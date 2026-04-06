@@ -1277,17 +1277,95 @@ Linux kernel task_struct</pre>
     </div>
   </div>
 
+  <h3>Real-World Examples: Where mmap() Is Used</h3>
+  <p>Let&rsquo;s trace exactly where <code>mmap()</code> appears in a production service like the <strong>Espresso Router</strong> (LinkedIn&rsquo;s NoSQL data store built on MySQL + Helix).</p>
+
+  <div class="jvm-card">
+  <h4>1. Loading the JVM Itself &mdash; Private File Mapping</h4>
+  <p>When you run <code>java -jar espresso-router.jar</code>, the kernel uses <code>mmap()</code> to load every shared library:</p>
+  <pre>mmap(NULL, 27M, PROT_READ|PROT_EXEC, MAP_PRIVATE, fd_libjvm_so, 0)
+mmap(NULL, 2M,  PROT_READ|PROT_EXEC, MAP_PRIVATE, fd_libc_so, 0)
+mmap(NULL, 1M,  PROT_READ|PROT_EXEC, MAP_PRIVATE, fd_libpthread_so, 0)</pre>
+  <ul>
+    <li><code>MAP_PRIVATE</code>: Each process gets COW pages &mdash; if one Espresso instance modifies a page, only it sees the change</li>
+    <li><code>PROT_EXEC</code>: The text segment is executable but <strong>read-only</strong></li>
+    <li>If you run 10 Espresso Router instances on the same host, they <strong>share</strong> the physical pages for <code>libjvm.so</code> &mdash; only 27MB of RAM, not 270MB</li>
+  </ul>
+
+  <h4>2. Netty&rsquo;s Direct ByteBuffers &mdash; Private Anonymous Mapping</h4>
+  <p>When Espresso Router&rsquo;s Netty layer allocates off-heap I/O buffers:</p>
+  <pre>mmap(NULL, 16M, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)</pre>
+  <ul>
+    <li><code>MAP_ANONYMOUS</code>: No file backing &mdash; pages initialized to zero</li>
+    <li><code>MAP_PRIVATE</code>: Only this process can see the buffer</li>
+    <li>This is how <code>sun.misc.Unsafe.allocateMemory()</code> works under the hood</li>
+    <li>These buffers are <strong>NOT GC&rsquo;d</strong> &mdash; Netty manages them with reference counting</li>
+  </ul>
+
+  <h4>3. MySQL / InnoDB Data Files &mdash; Shared File Mapping</h4>
+  <p>When MySQL (Espresso&rsquo;s storage engine) accesses data files, InnoDB can use <code>mmap()</code>:</p>
+  <pre>mmap(NULL, 16G, PROT_READ|PROT_WRITE, MAP_SHARED, fd_ibdata1, 0)</pre>
+  <ul>
+    <li><code>MAP_SHARED</code>: Changes are written back to the file on disk (after <code>msync()</code>/<code>fsync()</code>)</li>
+    <li>InnoDB can read table data by simply dereferencing pointers &mdash; no <code>read()</code> system calls</li>
+    <li>The kernel loads pages on demand (page fault &rarr; read from disk &rarr; populate page)</li>
+    <li>This is <strong>memory-mapped I/O</strong> &mdash; much faster than <code>read()</code>/<code>write()</code> for random access patterns</li>
+  </ul>
+
+  <h4>4. Large malloc() via glibc &mdash; Private Anonymous Mapping</h4>
+  <p>When any allocation exceeds glibc&rsquo;s <code>MMAP_THRESHOLD</code> (default 128KB), <code>malloc()</code> uses <code>mmap()</code> instead of <code>brk()</code>:</p>
+  <pre>// Application code
+byte[] largeBuffer = new byte[10_000_000];  // 10MB array
+
+// Under the hood, JVM calls:
+mmap(NULL, 10M, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)</pre>
+  <ul>
+    <li>Advantage: When <code>free()</code>&rsquo;d, the memory is immediately returned to the OS (unlike <code>brk()</code> which only moves the heap boundary)</li>
+    <li>The JVM uses this for its heap region at startup (<code>-Xmx=4g</code> reserves 4GB of address space via <code>mmap()</code>)</li>
+  </ul>
+
+  <h4>5. RocksDB Sorted String Table (SST) Files &mdash; Private File Mapping</h4>
+  <p>Espresso uses RocksDB as a local cache layer. RocksDB mmap&rsquo;s its SST files for fast reads:</p>
+  <pre>mmap(NULL, 64M, PROT_READ, MAP_PRIVATE, fd_000123.sst, 0)</pre>
+  <ul>
+    <li><code>PROT_READ</code> only &mdash; SST files are immutable after compaction</li>
+    <li><code>MAP_PRIVATE</code>: Multiple threads read concurrently, no locks needed for immutable data</li>
+    <li>RocksDB just dereferences pointers to read keys/values &mdash; zero <code>read()</code> syscall overhead</li>
+  </ul>
+  </div>
+
+  <h3>When to Use Which Mapping Type</h3>
+  <table class="kv-table">
+  <tr><th>Mapping Type</th><th>When to Use</th><th>Real Example in Espresso</th></tr>
+  <tr><td><strong>Private File</strong><br><code>MAP_PRIVATE</code> + file fd</td><td>Load executable code or read-only data. COW means writes are local.</td><td>Loading <code>libjvm.so</code>, <code>libc.so</code>, JVM text segment, RocksDB SST files</td></tr>
+  <tr><td><strong>Shared File</strong><br><code>MAP_SHARED</code> + file fd</td><td>Multiple processes need to read/write the same file. Changes visible to all and persisted.</td><td>InnoDB data files, transaction logs shared between MySQL threads</td></tr>
+  <tr><td><strong>Private Anonymous</strong><br><code>MAP_PRIVATE | MAP_ANONYMOUS</code></td><td>Allocate zeroed memory for a single process. Large heap regions, thread stacks.</td><td>JVM heap (<code>-Xmx</code>), Netty direct buffers, thread stacks, large <code>malloc()</code></td></tr>
+  <tr><td><strong>Shared Anonymous</strong><br><code>MAP_SHARED | MAP_ANONYMOUS</code></td><td>Share memory between parent and child processes (after <code>fork()</code>).</td><td>Shared memory IPC between processes, metrics shared between JVM and monitoring sidecar</td></tr>
+  </table>
+
+  <div class="info-box note">
+  <strong>Key insight:</strong> Almost everything in a running process is an <code>mmap()</code>. Check <code>/proc/PID/maps</code> &mdash; you&rsquo;ll see the JVM binary, every shared library, the heap, each thread&rsquo;s stack, and anonymous regions for off-heap allocations. The &ldquo;heap&rdquo; in <code>/proc/PID/maps</code> is just a special anonymous mapping grown with <code>brk()</code>.
+  </div>
+
   <h3>Troubleshooting Commands</h3>
   <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Memory Mapping Exploration</span></div>
-  <pre><span class="comment"># View memory mappings of a process</span>
-<span class="prompt">$</span> cat /proc/$$/maps            <span class="comment"># Memory map of current shell</span>
-55d3a000-55d3c000 r--p  /usr/bin/zsh      <span class="comment"># text (read-only, private)</span>
-55d3c000-55d60000 r-xp  /usr/bin/zsh      <span class="comment"># text (executable)</span>
-7f8a2000-7f8a4000 rw-p  [heap]            <span class="comment"># heap</span>
-7ffc1000-7ffc3000 rw-p  [stack]           <span class="comment"># stack</span>
+  <pre><span class="comment"># View all memory mappings of a Java process</span>
+<span class="prompt">$</span> cat /proc/$(pgrep -f EspressoRouter)/maps | head -20
+<span class="output">55d3a000-55d3c000 r--p  /usr/lib/jvm/java-17/bin/java     </span><span class="comment"># JVM binary (private file)</span>
+<span class="output">55d3c000-55d60000 r-xp  /usr/lib/jvm/java-17/bin/java     </span><span class="comment"># JVM code (executable)</span>
+<span class="output">7f8000-7f9000 rw-p      [anon]                            </span><span class="comment"># Direct buffer (private anon)</span>
+<span class="output">7fa000-7fb000 r-xp      /lib/x86_64/libjvm.so             </span><span class="comment"># JVM shared lib</span>
+<span class="output">7fc000-7fd000 rw-p      [heap]                            </span><span class="comment"># Java heap (anon)</span>
+<span class="output">7ffc1000-7ffc3000 rw-p  [stack]                           </span><span class="comment"># Main thread stack</span>
 
-<span class="prompt">$</span> pmap $$                      <span class="comment"># Prettier memory map</span>
-<span class="prompt">$</span> cat /proc/$$/smaps | head -30 <span class="comment"># Detailed memory stats per mapping</span></pre></div>
+<span class="comment"># Count mapping types</span>
+<span class="prompt">$</span> cat /proc/$(pgrep -f java)/maps | wc -l                 <span class="comment"># Total mappings</span>
+<span class="prompt">$</span> cat /proc/$(pgrep -f java)/maps | grep '\[anon\]' | wc -l <span class="comment"># Anonymous (heap, direct bufs)</span>
+<span class="prompt">$</span> cat /proc/$(pgrep -f java)/maps | grep '\.so' | wc -l    <span class="comment"># Shared libraries</span>
+
+<span class="comment"># Detailed per-mapping stats (RSS, PSS, swap)</span>
+<span class="prompt">$</span> pmap -x $(pgrep -f java) | head -40
+<span class="prompt">$</span> cat /proc/$(pgrep -f java)/smaps | head -30</pre></div>
   <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
 </div>
 
@@ -1338,6 +1416,155 @@ ELF 64-bit LSB pie executable, <strong>dynamically linked</strong>
     <div class="caption">Figure 8: Linux provides 7 main IPC mechanisms. Pipes and FIFOs for byte streams, sockets for network-capable communication, message queues for discrete messages, semaphores for synchronization, and shared memory for fastest data sharing.</div>
   </div>
 
+  <h3>Real-World Examples: Espresso Router IPC in Action</h3>
+  <p>A single Espresso Router request touches <strong>at least 4 different IPC mechanisms</strong>. Let&rsquo;s trace a client read request and see exactly which mechanism is used at each step and <em>why</em>.</p>
+
+  <div class="jvm-card">
+  <h4>The Request Flow &mdash; IPC at Every Step</h4>
+  <pre>Client App                    Espresso Router              MySQL
+    |                              |                          |
+    |---[1. TCP Socket]----------->|                          |
+    |   (cross-machine IPC)        |                          |
+    |                              |---[2. UNIX Socket]------>|
+    |                              |   (same-host IPC)        |
+    |                              |                          |
+    |                              |<--[2. UNIX Socket]-------|
+    |                              |   (query result)         |
+    |<--[1. TCP Socket]------------|                          |
+    |   (response)                 |                          |
+    |                              |
+    |         [3. Shared Memory: JVM threads share heap]
+    |         [4. Signals: SIGTERM for graceful shutdown]
+    |         [5. Pipes: log rotation via logrotate]
+    |         [6. File Locks: MySQL InnoDB row locking]</pre>
+
+  <h4 style="color:var(--accent)">1. TCP Sockets &mdash; Client to Espresso Router</h4>
+  <table class="kv-table">
+  <tr><th>What</th><th>Detail</th></tr>
+  <tr><td>Mechanism</td><td>TCP socket (AF_INET, SOCK_STREAM) via Netty NIO</td></tr>
+  <tr><td>Why</td><td>Client is on a <strong>different machine</strong>. TCP provides reliable, ordered, cross-network delivery. Sockets are the only IPC that works across hosts.</td></tr>
+  <tr><td>Port</td><td>Espresso listens on <code>:12918</code> (R2D2/Rest.li transport)</td></tr>
+  <tr><td>Kernel involvement</td><td>TCP state machine, <code>sk_buff</code> send/recv buffers, <code>epoll</code> for event notification</td></tr>
+  <tr><td>Why not pipes?</td><td>Pipes only work between related processes on the same host. Can&rsquo;t cross the network.</td></tr>
+  <tr><td>Why not shared memory?</td><td>Shared memory requires same host + shared physical pages. Cross-machine = impossible.</td></tr>
+  </table>
+
+  <h4 style="color:var(--accent2)">2. UNIX Domain Sockets &mdash; Espresso Router to MySQL</h4>
+  <table class="kv-table">
+  <tr><th>What</th><th>Detail</th></tr>
+  <tr><td>Mechanism</td><td>UNIX domain socket (AF_UNIX, SOCK_STREAM) at <code>/var/run/mysqld/mysqld.sock</code></td></tr>
+  <tr><td>Why</td><td>Espresso Router and MySQL are on the <strong>same host</strong>. UNIX sockets are ~2x faster than TCP loopback because they skip the entire TCP/IP stack (no checksums, no routing, no congestion control).</td></tr>
+  <tr><td>Alternative</td><td>Could use TCP to <code>localhost:3306</code>, but slower. UNIX socket is the standard choice for local MySQL connections.</td></tr>
+  <tr><td>Why not shared memory?</td><td>Would be even faster, but MySQL&rsquo;s JDBC driver uses socket protocol. Shared memory requires both sides to agree on a memory layout.</td></tr>
+  <tr><td>Why not pipes?</td><td>Pipes are unidirectional. Sockets are bidirectional &mdash; query goes one way, result comes back on the same connection.</td></tr>
+  </table>
+
+  <h4 style="color:var(--accent3)">3. Shared Memory &mdash; JVM Threads Within Espresso</h4>
+  <table class="kv-table">
+  <tr><th>What</th><th>Detail</th></tr>
+  <tr><td>Mechanism</td><td>Threads sharing the same address space (via <code>clone(CLONE_VM)</code>)</td></tr>
+  <tr><td>Why</td><td>The Netty EventLoop thread reads data, the routing thread looks up the partition map, the request handler calls MySQL &mdash; all need to access the same routing table, caches, and connection pools. Shared heap is the fastest possible IPC.</td></tr>
+  <tr><td>Synchronization</td><td><code>synchronized</code> blocks, <code>ConcurrentHashMap</code>, <code>volatile</code> fields, <code>ReentrantLock</code>. Without these, threads would see stale data due to CPU caches.</td></tr>
+  <tr><td>Why not sockets between threads?</td><td>Insanely slow compared to shared memory. A memory read is ~1ns. A socket round-trip is ~10&micro;s (10,000x slower).</td></tr>
+  </table>
+
+  <h4 style="color:var(--accent4)">4. Signals &mdash; Process Lifecycle Control</h4>
+  <table class="kv-table">
+  <tr><th>What</th><th>Detail</th></tr>
+  <tr><td>Mechanism</td><td>POSIX signals (SIGTERM, SIGHUP, SIGUSR1)</td></tr>
+  <tr><td>SIGTERM</td><td>Kubernetes sends this during pod termination. Espresso&rsquo;s shutdown hook deregisters from Helix, drains connections, flushes buffers, then exits. <code>preStop</code> hook gives 30s grace period.</td></tr>
+  <tr><td>SIGHUP</td><td>Reload configuration without restart. Espresso can reload routing tables, log levels, feature flags.</td></tr>
+  <tr><td>SIGUSR1</td><td>Trigger a heap dump or thread dump for debugging. <code>kill -USR1 &lt;pid&gt;</code></td></tr>
+  <tr><td>Why not sockets?</td><td>Signals are fire-and-forget, zero setup. No connection needed. Perfect for simple notifications like &ldquo;please shut down&rdquo;.</td></tr>
+  </table>
+
+  <h4 style="color:var(--red)">5. Pipes &mdash; Log Processing Pipeline</h4>
+  <table class="kv-table">
+  <tr><th>What</th><th>Detail</th></tr>
+  <tr><td>Mechanism</td><td>Anonymous pipe created by shell <code>|</code> operator</td></tr>
+  <tr><td>Example</td><td><code>tail -f /var/log/espresso/access.log | grep ERROR | tee /tmp/errors.log</code></td></tr>
+  <tr><td>Why pipes?</td><td>Streaming byte data between related processes. One producer, one consumer, unidirectional. Simple and efficient for log processing pipelines.</td></tr>
+  <tr><td>In production</td><td>Log rotation: <code>logrotate</code> uses pipes to compress old logs. Espresso&rsquo;s stdout is piped to a log collector sidecar in Kubernetes.</td></tr>
+  </table>
+
+  <h4 style="color:var(--accent2)">6. File Locking &mdash; MySQL InnoDB</h4>
+  <table class="kv-table">
+  <tr><th>What</th><th>Detail</th></tr>
+  <tr><td>Mechanism</td><td><code>flock()</code> / <code>fcntl()</code> advisory file locks</td></tr>
+  <tr><td>Example</td><td>InnoDB places an exclusive lock on <code>ibdata1</code> at startup &mdash; prevents two MySQL instances from corrupting the same data files</td></tr>
+  <tr><td>Row-level locks</td><td>InnoDB uses internal lock manager (not file locks) for row-level ACID. But the data file itself is <code>flock()</code>&rsquo;d.</td></tr>
+  </table>
+  </div>
+
+  <h3>Decision Guide: Which IPC Mechanism When?</h3>
+  <table class="kv-table">
+  <tr><th>Scenario</th><th>Best IPC</th><th>Why</th><th>Not This</th></tr>
+  <tr>
+    <td>Client on Machine A talks to server on Machine B</td>
+    <td><strong>TCP Socket</strong></td>
+    <td>Only mechanism that works across network</td>
+    <td>Everything else is same-host only</td>
+  </tr>
+  <tr>
+    <td>App talks to database on same host</td>
+    <td><strong>UNIX Socket</strong></td>
+    <td>~2x faster than TCP loopback, no TCP overhead</td>
+    <td>TCP works but wastes CPU on checksums/routing</td>
+  </tr>
+  <tr>
+    <td>Multiple threads sharing state (routing table, cache)</td>
+    <td><strong>Shared Memory</strong> (same process)</td>
+    <td>Fastest possible &mdash; just read memory. ~1ns</td>
+    <td>Sockets between threads = 10,000x slower</td>
+  </tr>
+  <tr>
+    <td>Two separate processes need high-speed data sharing</td>
+    <td><strong>Shared Memory</strong> (mmap MAP_SHARED)</td>
+    <td>No kernel copy, no syscall per read/write</td>
+    <td>Pipes/sockets copy data through kernel</td>
+  </tr>
+  <tr>
+    <td>&ldquo;Please shut down gracefully&rdquo;</td>
+    <td><strong>Signal</strong> (SIGTERM)</td>
+    <td>Fire-and-forget, no connection setup, 1 bit of info</td>
+    <td>Overkill to set up a socket for &ldquo;stop&rdquo;</td>
+  </tr>
+  <tr>
+    <td>Shell command pipeline (<code>grep | sort | head</code>)</td>
+    <td><strong>Pipe</strong></td>
+    <td>Simple byte stream, parent-child, auto-cleanup</td>
+    <td>Sockets are overkill for shell plumbing</td>
+  </tr>
+  <tr>
+    <td>Unrelated processes need a rendezvous point</td>
+    <td><strong>FIFO</strong> (named pipe)</td>
+    <td>Has a filesystem name, any process can open it</td>
+    <td>Anonymous pipes only work with fork()</td>
+  </tr>
+  <tr>
+    <td>Passing structured messages with priority</td>
+    <td><strong>Message Queue</strong></td>
+    <td>Discrete messages, priority ordering, kernel-buffered</td>
+    <td>Pipes are just byte streams, no message boundaries</td>
+  </tr>
+  <tr>
+    <td>Coordinating access to shared resource</td>
+    <td><strong>Semaphore</strong></td>
+    <td>Lightweight counter, no data transfer needed</td>
+    <td>Mutex is intra-process; semaphore works inter-process</td>
+  </tr>
+  <tr>
+    <td>Prevent two instances from corrupting same file</td>
+    <td><strong>File Lock</strong></td>
+    <td>Simple mutual exclusion on a file, survives crashes</td>
+    <td>Semaphores don&rsquo;t persist across restarts</td>
+  </tr>
+  </table>
+
+  <div class="info-box note">
+  <strong>Speed comparison:</strong> Shared memory (~1ns) &gt; UNIX domain socket (~5&micro;s) &gt; TCP loopback (~10&micro;s) &gt; TCP cross-network (~100&micro;s&ndash;10ms). Choose the fastest mechanism that meets your requirements. Cross-machine? TCP is your only option. Same process? Shared memory always wins.
+  </div>
+
   <h3>Troubleshooting Commands</h3>
   <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">IPC Exploration</span></div>
   <pre><span class="comment"># Pipes in action (shell)</span>
@@ -1351,13 +1578,24 @@ ELF 64-bit LSB pie executable, <strong>dynamically linked</strong>
 <span class="prompt">$</span> ipcs -s                      <span class="comment"># Semaphore sets</span>
 <span class="prompt">$</span> ipcrm -m &lt;shmid&gt;             <span class="comment"># Remove shared memory segment</span>
 
-<span class="comment"># Sockets</span>
-<span class="prompt">$</span> ss -tuln                     <span class="comment"># Show listening TCP/UDP sockets</span>
-<span class="prompt">$</span> ss -xln                      <span class="comment"># Show UNIX domain sockets</span>
-<span class="prompt">$</span> netstat -tlnp                <span class="comment"># Alternative (older)</span>
+<span class="comment"># Sockets &mdash; see what Espresso is using</span>
+<span class="prompt">$</span> ss -tuln                     <span class="comment"># TCP/UDP listeners (port 12918 = R2D2)</span>
+<span class="prompt">$</span> ss -xln                      <span class="comment"># UNIX sockets (mysqld.sock)</span>
+<span class="prompt">$</span> ss -tp | grep java           <span class="comment"># All TCP connections from Java processes</span>
+
+<span class="comment"># Count connections per process</span>
+<span class="prompt">$</span> ss -tp | grep espresso | wc -l  <span class="comment"># How many client connections?</span>
+
+<span class="comment"># See UNIX socket connections to MySQL</span>
+<span class="prompt">$</span> ss -xp | grep mysql          <span class="comment"># UNIX domain socket connections</span>
 
 <span class="comment"># File locks</span>
-<span class="prompt">$</span> lslocks                      <span class="comment"># Show active file locks</span></pre></div>
+<span class="prompt">$</span> lslocks                      <span class="comment"># Show active file locks (InnoDB ibdata1)</span>
+
+<span class="comment"># Signals</span>
+<span class="prompt">$</span> kill -l                      <span class="comment"># List all signal names</span>
+<span class="prompt">$</span> kill -TERM $(pgrep -f espresso)  <span class="comment"># Graceful shutdown</span>
+<span class="prompt">$</span> kill -USR1 $(pgrep -f java)  <span class="comment"># Trigger heap dump</span></pre></div>
   <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
 </div>
 
