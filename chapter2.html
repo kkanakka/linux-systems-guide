@@ -63,6 +63,17 @@
   footer{background:var(--surface);border-top:1px solid var(--border);padding:40px 0;margin-top:80px;text-align:center;color:var(--text-muted);font-size:.9em}
   ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
   @media(max-width:768px){.hero h1{font-size:2em}.compare-grid,.toc-grid{grid-template-columns:1fr}.container{padding:0 16px}}
+  .jvm-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin:18px 0}
+  .jvm-warn{border-left:4px solid var(--red);padding-left:14px;margin:14px 0}
+  .jvm-tip{border-left:4px solid var(--accent2);padding-left:14px;margin:14px 0}
+  .jvm-formula{background:#1a1f2b;border:2px solid var(--accent3);border-radius:8px;padding:14px;margin:14px 0;font-family:'SF Mono',Consolas,monospace;font-size:.92em;color:var(--accent3)}
+  .seg-label{display:inline-block;padding:2px 10px;border-radius:4px;font-weight:600;font-size:.85em;margin-right:6px}
+  .seg-text{background:#1f3a5f;color:#79b8ff}
+  .seg-data{background:#1a3a1a;color:#56d364}
+  .seg-heap{background:#3b1f5e;color:#d2a8ff}
+  .seg-stack{background:#1a3a3a;color:#56d3a8}
+  .seg-native{background:#3a2a0f;color:#e3b341}
+  .seg-kernel{background:#2a2a2a;color:#999}
 </style>
 </head>
 <body>
@@ -74,7 +85,6 @@
     <div class="badge">Based on The Linux Programming Interface &mdash; Chapter 2</div>
     <br>
     <a class="nav-link" href="index.html">&larr; Chapter 6: Processes &amp; Programs</a>
-    <a class="nav-link" href="java-memory.html">Java Memory Architecture &rarr;</a>
   </div>
 </div>
 
@@ -740,6 +750,507 @@ write(1, "myhost\n", 7) = 7
 <span class="comment"># Daemons</span>
 <span class="prompt">$</span> systemctl list-units --type=service  <span class="comment"># List all services</span>
 <span class="prompt">$</span> systemctl status sshd        <span class="comment"># Check specific daemon</span></pre></div>
+
+  <!-- ==================== JAVA MEMORY ARCHITECTURE DEEP DIVE ==================== -->
+  <div style="margin-top:50px;border-top:2px solid var(--accent3);padding-top:30px;">
+  <h3 style="font-size:1.8em;background:linear-gradient(90deg,var(--accent3),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;border-left:none;padding-left:0;">Java Memory Architecture &mdash; Deep Dive</h3>
+  <p>This section maps <strong>every Java component</strong> to its exact location in the Linux process memory layout. We trace how ZooKeeper and Espresso use Text, Data, BSS, Heap, Stack, and Kernel memory.</p>
+  </div>
+
+  <!-- JVM 1: PROCESS MEMORY LAYOUT -->
+  <h3 id="jvm-1">Java Process Memory Layout</h3>
+  <p>A running Java program is a regular Linux process. Its virtual address space has the same segments as any C program &mdash; but the JVM <strong>carves up the heap</strong> into specialized sub-regions and adds large off-heap native allocations.</p>
+
+  <div class="diagram-box">
+    <img src="images/jvm_01_memory_layout.png" alt="Java Process Memory Layout Inside Linux">
+    <div class="caption">Figure: Complete JVM process memory layout showing Text, Data, Heap (young/old gen), Native/Off-heap, Thread Stacks, and Kernel Space</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4><span class="seg-label seg-text">TEXT</span> Machine Code &mdash; Read-Only, Shared</h4>
+  <ul>
+    <li><strong>JVM binary code</strong>: <code>libjvm.so</code>, the core JVM runtime (interpreter loop, GC algorithms, class loader)</li>
+    <li><strong>JIT-compiled methods</strong>: After the JVM detects a &ldquo;hot&rdquo; method (called thousands of times), the C1/C2 compiler compiles it from bytecode to native machine instructions, stored in the <strong>CodeCache</strong></li>
+    <li><strong>Interpreter dispatch loop</strong>: The bytecode interpreter itself is compiled C++ code in the text segment</li>
+    <li>This region is <strong>read-only</strong> and can be <strong>shared</strong> between processes running the same JVM binary</li>
+  </ul>
+
+  <h4><span class="seg-label seg-data">DATA</span> Initialized Global/Static Variables</h4>
+  <ul>
+    <li>JVM version strings, default configuration constants</li>
+    <li>Signal handler function pointers</li>
+    <li>Static final fields from loaded Java classes (after class loading)</li>
+    <li>Values are read from the executable file when the JVM binary is loaded</li>
+  </ul>
+
+  <h4><span class="seg-label seg-data">BSS</span> Uninitialized Global/Static Variables</h4>
+  <ul>
+    <li>Large static arrays before initialization</li>
+    <li>JVM internal counters that start at zero</li>
+    <li>The binary doesn&rsquo;t store these bytes &mdash; the kernel records the size and fills with zeros at startup</li>
+  </ul>
+
+  <h4><span class="seg-label seg-heap">HEAP</span> Dynamic Memory &mdash; The Largest Region</h4>
+  <p>In a Java process, &ldquo;heap&rdquo; has <strong>two meanings</strong>:</p>
+  <table class="kv-table">
+  <tr><th>Java Heap (<code>-Xmx</code>)</th><th>Native Heap (<code>malloc</code>)</th></tr>
+  <tr>
+    <td>
+      <strong>Eden</strong>: Where <code>new</code> objects are born &mdash; short-lived<br>
+      <strong>Survivor S0/S1</strong>: Survived 1+ minor GC cycles<br>
+      <strong>Old Gen (Tenured)</strong>: Long-lived objects (DataNode tree, HashMap, SessionTracker)
+    </td>
+    <td>
+      <strong>Metaspace</strong>: Class metadata, method vtables<br>
+      <strong>DirectByteBuffer</strong>: Netty I/O buffers via <code>sun.misc.Unsafe</code><br>
+      <strong>JIT CodeCache</strong>: Compiled native methods<br>
+      <strong>Thread-local storage</strong> for native code
+    </td>
+  </tr>
+  <tr>
+    <td>Managed by GC (G1, ZGC, etc.)</td>
+    <td>Outside GC control. <code>malloc</code>/<code>free</code> or Netty ref-counting</td>
+  </tr>
+  </table>
+
+  <h4><span class="seg-label seg-stack">STACK</span> Per-Thread, Auto-Managed</h4>
+  <ul>
+    <li>Each Java thread gets its own stack, typically 512KB&ndash;1MB (<code>-Xss</code>)</li>
+    <li>Contains <strong>method call frames</strong> with local variables, return addresses, operand values</li>
+    <li><strong>Primitives</strong> (<code>int</code>, <code>long</code>, <code>boolean</code>) are stored directly on the stack</li>
+    <li><strong>Object references</strong> are on the stack, but the actual objects are on the heap</li>
+    <li>200 threads &times; 1MB = 200MB of stack memory!</li>
+    <li>If recursion goes too deep: <code>StackOverflowError</code></li>
+  </ul>
+
+  <h4><span class="seg-label seg-kernel">KERNEL SPACE</span> Not Accessible to JVM</h4>
+  <ul>
+    <li>Socket buffers (<code>sk_buff</code>) for TCP connections</li>
+    <li>Page cache (cached disk I/O)</li>
+    <li>File descriptor table, epoll interest lists</li>
+    <li>The JVM interacts with kernel space only through <strong>system calls</strong></li>
+  </ul>
+  </div>
+
+  <div class="jvm-formula">
+  <strong>Total Process Memory</strong> = Heap (-Xmx) + Metaspace + Direct Buffers + Code Cache + Thread Stacks &times; N + Native libs + Kernel overhead<br>
+  <strong>Example:</strong> 4G + 256M + 512M + 240M + 200&times;1M + 100M &asymp; <strong>5.3GB</strong>
+  </div>
+
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">JVM Memory Inspection</span></div>
+  <pre><span class="comment"># Total process memory (RSS = physical, VSZ = virtual)</span>
+<span class="prompt">$</span> ps -p $(pgrep -f ZooKeeper) -o pid,rss,vsz,comm
+
+<span class="comment"># Detailed memory map</span>
+<span class="prompt">$</span> cat /proc/$(pgrep -f ZooKeeper)/maps | head -40
+
+<span class="comment"># Java-specific: heap + non-heap</span>
+<span class="prompt">$</span> jcmd $(pgrep -f ZooKeeper) VM.native_memory summary
+
+<span class="comment"># JVM flags in effect</span>
+<span class="prompt">$</span> jcmd $(pgrep -f ZooKeeper) VM.flags</pre></div>
+
+  <!-- JVM 2: STACK vs HEAP -->
+  <h3 id="jvm-2">Stack vs Heap &mdash; What Goes Where in Java</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_06_stack_vs_heap.png" alt="Stack vs Heap: What Goes Where in Java">
+    <div class="caption">Figure: Stack holds primitives and references per-thread; Heap holds actual objects shared by all threads</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>Stack: Per-Thread, Automatic</h4>
+  <p>When ZooKeeper&rsquo;s RequestProcessor chain calls <code>PrepRequestProcessor</code> &rarr; <code>SyncRequestProcessor</code> &rarr; <code>FinalRequestProcessor</code>, each call pushes a <strong>frame</strong>:</p>
+  <pre>┌─────────────────────────────────────┐  &larr; Stack Pointer (top)
+│ serialize() frame                   │
+│   int offset = 0    (primitive)     │
+│   ByteBuffer buf    (ref &rarr; off-heap)│
+│   return address                    │
+├─────────────────────────────────────┤
+│ processRequest() frame              │
+│   Request req       (ref &rarr; heap)    │
+│   int txnType = 1   (primitive)     │
+│   byte[] data       (ref &rarr; heap)    │
+│   return address                    │
+├─────────────────────────────────────┤
+│ main() frame                        │
+│   String[] args     (ref &rarr; heap)    │
+│   int port = 2181   (primitive)     │
+│   return address                    │
+└─────────────────────────────────────┘  &larr; Stack Bottom</pre>
+  <p>When <code>serialize()</code> returns, its frame is <strong>popped</strong> &mdash; all its locals vanish instantly. No GC needed.</p>
+
+  <h4>Heap: Shared, GC-Managed</h4>
+  <table class="kv-table">
+  <tr><th>What</th><th>Where on Heap</th><th>Lifetime</th></tr>
+  <tr><td><code>new Request()</code></td><td>Young Gen (Eden)</td><td>Short &mdash; GC&rsquo;d after processing</td></tr>
+  <tr><td><code>new byte[1024]</code></td><td>Young Gen (Eden)</td><td>Short &mdash; temporary buffer</td></tr>
+  <tr><td><code>DataNode("/app/config")</code></td><td>Old Gen (Tenured)</td><td>Long &mdash; lives for process lifetime</td></tr>
+  <tr><td><code>HashMap&lt;String,DataNode&gt;</code></td><td>Old Gen (Tenured)</td><td>Long &mdash; the ZK data tree</td></tr>
+  <tr><td><code>SessionTracker</code></td><td>Old Gen (Tenured)</td><td>Long &mdash; tracks all client sessions</td></tr>
+  </table>
+
+  <h4>Key Differences</h4>
+  <table class="kv-table">
+  <tr><th>Property</th><th>Stack</th><th>Heap</th><th>Off-Heap</th></tr>
+  <tr><td>Scope</td><td>Per-thread</td><td>Shared by all threads</td><td>Shared (manual)</td></tr>
+  <tr><td>Size</td><td>Fixed (<code>-Xss</code>), default 1MB</td><td>Dynamic (<code>-Xms</code> to <code>-Xmx</code>)</td><td>Varies</td></tr>
+  <tr><td>Management</td><td>Auto (LIFO push/pop)</td><td>GC (G1, ZGC, etc.)</td><td><code>malloc/free</code>, ref-counting</td></tr>
+  <tr><td>Stores</td><td>Primitives + references</td><td>Actual objects</td><td>Direct buffers, class metadata</td></tr>
+  <tr><td>Speed</td><td>Very fast (pointer move)</td><td>Slower (allocation + GC)</td><td>Fast (no GC pause)</td></tr>
+  <tr><td>Overflow</td><td><code>StackOverflowError</code></td><td><code>OutOfMemoryError</code></td><td><code>OutOfMemoryError: Direct buffer</code></td></tr>
+  </table>
+  </div>
+
+  <!-- JVM 3: SEGMENTS DETAILED -->
+  <h3 id="jvm-3">Text, Data, BSS, Heap, Stack &mdash; Java Edition</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_09_segments_detailed.png" alt="What Lives in Text, Data, BSS, Heap, and Stack — Java Edition">
+    <div class="caption">Figure: Mapping C memory segment concepts from Chapter 6 to their Java equivalents</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>Mapping C Concepts to Java</h4>
+  <table class="kv-table">
+  <tr><th>C Concept</th><th>Java Equivalent</th><th>Memory Location</th></tr>
+  <tr><td>Global initialized (<code>int primes[] = {2,3,5,7}</code>)</td><td><code>static final int[] PRIMES = {2,3,5,7}</code></td><td>Data segment (constant pool &rarr; heap after class load)</td></tr>
+  <tr><td>Global uninitialized (<code>char globBuf[65536]</code>)</td><td><code>static byte[] buffer</code> (null until assigned)</td><td>BSS (reference is null/zero)</td></tr>
+  <tr><td>Local variable (<code>int result</code>)</td><td><code>int result = x * x</code></td><td>Stack (primitive directly)</td></tr>
+  <tr><td>Heap allocation (<code>malloc(1024)</code>)</td><td><code>new byte[1024]</code></td><td>Java Heap (Eden &rarr; Survivor &rarr; Old Gen)</td></tr>
+  <tr><td>Function pointer</td><td>Method reference / vtable</td><td>Metaspace (off-heap)</td></tr>
+  <tr><td>Text / code</td><td>JIT-compiled bytecode</td><td>CodeCache (off-heap, executable)</td></tr>
+  </table>
+
+  <p>The JVM adds a layer of indirection:</p>
+  <ul>
+    <li><strong>javac</strong> compiles <code>.java</code> &rarr; <code>.class</code> (bytecode, not native machine code)</li>
+    <li>The JVM <strong>interpreter</strong> executes bytecodes one by one (lives in text segment as compiled C++)</li>
+    <li>The <strong>JIT compiler</strong> (C1/C2) detects hot methods and compiles them to native x86/ARM code, storing the result in the <strong>CodeCache</strong></li>
+    <li>The <strong>GC</strong> manages the Java heap, moving objects between young and old gen</li>
+  </ul>
+  </div>
+
+  <!-- JVM 4: FORK IN JAVA -->
+  <h3 id="jvm-4">fork() in Java &mdash; The Dangerous Copy</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_02_fork_danger.png" alt="fork() in Java: The Dangerous Copy">
+    <div class="caption">Figure: fork() duplicates the address space but only 1 thread survives &mdash; mutexes from dead threads stay locked forever</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>What Happens When a Java Process Forks</h4>
+  <p>Java apps almost never call <code>fork()</code> directly. But <code>Runtime.exec("command")</code> internally calls <code>fork()</code> + <code>exec()</code>:</p>
+  <ol>
+    <li><strong>fork() duplicates the entire virtual address space</strong>: 4GB heap, 1GB Netty direct buffers, all thread stacks. With <strong>Copy-on-Write (COW)</strong>, physical pages aren&rsquo;t copied until modified, but <strong>page table entries</strong> are all duplicated.</li>
+    <li><strong>Only ONE thread survives</strong>: If your ZooKeeper has 200 threads, the child gets <em>only the calling thread</em>. The other 199 vanish. <strong>Mutexes they held are permanently locked</strong> in the child (JVM internal locks, GC locks, classloader locks).</li>
+    <li><strong>exec() must follow immediately</strong>: It replaces the entire address space with a new program, cleaning up the dangerous half-forked state.</li>
+  </ol>
+
+  <div class="info-box danger">
+  <strong>OOM Kill Risk:</strong> Redis and large JVMs can trigger OOM killer during <code>fork()</code>. Even with COW, the kernel accounts for <em>potential</em> memory. The <code>vm.overcommit_memory</code> sysctl controls this. Set to <code>1</code> for large JVM workloads. Modern Java (9+) uses <code>posix_spawn()</code> via ProcessBuilder to avoid full fork().
+  </div>
+  </div>
+
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">fork() / OOM Diagnostics</span></div>
+  <pre><span class="comment"># Check overcommit settings</span>
+<span class="prompt">$</span> cat /proc/sys/vm/overcommit_memory    <span class="comment"># 0=heuristic, 1=always, 2=never</span>
+
+<span class="comment"># See committed vs available memory</span>
+<span class="prompt">$</span> cat /proc/meminfo | grep -i commit
+
+<span class="comment"># Check for OOM kills</span>
+<span class="prompt">$</span> dmesg | grep -i "oom\|killed process"</pre></div>
+
+  <!-- JVM 5: THREAD MAPPING -->
+  <h3 id="jvm-5">Java Thread = Linux pthread = Kernel Task</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_08_thread_mapping.png" alt="Java Thread = Linux pthread = Kernel Task">
+    <div class="caption">Figure: 1:1:1 mapping from Java Thread &rarr; pthread &rarr; kernel task_struct. Threads ARE processes that share memory.</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>The 1:1:1 Mapping</h4>
+  <pre>Java Thread ("RequestProcessor-1")
+    &darr;  [Thread.start() calls pthread_create()]
+Native pthread
+    &darr;  [clone(CLONE_VM | CLONE_FILES | CLONE_SIGHAND)]
+Linux kernel task_struct</pre>
+
+  <h4>What Threads Share vs Own</h4>
+  <table class="kv-table">
+  <tr><th>Shared (all threads see same data)</th><th>Per-Thread (each has its own)</th></tr>
+  <tr>
+    <td><code>mm_struct</code> (page tables), <code>files_struct</code> (file descriptors), signal handlers, Java Heap, static/class variables, Metaspace</td>
+    <td>Thread stack (<code>-Xss</code>), kernel stack, CPU register state, scheduling priority, <code>ThreadLocal&lt;T&gt;</code>, <code>errno</code></td>
+  </tr>
+  </table>
+
+  <h4>How clone() Creates Threads</h4>
+  <table class="kv-table">
+  <tr><th>Operation</th><th>System Call</th><th>What&rsquo;s Shared</th></tr>
+  <tr><td><code>fork()</code></td><td><code>clone(SIGCHLD)</code></td><td>Nothing &mdash; full copy (COW)</td></tr>
+  <tr><td><code>pthread_create()</code></td><td><code>clone(CLONE_VM | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD)</code></td><td>Memory, files, signals, PID group</td></tr>
+  </table>
+  <p><strong>Threads ARE processes that share memory.</strong> In Linux, both are <code>task_struct</code> entries. The <code>clone()</code> flags determine how much is shared.</p>
+  </div>
+
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Thread Investigation</span></div>
+  <pre><span class="comment"># See all threads of a Java process</span>
+<span class="prompt">$</span> ps -T -p $(pgrep -f ZooKeeper) | head -20
+
+<span class="comment"># Thread count</span>
+<span class="prompt">$</span> cat /proc/$(pgrep -f ZooKeeper)/status | grep Threads
+
+<span class="comment"># See which core each thread is on</span>
+<span class="prompt">$</span> ps -T -p $(pgrep -f ZooKeeper) -o spid,psr,pcpu,comm | head -20
+
+<span class="comment"># Pin a thread to specific cores</span>
+<span class="prompt">$</span> taskset -p 0x0F 12345   <span class="comment"># cores 0-3 only</span></pre></div>
+
+  <!-- JVM 6: CPU NUMA CGROUPS -->
+  <h3 id="jvm-6">CPU Cores, NUMA, and cgroups</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_03_cpu_numa_cgroups.png" alt="CPU Cores, NUMA, and cgroups">
+    <div class="caption">Figure: Dual-socket server with NUMA nodes. Local memory access ~80ns, cross-node ~150ns (2x slower). cgroups pin threads to specific cores.</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>CPU Core Assignment &mdash; CFS Scheduler</h4>
+  <p>Linux <strong>CFS (Completely Fair Scheduler)</strong> maintains a per-core run queue (red-black tree sorted by virtual runtime). Threads migrate freely between cores unless pinned with <code>taskset</code> or <code>sched_setaffinity()</code>.</p>
+
+  <h4>NUMA &mdash; Non-Uniform Memory Access</h4>
+  <table class="kv-table">
+  <tr><th>Access Type</th><th>Latency</th><th>Example</th></tr>
+  <tr><td>Local (same NUMA node)</td><td>~80ns</td><td>Core 0 accessing RAM on Socket 0</td></tr>
+  <tr><td>Remote (cross-node via QPI/UPI)</td><td>~150ns</td><td>Core 0 accessing RAM on Socket 1</td></tr>
+  </table>
+  <p><code>-XX:+UseNUMA</code> tells the GC to allocate young gen on the NUMA node where the allocating thread runs. Without it, threads pay a 2x latency penalty on every object access from remote memory.</p>
+
+  <h4>cgroups &mdash; Resource Boundaries</h4>
+  <table class="kv-table">
+  <tr><th>cgroup Parameter</th><th>What It Controls</th><th>Example</th></tr>
+  <tr><td><code>cpuset.cpus</code></td><td>Which CPU cores are allowed</td><td><code>0-3</code></td></tr>
+  <tr><td><code>cpuset.mems</code></td><td>Which NUMA nodes for memory</td><td><code>0</code></td></tr>
+  <tr><td><code>memory.max</code></td><td>Hard memory limit</td><td><code>4294967296</code> (4GB)</td></tr>
+  <tr><td><code>cpu.max</code></td><td>CPU time limit (quota/period)</td><td><code>200000 100000</code> (2 cores)</td></tr>
+  </table>
+  </div>
+
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">NUMA &amp; cgroup Commands</span></div>
+  <pre><span class="comment"># Check NUMA topology</span>
+<span class="prompt">$</span> numactl --hardware
+
+<span class="comment"># Run JVM bound to a NUMA node</span>
+<span class="prompt">$</span> numactl --cpunodebind=0 --membind=0 java -jar zookeeper.jar
+
+<span class="comment"># See cgroup of a process</span>
+<span class="prompt">$</span> cat /proc/$(pgrep -f ZooKeeper)/cgroup
+
+<span class="comment"># See memory limit &amp; current usage</span>
+<span class="prompt">$</span> cat /sys/fs/cgroup/memory/&lt;path&gt;/memory.max
+<span class="prompt">$</span> cat /sys/fs/cgroup/memory/&lt;path&gt;/memory.current</pre></div>
+
+  <!-- JVM 7: CGROUP PAGE CACHE -->
+  <h3 id="jvm-7">cgroups + Page Cache &mdash; The Hidden Memory Trap</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_04_cgroup_pagecache.png" alt="cgroups + Page Cache: The Hidden Memory Trap">
+    <div class="caption">Figure: Page cache from multiple processes is shared and counts against the same cgroup memory.max limit</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>What Counts Against memory.max</h4>
+  <div class="jvm-formula">
+  memory.current = anon RSS (heap + stacks) + file-backed pages (page cache) + kernel slab memory
+  </div>
+  <p><strong>Most misunderstood aspect of cgroups:</strong> Page cache of all processes in a cgroup is summed. ZooKeeper txn logs + Espresso MySQL data files all count together.</p>
+
+  <h4>At the Limit</h4>
+  <ol>
+    <li><strong>First</strong>: Kernel reclaims page cache (drops clean pages) &mdash; I/O degrades</li>
+    <li><strong>If still not enough</strong>: <strong>OOM killer</strong> picks a process to terminate!</li>
+  </ol>
+
+  <h4>Container Sizing Formula</h4>
+  <div class="jvm-formula">
+  Container memory = JVM heap + off-heap (Metaspace + direct buffers + stacks) + page cache headroom + kernel overhead
+  </div>
+  <table class="kv-table">
+  <tr><th>Component</th><th>ZooKeeper</th><th>Espresso</th></tr>
+  <tr><td>JVM Heap</td><td>2GB</td><td>4GB</td></tr>
+  <tr><td>Metaspace</td><td>256MB</td><td>512MB</td></tr>
+  <tr><td>Thread Stacks</td><td>200 &times; 1MB = 200MB</td><td>300 &times; 1MB = 300MB</td></tr>
+  <tr><td>Direct Buffers</td><td>128MB</td><td>512MB</td></tr>
+  <tr><td>Page Cache headroom</td><td>~500MB</td><td>~1GB</td></tr>
+  <tr><td>Kernel overhead</td><td>~100MB</td><td>~200MB</td></tr>
+  <tr><td><strong>Recommended cgroup</strong></td><td><strong>3.5&ndash;4GB</strong></td><td><strong>7&ndash;8GB</strong></td></tr>
+  </table>
+
+  <div class="info-box danger">
+  <strong>Common mistake:</strong> Setting <code>memory.max = -Xmx</code>. If heap is 4GB and cgroup limit is 4GB, you&rsquo;re guaranteed OOM killed &mdash; zero room for Metaspace, stacks, direct buffers, and page cache!
+  </div>
+  </div>
+
+  <!-- JVM 8: NETTY -->
+  <h3 id="jvm-8">Netty I/O &mdash; Two Worlds of Memory</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_07_netty_memory.png" alt="Netty I/O: Two Worlds of Memory">
+    <div class="caption">Figure: Netty uses off-heap DirectByteBuffers for zero-copy I/O, bypassing GC. Kernel manages socket buffers separately.</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>Why Direct Buffers?</h4>
+  <table class="kv-table">
+  <tr><th>Buffer Type</th><th>I/O Path</th><th>Copies</th></tr>
+  <tr><td>Heap <code>byte[]</code></td><td>JVM heap &rarr; copy to native buffer &rarr; kernel &rarr; NIC</td><td><strong>2 copies</strong></td></tr>
+  <tr><td>Direct <code>ByteBuffer</code></td><td>Direct buffer &rarr; kernel &rarr; NIC</td><td><strong>1 copy</strong></td></tr>
+  <tr><td><code>sendfile()</code></td><td>Page cache &rarr; NIC (DMA)</td><td><strong>0 copies</strong></td></tr>
+  </table>
+  <p>GC can <strong>move heap objects</strong> during compaction. The kernel needs a stable address for DMA. Direct buffers are pinned at a fixed native address.</p>
+
+  <h4>Netty&rsquo;s Memory Management</h4>
+  <ul>
+    <li><strong>PooledByteBufAllocator</strong>: Pre-allocated arenas of direct memory, sliced into buffers as needed</li>
+    <li><strong>Reference counting</strong>: <code>retain()</code> / <code>release()</code>. When count hits 0, memory returns to pool</li>
+    <li><strong>NOT garbage collected</strong>. Forgetting <code>release()</code> causes a native memory leak invisible to heap dumps!</li>
+  </ul>
+
+  <h4>Kernel Side (per TCP connection)</h4>
+  <ul>
+    <li><code>struct sock</code> &mdash; TCP state machine, window size, RTT</li>
+    <li><code>sk_buff</code> send/receive buffers (~87KB each, tunable via <code>sysctl</code>)</li>
+    <li><code>epoll</code> interest list entry (red-black tree)</li>
+    <li>File descriptor table entry</li>
+  </ul>
+  </div>
+
+  <!-- JVM 9: ZOOKEEPER TRACE -->
+  <h3 id="jvm-9">ZooKeeper Write Request &mdash; Complete Trace</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_05_zookeeper_trace.png" alt="ZooKeeper Write Request — Where Every Component Lives">
+    <div class="caption">Figure: Complete trace of a ZooKeeper write request showing data path through every memory region</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>Tracing a Write to <code>/app/config</code></h4>
+  <table class="kv-table">
+  <tr><th>Step</th><th>Component</th><th>Memory Location</th><th>Why</th></tr>
+  <tr><td>1</td><td>Client TCP connection arrives</td><td><span class="seg-label seg-kernel">KERNEL</span> Socket fd, <code>sk_buff</code></td><td>Kernel manages TCP state</td></tr>
+  <tr><td>2</td><td>Netty EventLoop (<code>epoll_wait</code>)</td><td><span class="seg-label seg-stack">STACK</span> + <span class="seg-label seg-heap">HEAP</span></td><td>Thread stack + Channel objects</td></tr>
+  <tr><td>3</td><td>Bytes read into Netty buffer</td><td><span class="seg-label seg-native">OFF-HEAP</span></td><td>DirectByteBuffer avoids copy</td></tr>
+  <tr><td>4</td><td>Deserialized into Request</td><td><span class="seg-label seg-heap">HEAP</span> Young Gen</td><td>Short-lived Java object</td></tr>
+  <tr><td>5</td><td>PrepRequestProcessor validates</td><td><span class="seg-label seg-stack">STACK</span> + <span class="seg-label seg-heap">HEAP</span></td><td>Call frame + txn objects</td></tr>
+  <tr><td>6</td><td>SyncRequestProcessor &rarr; txn log</td><td><span class="seg-label seg-native">OFF-HEAP</span> &rarr; <span class="seg-label seg-kernel">PAGE CACHE</span> &rarr; Disk</td><td>Direct buf &rarr; kernel &rarr; fsync</td></tr>
+  <tr><td>7</td><td>FinalRequestProcessor applies</td><td><span class="seg-label seg-heap">HEAP</span> Old Gen</td><td>DataNode tree updated</td></tr>
+  <tr><td>8</td><td>Response sent back</td><td><span class="seg-label seg-native">OFF-HEAP</span> &rarr; <span class="seg-label seg-kernel">KERNEL</span></td><td>Netty buf &rarr; socket &rarr; NIC</td></tr>
+  </table>
+
+  <h4>Full Component Map</h4>
+  <table class="kv-table">
+  <tr><th>Component</th><th>Location</th><th>Why</th></tr>
+  <tr><td>DataNode for <code>/app/config</code></td><td>JVM heap (old gen)</td><td>Long-lived Java object</td></tr>
+  <tr><td>StatPersisted (zxid, version)</td><td>JVM heap</td><td>Attached to DataNode</td></tr>
+  <tr><td>Request being processed</td><td>JVM heap (young gen)</td><td>Short-lived, GC&rsquo;d after</td></tr>
+  <tr><td>PrepRequestProcessor call frame</td><td>Thread stack</td><td>Method locals, return address</td></tr>
+  <tr><td>Txn log bytes before flush</td><td>Off-heap (direct buffer)</td><td>NIO channel write buffer</td></tr>
+  <tr><td>Txn log file after fsync</td><td>Page cache (kernel)</td><td>Counts in cgroup</td></tr>
+  <tr><td>Client TCP connection</td><td>Kernel FD table + socket buffers</td><td>Kernel manages TCP</td></tr>
+  <tr><td>JIT-compiled <code>serialize()</code></td><td>Code cache (native)</td><td>JVM compiles hot methods</td></tr>
+  </table>
+  </div>
+
+  <!-- JVM 10: ESPRESSO -->
+  <h3 id="jvm-10">Espresso Architecture &mdash; Memory Locations</h3>
+
+  <div class="diagram-box">
+    <img src="images/jvm_10_espresso_memory.png" alt="Espresso Architecture — Memory Locations">
+    <div class="caption">Figure: Espresso = Java app + MySQL storage. Two separate memory worlds with shared kernel page cache.</div>
+  </div>
+
+  <div class="jvm-card">
+  <h4>JVM Process (Espresso Server)</h4>
+  <table class="kv-table">
+  <tr><th>Component</th><th>Memory Region</th></tr>
+  <tr><td>Routing Table (Helix, partition &rarr; host)</td><td>Heap (old gen)</td></tr>
+  <tr><td>Request objects (R2D2/Rest.li)</td><td>Heap (young gen)</td></tr>
+  <tr><td>Netty R2D2 transport buffers</td><td>Off-heap (DirectByteBuffer)</td></tr>
+  <tr><td>RocksDB block cache (JNI)</td><td>Off-heap (native)</td></tr>
+  <tr><td>Metaspace for loaded classes</td><td>Off-heap</td></tr>
+  </table>
+
+  <h4>MySQL / InnoDB (Separate Process)</h4>
+  <table class="kv-table">
+  <tr><th>Component</th><th>Memory Region</th></tr>
+  <tr><td>InnoDB Buffer Pool (8&ndash;16GB)</td><td>MySQL process heap</td></tr>
+  <tr><td>Redo log buffer</td><td>MySQL process heap</td></tr>
+  <tr><td>MySQL data files cached</td><td>Kernel page cache</td></tr>
+  </table>
+  <p>Request flow: <strong>Client &rarr; Netty (off-heap) &rarr; Router (heap) &rarr; MySQL query &rarr; InnoDB &rarr; Disk</strong></p>
+  </div>
+
+  <!-- JVM 11: LINUX COMMANDS -->
+  <h3 id="jvm-11">Linux Commands for JVM Memory Investigation</h3>
+
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Process-Level Commands</span></div>
+  <pre><span class="comment"># Overview: RSS, VSZ, threads</span>
+<span class="prompt">$</span> ps -p &lt;pid&gt; -o pid,rss,vsz,nlwp,comm
+
+<span class="comment"># Detailed memory map</span>
+<span class="prompt">$</span> pmap -x &lt;pid&gt; | head -40
+
+<span class="comment"># smaps for per-region breakdown</span>
+<span class="prompt">$</span> cat /proc/&lt;pid&gt;/smaps_rollup
+
+<span class="comment"># NUMA distribution</span>
+<span class="prompt">$</span> numastat -p &lt;pid&gt;</pre></div>
+
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">JVM-Specific Commands</span></div>
+  <pre><span class="comment"># Native Memory Tracking (start JVM with -XX:NativeMemoryTracking=summary)</span>
+<span class="prompt">$</span> jcmd &lt;pid&gt; VM.native_memory summary
+
+<span class="comment"># Heap breakdown</span>
+<span class="prompt">$</span> jmap -heap &lt;pid&gt;
+
+<span class="comment"># GC activity (poll every 1000ms)</span>
+<span class="prompt">$</span> jstat -gcutil &lt;pid&gt; 1000
+
+<span class="comment"># Thread dump</span>
+<span class="prompt">$</span> jcmd &lt;pid&gt; Thread.print
+
+<span class="comment"># cgroup memory stats</span>
+<span class="prompt">$</span> cat /sys/fs/cgroup/&lt;path&gt;/memory.stat
+<span class="prompt">$</span> cat /sys/fs/cgroup/&lt;path&gt;/memory.events</pre></div>
+
+  <!-- JVM 12: MASTER TABLE -->
+  <h3 id="jvm-12">Master Reference &mdash; Where Everything Lives</h3>
+
+  <div class="jvm-card">
+  <table class="kv-table">
+  <tr><th>Thing</th><th>Segment</th><th>Managed By</th><th>Size Control</th></tr>
+  <tr><td>JVM binary (libjvm.so)</td><td><span class="seg-label seg-text">TEXT</span></td><td>OS loader</td><td>Fixed</td></tr>
+  <tr><td>JIT-compiled methods</td><td><span class="seg-label seg-native">CODE CACHE</span></td><td>JVM JIT</td><td><code>-XX:ReservedCodeCacheSize</code></td></tr>
+  <tr><td>JVM constants</td><td><span class="seg-label seg-data">DATA</span></td><td>OS loader</td><td>Fixed</td></tr>
+  <tr><td>Uninitialized statics</td><td><span class="seg-label seg-data">BSS</span></td><td>OS (zeroed)</td><td>Fixed</td></tr>
+  <tr><td>Java objects (<code>new</code>)</td><td><span class="seg-label seg-heap">JAVA HEAP</span></td><td>GC</td><td><code>-Xms</code>/<code>-Xmx</code></td></tr>
+  <tr><td>Young Gen</td><td><span class="seg-label seg-heap">JAVA HEAP</span></td><td>GC</td><td><code>-Xmn</code> or auto</td></tr>
+  <tr><td>Old Gen</td><td><span class="seg-label seg-heap">JAVA HEAP</span></td><td>GC</td><td><code>-Xmx</code> minus young</td></tr>
+  <tr><td>Class metadata</td><td><span class="seg-label seg-native">METASPACE</span></td><td>Classloader</td><td><code>-XX:MaxMetaspaceSize</code></td></tr>
+  <tr><td>Direct ByteBuffers</td><td><span class="seg-label seg-native">OFF-HEAP</span></td><td>Netty ref-count</td><td><code>-XX:MaxDirectMemorySize</code></td></tr>
+  <tr><td>Thread stack</td><td><span class="seg-label seg-stack">STACK</span></td><td>Auto (LIFO)</td><td><code>-Xss</code> (default 1MB)</td></tr>
+  <tr><td>Local primitives</td><td><span class="seg-label seg-stack">STACK</span></td><td>Auto</td><td>Part of frame</td></tr>
+  <tr><td>Socket state (TCP)</td><td><span class="seg-label seg-kernel">KERNEL</span></td><td>Kernel</td><td><code>sysctl net.core.*</code></td></tr>
+  <tr><td>Page cache</td><td><span class="seg-label seg-kernel">KERNEL</span></td><td>Kernel</td><td>Reclaimed under pressure</td></tr>
+  <tr><td>File descriptors</td><td><span class="seg-label seg-kernel">KERNEL</span></td><td>Kernel</td><td><code>ulimit -n</code>, <code>file-max</code></td></tr>
+  <tr><td>epoll interest list</td><td><span class="seg-label seg-kernel">KERNEL</span></td><td>Kernel</td><td>fd limit</td></tr>
+  </table>
+  </div>
+
   <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
 </div>
 
