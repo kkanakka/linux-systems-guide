@@ -850,6 +850,128 @@ write(1, "myhost\n", 7) = 7
 <span class="comment"># JVM flags in effect</span>
 <span class="prompt">$</span> jcmd $(pgrep -f ZooKeeper) VM.flags</pre></div>
 
+  <!-- JVM 1.5: MALLOC vs JVM HEAP -->
+  <h3 id="jvm-malloc">The Core Confusion: malloc vs JVM Heap</h3>
+  <p><code>malloc</code> is a C library function (glibc) that requests memory from the OS. Java&rsquo;s heap does <strong>not</strong> use <code>malloc</code>. They&rsquo;re two completely separate memory management systems running in the same process.</p>
+
+  <div class="jvm-card">
+  <h4>Why the JVM Heap Doesn&rsquo;t Use malloc</h4>
+  <p>The JVM is a memory manager that runs on top of another memory manager. It deliberately bypasses <code>malloc</code> for the heap because malloc is too slow, too fragmented, and can&rsquo;t support garbage collection.</p>
+
+  <p>Here&rsquo;s what actually happens step by step when you run <code>java -Xmx=4g -Xms=2g -jar zookeeper.jar</code>:</p>
+
+  <ol>
+    <li><strong>JVM calls <code>mmap()</code> directly</strong> &mdash; not <code>malloc()</code>:
+      <pre>mmap(NULL, 4GB, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)</pre>
+      This asks the kernel for a single, <strong>contiguous 4GB block</strong> of virtual address space. The kernel says &ldquo;sure&rdquo; and creates page table entries, but <strong>no physical RAM is allocated yet</strong> (pages are lazy/demand-paged).
+    </li>
+    <li><strong>The JVM carves this into regions</strong> &mdash; young gen (Eden, Survivor 0, Survivor 1) and old gen. The JVM itself manages allocation within this space.</li>
+    <li><strong>When your code does <code>new DataNode()</code></strong>, the JVM does <strong>NOT</strong> call <code>malloc</code>. Instead, each thread has a <strong>TLAB (Thread-Local Allocation Buffer)</strong> &mdash; a small pre-carved chunk of Eden. Allocation is literally just bumping a pointer forward:
+      <pre>pointer += objectSize;   // That's it. One CPU instruction.</pre>
+      This is enormously faster than <code>malloc</code>, which has to traverse free lists, check bins, potentially call <code>sbrk</code>/<code>mmap</code>, and deal with thread contention via locks.
+    </li>
+  </ol>
+
+  <h4>Why malloc Is Fundamentally Incompatible with GC</h4>
+  <p><code>malloc</code> gives you an address and promises that address is <strong>stable forever</strong> until you <code>free()</code> it. But GC needs to <strong>move objects</strong> &mdash; the G1 or ZGC collector copies live objects from one region to another, compacting memory and updating all references. If objects were <code>malloc</code>&rsquo;d, the GC couldn&rsquo;t move them because <code>malloc</code> doesn&rsquo;t know about inter-object references and can&rsquo;t update pointers.</p>
+
+  <div class="info-box note">
+  <strong>Think of it this way:</strong> <code>malloc</code> is like buying plots of land scattered around a city &mdash; you own them permanently at fixed addresses. The JVM heap is like renting space in a warehouse where the manager can reorganize everything overnight, sliding boxes around to eliminate gaps. GC is that reorganization.
+  </div>
+
+  <h4>So Where Does malloc Actually Get Used?</h4>
+  <p>Everything <strong>outside</strong> the JVM heap goes through <code>malloc</code> (via glibc&rsquo;s ptmalloc2):</p>
+
+  <table class="kv-table">
+  <tr><th>Component</th><th>How It&rsquo;s Allocated</th><th>Why malloc Here</th></tr>
+  <tr>
+    <td><code>ByteBuffer.allocateDirect(1024)</code><br>(Netty uses this)</td>
+    <td><code>Unsafe.allocateMemory()</code> &rarr; <code>malloc()</code> &rarr; <code>mmap()</code></td>
+    <td>These buffers live outside GC&rsquo;s control &mdash; they <strong>won&rsquo;t be moved</strong> by GC, so the kernel can DMA directly to/from them for zero-copy I/O</td>
+  </tr>
+  <tr>
+    <td>Metaspace (class metadata)</td>
+    <td><code>malloc</code>&rsquo;d in chunks</td>
+    <td>When ZooKeeper loads classes, bytecode metadata goes here. Not GC-managed objects.</td>
+  </tr>
+  <tr>
+    <td>Thread stacks</td>
+    <td><code>pthread_create</code> &rarr; <code>mmap</code> (1MB region)</td>
+    <td>Each <code>new Thread()</code> gets its own stack region. Fixed size, no GC needed.</td>
+  </tr>
+  <tr>
+    <td>JIT Code Cache</td>
+    <td><code>mmap</code>&rsquo;d memory</td>
+    <td>Compiled native code from C1/C2 compilers. Executable pages, not Java objects.</td>
+  </tr>
+  <tr>
+    <td>JNI native allocations</td>
+    <td><code>malloc</code> via glibc</td>
+    <td>If <code>libzookeeper_jni.so</code> calls <code>malloc</code>, it&rsquo;s completely invisible to the JVM.</td>
+  </tr>
+  <tr>
+    <td>GC internal data structures</td>
+    <td><code>malloc</code></td>
+    <td>The GC itself needs bookkeeping memory (remembered sets, card tables). Can&rsquo;t be on the heap it&rsquo;s managing!</td>
+  </tr>
+  </table>
+
+  <h4>The Sizing Consequence</h4>
+  <p>When you set <code>-Xmx=4g</code>, you&rsquo;re sizing <strong>only</strong> the <code>mmap</code>&rsquo;d region that the JVM manages internally. The actual process RSS will be larger because of all the <code>malloc</code>&rsquo;d native memory on top:</p>
+
+  <table class="kv-table">
+  <tr><th>Region</th><th>Size</th><th>Allocator</th></tr>
+  <tr><td>JVM heap</td><td>4GB</td><td>JVM&rsquo;s own (via <code>mmap</code>)</td></tr>
+  <tr><td>Metaspace</td><td>~100MB</td><td><code>malloc</code> &rarr; <code>mmap</code></td></tr>
+  <tr><td>Thread stacks (200 threads)</td><td>~200MB</td><td><code>mmap</code> per thread</td></tr>
+  <tr><td>Code cache</td><td>~240MB</td><td><code>mmap</code></td></tr>
+  <tr><td>Direct byte buffers</td><td>~512MB</td><td><code>malloc</code> &rarr; <code>mmap</code></td></tr>
+  <tr><td>GC internal data</td><td>~200MB</td><td><code>malloc</code></td></tr>
+  <tr><td><strong>Total RSS</strong></td><td><strong>~5.2GB</strong></td><td><strong>Mixed</strong></td></tr>
+  </table>
+
+  <div class="info-box danger">
+  <strong>This is why</strong> setting your container&rsquo;s <code>memory.max</code> to exactly 4GB when you&rsquo;ve set <code>-Xmx=4g</code> will get you <strong>OOM killed</strong> &mdash; the off-heap native memory pushes you over.
+  </div>
+
+  <h4>The Speed Difference</h4>
+  <table class="kv-table">
+  <tr><th>Operation</th><th>Time</th><th>How It Works</th></tr>
+  <tr>
+    <td><strong>JVM TLAB allocation</strong><br>(<code>new DataNode()</code>)</td>
+    <td><strong>~10 ns</strong></td>
+    <td>Bump a pointer forward. Single CPU instruction. No locks &mdash; TLAB is thread-local.</td>
+  </tr>
+  <tr>
+    <td><strong>malloc()</strong></td>
+    <td><strong>~50&ndash;100 ns</strong></td>
+    <td>Traverse free lists, check size bins, potentially call <code>sbrk</code>/<code>mmap</code>, acquire lock for thread safety.</td>
+  </tr>
+  <tr><td colspan="3" style="text-align:center;color:var(--accent3);font-weight:600;">JVM allocation is 5&ndash;10x faster than malloc</td></tr>
+  </table>
+  <p>When ZooKeeper is creating millions of request/response objects per second, that 5&ndash;10x difference in allocation speed is critical.</p>
+  </div>
+
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">See malloc vs mmap in Action</span></div>
+  <pre><span class="comment"># See the JVM's heap mmap region vs malloc'd native memory</span>
+<span class="prompt">$</span> jcmd $(pgrep -f ZooKeeper) VM.native_memory summary
+<span class="output">Total: reserved=6442450944, committed=5368709120</span>
+<span class="output">-       Java Heap (reserved=4294967296, committed=4294967296)   </span><span class="comment"># ← mmap'd, GC-managed</span>
+<span class="output">-           Class (reserved=1073741824, committed=268435456)    </span><span class="comment"># ← Metaspace, malloc'd</span>
+<span class="output">-          Thread (reserved=262144000, committed=262144000)     </span><span class="comment"># ← mmap per thread</span>
+<span class="output">-            Code (reserved=251658240, committed=50331648)      </span><span class="comment"># ← JIT CodeCache, mmap'd</span>
+<span class="output">-        Internal (reserved=134217728, committed=134217728)     </span><span class="comment"># ← Direct buffers, malloc'd</span>
+
+<span class="comment"># Trace actual mmap/malloc calls (Linux only)</span>
+<span class="prompt">$</span> strace -e mmap,brk -p $(pgrep -f java) 2>&amp;1 | head -20
+
+<span class="comment"># See glibc malloc stats</span>
+<span class="prompt">$</span> MALLOC_STATS=1 java -jar app.jar  <span class="comment"># prints malloc summary on exit</span>
+
+<span class="comment"># Compare RSS vs -Xmx to see the gap</span>
+<span class="prompt">$</span> ps -p $(pgrep -f ZooKeeper) -o pid,rss,vsz --no-headers
+<span class="comment"># RSS will be ~5.2GB even though -Xmx is only 4GB</span></pre></div>
+
   <!-- JVM 2: STACK vs HEAP -->
   <h3 id="jvm-2">Stack vs Heap &mdash; What Goes Where in Java</h3>
 
