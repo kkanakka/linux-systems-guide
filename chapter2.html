@@ -91,7 +91,7 @@
 <div class="container">
 
 <div class="toc" id="toc">
-  <h2>Table of Contents (20 Sections)</h2>
+  <h2>Table of Contents (21 Sections)</h2>
   <div class="toc-grid">
     <a href="#sec-1">2.1 The Core OS: The Kernel</a>
     <a href="#sec-2">2.2 The Shell</a>
@@ -113,6 +113,7 @@
     <a href="#sec-18">2.18 Realtime</a>
     <a href="#sec-19">2.19 The /proc File System</a>
     <a href="#sec-20">2.20 Summary &amp; Cheat Sheet</a>
+    <a href="#sec-21" style="color:var(--accent4);font-weight:600;">Ch.13 &mdash; File I/O Buffering</a>
   </div>
 </div>
 
@@ -2115,6 +2116,998 @@ pid 1's current scheduling priority: 0
 <span class="prompt">$</span> cat /proc/PID/io             <span class="comment"># I/O counters</span>
 <span class="prompt">$</span> cat /proc/PID/limits         <span class="comment"># Resource limits</span>
 <span class="prompt">$</span> sysctl -a                    <span class="comment"># All kernel parameters</span></pre></div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 21: FILE I/O BUFFERING (Chapter 13) ==================== -->
+<div class="section" id="sec-21">
+  <div class="section-num">Chapter 13</div>
+  <h2>File I/O Buffering</h2>
+
+  <p>I/O system calls (<code>read()</code>, <code>write()</code>) and the C standard library (<code>printf()</code>, <code>fprintf()</code>) <b>both buffer data</b> when operating on disk files. Understanding these two layers of buffering is essential for writing performant, correct applications &mdash; and for knowing when you need to bypass or flush them.</p>
+
+  <div class="info-box note">
+    <strong>The Two Layers of Buffering</strong>
+    <b>Layer 1:</b> stdio library buffer (user space, e.g. 8 KB) &mdash; controlled by <code>setvbuf()</code>, <code>fflush()</code><br>
+    <b>Layer 2:</b> Kernel buffer cache / page cache (kernel space, dynamically sized) &mdash; controlled by <code>fsync()</code>, <code>fdatasync()</code>, <code>sync()</code>, <code>O_SYNC</code>
+  </div>
+
+  <!-- ===== 13.1 KERNEL BUFFERING ===== -->
+  <h3 id="ch13-kernel-buffer">13.1 Kernel Buffering of File I/O: The Buffer Cache</h3>
+
+  <p>When working with disk files, <code>read()</code> and <code>write()</code> don&rsquo;t directly initiate disk access. They simply copy data between a <b>user-space buffer</b> and a <b>buffer in the kernel buffer cache</b>.</p>
+
+  <div class="jvm-card">
+    <h4>What Happens When You Call write()</h4>
+<pre><span class="lang-label">C</span>write(fd, "abc", 3);
+
+<span class="comment">// Step 1: 3 bytes copied from user-space buffer → kernel buffer cache (RAM to RAM, fast!)</span>
+<span class="comment">// Step 2: write() RETURNS — your program continues executing</span>
+<span class="comment">// Step 3: At some LATER point, kernel flushes buffer to disk (async)</span>
+<span class="comment">//         This is done by the pdflush/writeback kernel thread</span>
+<span class="comment">//</span>
+<span class="comment">// If another process reads these bytes before flush, the kernel</span>
+<span class="comment">// serves them from the buffer cache — NOT from the (outdated) disk.</span></pre>
+  </div>
+
+  <p>For <b>input</b>, the kernel reads data from disk into the buffer cache. Calls to <code>read()</code> fetch from this buffer until exhausted, then the kernel reads the next segment. The kernel also performs <b>read-ahead</b> for sequential access &mdash; pre-loading the next blocks before the process requests them.</p>
+
+  <div class="info-box success">
+    <strong>Why Buffer?</strong>
+    <b>Speed</b>: <code>read()</code> and <code>write()</code> return fast because they don&rsquo;t wait for slow disk operations.<br>
+    <b>Efficiency</b>: Reduces the number of actual disk transfers the kernel must perform.<br>
+    <b>Dynamic sizing</b>: No fixed upper limit on buffer cache &mdash; kernel allocates as many pages as needed, limited only by available RAM and competing demands.
+  </div>
+
+  <div class="info-box note">
+    <strong>Buffer Cache vs. Page Cache</strong>
+    From kernel 2.4 onward, Linux no longer maintains a separate buffer cache. File I/O buffers are included in the <b>page cache</b>, which also contains pages from memory-mapped files. The term &ldquo;buffer cache&rdquo; persists for historical reasons.
+  </div>
+
+  <div class="diagram-box">
+    <img src="images/ch13_01_io_buffering_layers.png" alt="File I/O Buffering: The Complete Picture">
+    <div class="caption">The complete I/O buffering picture &mdash; from user data through stdio, kernel page cache, to physical disk</div>
+  </div>
+
+  <!-- ===== 13.1.1 BUFFER SIZE IMPACT ===== -->
+  <h3 id="ch13-buf-size">Effect of Buffer Size on I/O System Call Performance</h3>
+
+  <p>The kernel performs the same number of disk accesses regardless of whether we perform <b>1000 writes of 1 byte</b> or <b>1 write of 1000 bytes</b>. But system calls are expensive &mdash; each one requires a trap into kernel mode, argument validation, and data copying between user/kernel space.</p>
+
+  <h4>Table 13-1: Time to Copy 100 Million Bytes (read + write)</h4>
+  <table class="kv-table">
+    <tr><th>BUF_SIZE</th><th>Elapsed (s)</th><th>Total CPU</th><th>User CPU</th><th>System CPU</th><th># of syscalls</th></tr>
+    <tr><td>1</td><td style="color:var(--red);font-weight:700">107.43</td><td>107.32</td><td>8.20</td><td>99.12</td><td>100,000,000 &times; 2</td></tr>
+    <tr><td>2</td><td>54.16</td><td>53.89</td><td>4.13</td><td>49.76</td><td>50,000,000 &times; 2</td></tr>
+    <tr><td>4</td><td>31.72</td><td>30.96</td><td>2.30</td><td>28.66</td><td>25,000,000 &times; 2</td></tr>
+    <tr><td>8</td><td>15.59</td><td>14.34</td><td>1.08</td><td>13.26</td><td>12,500,000 &times; 2</td></tr>
+    <tr><td>16</td><td>7.50</td><td>7.14</td><td>0.51</td><td>6.63</td><td>6,250,000 &times; 2</td></tr>
+    <tr><td>64</td><td>2.19</td><td>2.04</td><td>0.13</td><td>1.91</td><td>~1,562,500 &times; 2</td></tr>
+    <tr><td>256</td><td>2.06</td><td>1.75</td><td>0.10</td><td>1.65</td><td>~390,625 &times; 2</td></tr>
+    <tr><td>1024</td><td>2.05</td><td>0.65</td><td>0.02</td><td>0.63</td><td>~97,656 &times; 2</td></tr>
+    <tr><td style="color:var(--accent2);font-weight:700">4096</td><td style="color:var(--accent2);font-weight:700">2.05</td><td>0.38</td><td>0.01</td><td>0.38</td><td style="color:var(--accent2)">~24,414 &times; 2</td></tr>
+    <tr><td>16384</td><td>2.05</td><td>0.34</td><td>0.00</td><td>0.33</td><td>~6,103 &times; 2</td></tr>
+    <tr><td>65536</td><td>2.06</td><td>0.32</td><td>0.00</td><td>0.32</td><td>~1,525 &times; 2</td></tr>
+  </table>
+
+  <h4>Table 13-2: Time to Write 100 Million Bytes (write only, no disk I/O)</h4>
+  <table class="kv-table">
+    <tr><th>BUF_SIZE</th><th>Elapsed (s)</th><th>Total CPU</th><th>User CPU</th><th>System CPU</th></tr>
+    <tr><td>1</td><td style="color:var(--red);font-weight:700">72.13</td><td>72.11</td><td>5.00</td><td>67.11</td></tr>
+    <tr><td>4</td><td>20.01</td><td>19.99</td><td>1.26</td><td>18.73</td></tr>
+    <tr><td>16</td><td>4.70</td><td>4.68</td><td>0.31</td><td>4.37</td></tr>
+    <tr><td>64</td><td>1.24</td><td>1.24</td><td>0.07</td><td>1.16</td></tr>
+    <tr><td>256</td><td>0.38</td><td>0.38</td><td>0.02</td><td>0.36</td></tr>
+    <tr><td>1024</td><td>0.17</td><td>0.17</td><td>0.01</td><td>0.16</td></tr>
+    <tr><td style="color:var(--accent2);font-weight:700">4096</td><td style="color:var(--accent2);font-weight:700">0.11</td><td>0.11</td><td>0.00</td><td>0.11</td></tr>
+    <tr><td>65536</td><td>0.09</td><td>0.09</td><td>0.00</td><td>0.09</td></tr>
+  </table>
+
+  <div class="info-box warning">
+    <strong>Key Takeaway</strong>
+    With BUF_SIZE = 65,536: Table 13-1 takes <b>2.06s</b> but Table 13-2 takes only <b>0.09s</b>. The difference (1.97s) is the time spent doing actual <b>disk reads</b>. Write-only benchmarks don&rsquo;t hit the disk because the data stays in the page cache (100 MB file on a 4 GB RAM machine).
+  </div>
+
+  <div class="diagram-box">
+    <img src="images/ch13_02_buffer_size_performance.png" alt="Buffer Size vs Performance">
+    <div class="caption">Sweet spot at BUF_SIZE = 4096 (filesystem block size) &mdash; 100 million 1-byte calls vs ~24,000 4096-byte calls</div>
+  </div>
+
+  <div class="jvm-card">
+    <h4>Why 4096 Is the Magic Number</h4>
+    <ul>
+      <li><b>ext2/ext3/ext4 block size</b> is typically 4096 bytes</li>
+      <li>Each <code>write()</code> that fits in one filesystem block = one efficient transfer</li>
+      <li>Below 4096: syscall overhead dominates</li>
+      <li>Above 4096: diminishing returns &mdash; cost of syscalls already negligible vs disk I/O</li>
+      <li>The kernel page size on x86-64 Linux is also 4096 bytes (4 KB)</li>
+    </ul>
+  </div>
+
+  <!-- Demo commands -->
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+      <span class="terminal-title">Measure buffer size impact yourself</span>
+    </div>
+<pre><span class="comment"># Create a 100MB test file</span>
+<span class="prompt">$</span> dd if=/dev/urandom of=/tmp/testfile bs=1M count=100
+100+0 records in
+100+0 records out
+104857600 bytes (105 MB) copied, 0.612 s, 171 MB/s
+
+<span class="comment"># Copy with 1-byte buffer (painfully slow)</span>
+<span class="prompt">$</span> time dd if=/tmp/testfile of=/tmp/copy bs=1 count=104857600
+104857600+0 records in
+104857600+0 records out
+real    1m47.2s   <span class="comment">← ~107 seconds!</span>
+
+<span class="comment"># Copy with 4096-byte buffer (fast)</span>
+<span class="prompt">$</span> time dd if=/tmp/testfile of=/tmp/copy bs=4096
+25600+0 records in
+25600+0 records out
+real    0m2.1s    <span class="comment">← ~2 seconds! (50x faster)</span>
+
+<span class="comment"># Copy with 1MB buffer</span>
+<span class="prompt">$</span> time dd if=/tmp/testfile of=/tmp/copy bs=1M
+100+0 records in
+100+0 records out
+real    0m2.0s    <span class="comment">← No significant improvement beyond 4K</span>
+
+<span class="comment"># Check your filesystem block size</span>
+<span class="prompt">$</span> stat -f /tmp | grep "Block size"
+Block size: 4096
+
+<span class="comment"># Check page size</span>
+<span class="prompt">$</span> getconf PAGE_SIZE
+4096</pre>
+  </div>
+
+  <!-- ===== 13.2 STDIO BUFFERING ===== -->
+  <h3 id="ch13-stdio-buffer">13.2 Buffering in the stdio Library</h3>
+
+  <p>The C library I/O functions (<code>fprintf()</code>, <code>fscanf()</code>, <code>fgets()</code>, <code>fputs()</code>, <code>fputc()</code>, <code>fgetc()</code>) perform their own buffering into large blocks to reduce system calls. This is why <code>printf()</code> is generally easier &mdash; you don&rsquo;t have to manually batch your <code>write()</code> calls.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch13_03_stdio_buffering_modes.png" alt="stdio Buffering Modes">
+    <div class="caption">Three stdio buffering modes: unbuffered (_IONBF), line-buffered (_IOLBF), fully-buffered (_IOFBF)</div>
+  </div>
+
+  <h4>setvbuf() &mdash; Control the Buffering Mode</h4>
+<pre><span class="lang-label">C</span>#include &lt;stdio.h&gt;
+
+int setvbuf(FILE *stream, char *buf, int mode, size_t size);
+<span class="comment">// Returns 0 on success, or nonzero on error</span>
+
+<span class="comment">// mode can be:</span>
+<span class="comment">//   _IONBF  — No buffering (every call → immediate syscall)</span>
+<span class="comment">//              Default for stderr</span>
+<span class="comment">//   _IOLBF  — Line buffering (flush on newline or buffer full)</span>
+<span class="comment">//              Default for terminal streams</span>
+<span class="comment">//   _IOFBF  — Full buffering (flush only when buffer full)</span>
+<span class="comment">//              Default for disk files</span></pre>
+
+  <table class="kv-table">
+    <tr><th>Mode</th><th>Flag</th><th>When Buffer Flushes</th><th>Default For</th><th>Use Case</th></tr>
+    <tr>
+      <td><b>No buffering</b></td>
+      <td><code>_IONBF</code></td>
+      <td>Every single stdio call triggers <code>write()</code></td>
+      <td><code>stderr</code></td>
+      <td>Error output must appear immediately</td>
+    </tr>
+    <tr>
+      <td><b>Line buffering</b></td>
+      <td><code>_IOLBF</code></td>
+      <td>On <code>\n</code> (newline) or when buffer is full</td>
+      <td><code>stdout</code> when connected to terminal</td>
+      <td>Interactive terminal output</td>
+    </tr>
+    <tr>
+      <td><b>Full buffering</b></td>
+      <td><code>_IOFBF</code></td>
+      <td>Only when the buffer (BUFSIZ = 8192 bytes) is completely full</td>
+      <td>Disk files, <code>stdout</code> redirected to file</td>
+      <td>Maximum performance for file I/O</td>
+    </tr>
+  </table>
+
+  <h4>Usage Examples</h4>
+<pre><span class="lang-label">C</span><span class="comment">// Make stdout fully buffered with a custom 1024-byte buffer</span>
+#define BUF_SIZE 1024
+static char buf[BUF_SIZE];
+if (setvbuf(stdout, buf, _IOFBF, BUF_SIZE) != 0)
+    errExit("setvbuf");
+
+<span class="comment">// Make stdout unbuffered (every printf → immediate write)</span>
+setbuf(stdout, NULL);
+<span class="comment">// Equivalent to: setvbuf(stdout, NULL, _IONBF, 0)</span>
+
+<span class="comment">// setbuf(fp, buf) is equivalent to:</span>
+<span class="comment">//   setvbuf(fp, buf, (buf != NULL) ? _IOFBF : _IONBF, BUFSIZ)</span>
+<span class="comment">// where BUFSIZ = 8192 in glibc</span>
+
+<span class="comment">// setbuffer() (BSD extension) — same but lets you specify size</span>
+#define _BSD_SOURCE
+#include &lt;stdio.h&gt;
+void setbuffer(FILE *stream, char *buf, size_t size);
+<span class="comment">// setbuffer(fp, buf, size) ≡ setvbuf(fp, buf, (buf!=NULL)?_IOFBF:_IONBF, size)</span></pre>
+
+  <div class="info-box danger">
+    <strong>Warning: Don&rsquo;t Use Stack Buffers with setvbuf()</strong>
+    The buffer you pass to <code>setvbuf()</code> must <b>not</b> be a local variable on the stack. When the function returns and the stack frame is deallocated, the stdio library will write into freed memory &mdash; causing corruption.
+    Use <code>static</code> variables or <code>malloc()</code>-allocated memory.
+  </div>
+
+  <h4>fflush() &mdash; Force Flush a stdio Buffer</h4>
+<pre><span class="lang-label">C</span>#include &lt;stdio.h&gt;
+
+int fflush(FILE *stream);
+<span class="comment">// Returns 0 on success, EOF on error</span>
+
+fflush(stdout);       <span class="comment">// Flush stdout's user-space buffer → kernel via write()</span>
+fflush(NULL);         <span class="comment">// Flush ALL stdio buffers</span>
+fflush(input_stream); <span class="comment">// On input stream: discard buffered input</span>
+
+<span class="comment">// Auto-flush happens when:</span>
+<span class="comment">//   1. Stream is closed (fclose)</span>
+<span class="comment">//   2. Program exits normally (exit())</span>
+<span class="comment">//   3. In glibc: when reading from stdin (implicit fflush(stdout))</span>
+<span class="comment">//      ↑ NOT portable! Always use explicit fflush() for prompts</span></pre>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+      <span class="terminal-title">See stdio buffering in action</span>
+    </div>
+<pre><span class="comment"># stdout is LINE-BUFFERED when connected to terminal</span>
+<span class="prompt">$</span> python3 -c "import sys; print(sys.stdout.line_buffering)"
+True
+
+<span class="comment"># stdout is FULLY-BUFFERED when redirected to file</span>
+<span class="prompt">$</span> python3 -c "import sys; print(sys.stdout.line_buffering)" > /tmp/out
+<span class="prompt">$</span> cat /tmp/out
+False
+
+<span class="comment"># C equivalent: check if stdout is a terminal</span>
+<span class="prompt">$</span> cat &lt;&lt;'EOF' | gcc -x c - -o /tmp/checkbuf && /tmp/checkbuf
+#include &lt;stdio.h&gt;
+#include &lt;unistd.h&gt;
+int main() {
+    if (isatty(fileno(stdout)))
+        printf("stdout is a terminal → line-buffered\n");
+    else
+        printf("stdout is NOT a terminal → fully-buffered\n");
+    return 0;
+}
+EOF
+stdout is a terminal → line-buffered
+
+<span class="comment"># strace to see actual write() syscalls</span>
+<span class="prompt">$</span> strace -e write printf "hello\nworld\n" 2>&1 | head
+write(1, "hello\nworld\n", 12) = 12</pre>
+  </div>
+
+  <!-- ===== 13.3 CONTROLLING KERNEL BUFFERING ===== -->
+  <h3 id="ch13-kernel-control">13.3 Controlling Kernel Buffering of File I/O</h3>
+
+  <p>Sometimes you need to ensure data is <b>actually on the physical disk</b> &mdash; not just in the kernel&rsquo;s page cache. Database journal processes, transaction logs, and financial systems all require this guarantee.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch13_04_sync_controls.png" alt="Kernel Flush Controls: fsync vs fdatasync vs sync">
+    <div class="caption">fsync() vs fdatasync() vs sync() &mdash; different scopes and performance trade-offs</div>
+  </div>
+
+  <h4>Synchronized I/O: Two Levels of Guarantee</h4>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4 style="color:var(--accent);">Data Integrity Completion</h4>
+      <ul>
+        <li>File data is transferred to disk</li>
+        <li>Only metadata <b>needed to retrieve data</b> is transferred (e.g., file size if it changed)</li>
+        <li>Timestamps do <b>not</b> need to be written</li>
+        <li>Achieved by: <code>fdatasync()</code>, <code>O_DSYNC</code></li>
+        <li><b>Potentially 1 disk write</b> (just the data blocks)</li>
+      </ul>
+    </div>
+    <div class="compare-card">
+      <h4 style="color:var(--accent3);">File Integrity Completion</h4>
+      <ul>
+        <li>File data is transferred to disk</li>
+        <li><b>All</b> metadata is transferred (timestamps, permissions, etc.)</li>
+        <li>Superset of data integrity</li>
+        <li>Achieved by: <code>fsync()</code>, <code>O_SYNC</code></li>
+        <li><b>At least 2 disk writes</b> (data blocks + inode/metadata &mdash; requires disk seek)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4>The Three Sync System Calls</h4>
+<pre><span class="lang-label">C</span>#include &lt;unistd.h&gt;
+
+<span class="comment">// fsync — flush ONE file (data + ALL metadata) to disk</span>
+int fsync(int fd);
+<span class="comment">// Blocks until transfer to disk device (or its cache) completes</span>
+<span class="comment">// Use for: database journals, critical logs</span>
+
+<span class="comment">// fdatasync — flush ONE file (data + essential metadata only) to disk</span>
+int fdatasync(int fd);
+<span class="comment">// Skips non-essential metadata (like timestamps)</span>
+<span class="comment">// Can be 1 disk op vs fsync's 2 — significant for high-frequency writers!</span>
+<span class="comment">// Use for: high-perf logging where timestamps don't matter</span>
+
+<span class="comment">// sync — flush ALL kernel buffers for ALL files to disk</span>
+void sync(void);
+<span class="comment">// On Linux: blocks until all data transferred</span>
+<span class="comment">// Use for: before shutdown, emergency situations</span></pre>
+
+  <div class="jvm-card">
+    <h4>Real-World Example: Database Write-Ahead Log (WAL)</h4>
+<pre><span class="lang-label">C</span><span class="comment">// PostgreSQL-style WAL write</span>
+int wal_fd = open("pg_wal/000000010000000000000001", O_WRONLY | O_APPEND);
+
+<span class="comment">// Write the WAL record</span>
+write(wal_fd, wal_record, record_len);
+
+<span class="comment">// CRITICAL: Must reach disk before we acknowledge the transaction!</span>
+<span class="comment">// Option 1: fdatasync — faster, but timestamps may lag</span>
+fdatasync(wal_fd);   <span class="comment">// ← PostgreSQL uses this by default (wal_sync_method = fdatasync)</span>
+
+<span class="comment">// Option 2: fsync — safer, includes all metadata</span>
+fsync(wal_fd);       <span class="comment">// ← More expensive, but guarantees everything</span>
+
+<span class="comment">// Only NOW can we tell the client: "Transaction committed"</span></pre>
+  </div>
+
+  <div class="info-box note">
+    <strong>The Automatic Flusher</strong>
+    A kernel thread (<code>pdflush</code> in 2.6, <code>writeback</code> in modern kernels) automatically flushes dirty pages to disk if they haven&rsquo;t been synced within <b>30 seconds</b>.
+    Controlled by <code>/proc/sys/vm/dirty_expire_centisecs</code> (default: 3000 = 30s).
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+      <span class="terminal-title">Inspect kernel dirty page settings</span>
+    </div>
+<pre><span class="comment"># How long before dirty pages MUST be written (centiseconds)</span>
+<span class="prompt">$</span> cat /proc/sys/vm/dirty_expire_centisecs
+3000    <span class="comment">← 30 seconds</span>
+
+<span class="comment"># Percentage of RAM that can be dirty before writeback starts</span>
+<span class="prompt">$</span> cat /proc/sys/vm/dirty_ratio
+20      <span class="comment">← 20% of RAM</span>
+
+<span class="comment"># Background writeback starts at this percentage</span>
+<span class="prompt">$</span> cat /proc/sys/vm/dirty_background_ratio
+10      <span class="comment">← 10% of RAM</span>
+
+<span class="comment"># Current dirty pages</span>
+<span class="prompt">$</span> grep -i dirty /proc/meminfo
+Dirty:              1284 kB
+Writeback:             0 kB
+
+<span class="comment"># Force sync all buffers RIGHT NOW</span>
+<span class="prompt">$</span> sync
+<span class="prompt">$</span> grep -i dirty /proc/meminfo
+Dirty:                 0 kB    <span class="comment">← All flushed!</span></pre>
+  </div>
+
+  <!-- ===== O_SYNC ===== -->
+  <h3 id="ch13-osync">O_SYNC &mdash; Making All Writes Synchronous</h3>
+
+  <p>Opening a file with <code>O_SYNC</code> makes <b>every</b> <code>write()</code> block until the data and metadata are physically on the disk. It&rsquo;s the nuclear option &mdash; safe but extremely expensive.</p>
+
+<pre><span class="lang-label">C</span><span class="comment">// Every write() now waits for disk confirmation</span>
+int fd = open(pathname, O_WRONLY | O_SYNC);
+
+<span class="comment">// This write() will NOT return until data is on the physical disk</span>
+write(fd, buffer, 4096);
+<span class="comment">// ← Blocks for milliseconds (SSD) to tens of milliseconds (HDD)</span></pre>
+
+  <div class="diagram-box">
+    <img src="images/ch13_05_osync_impact.png" alt="O_SYNC Performance Impact">
+    <div class="caption">O_SYNC can slow writes by 1000x+ for small buffer sizes &mdash; use sparingly!</div>
+  </div>
+
+  <h4>Table 13-3: O_SYNC Impact on Writing 1 Million Bytes</h4>
+  <table class="kv-table">
+    <tr><th>BUF_SIZE</th><th colspan="2">Without O_SYNC</th><th colspan="2">With O_SYNC</th><th>Slowdown</th></tr>
+    <tr><th></th><th>Elapsed</th><th>Total CPU</th><th>Elapsed</th><th>Total CPU</th><th></th></tr>
+    <tr>
+      <td>1</td>
+      <td>0.73s</td><td>0.73s</td>
+      <td style="color:var(--red);font-weight:700">1030s</td><td>98.8s</td>
+      <td style="color:var(--red);font-weight:700">1,411&times;</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>0.05s</td><td>0.05s</td>
+      <td>65.0s</td><td>0.40s</td>
+      <td>1,300&times;</td>
+    </tr>
+    <tr>
+      <td>256</td>
+      <td>0.02s</td><td>0.02s</td>
+      <td>4.07s</td><td>0.03s</td>
+      <td>203&times;</td>
+    </tr>
+    <tr>
+      <td>4096</td>
+      <td>0.01s</td><td>0.01s</td>
+      <td>0.34s</td><td>0.03s</td>
+      <td>34&times;</td>
+    </tr>
+  </table>
+
+  <div class="info-box danger">
+    <strong>With Disk Cache Disabled</strong>
+    If you disable the disk&rsquo;s own hardware write cache (<code>hdparm -W0</code>), the 1-byte O_SYNC case goes from 1,030 seconds to <b>~16,000 seconds</b> (~4.4 hours for 1 MB!). The 4096-byte case goes from 0.34s to 4s.
+  </div>
+
+  <h4>O_DSYNC and O_RSYNC</h4>
+  <table class="kv-table">
+    <tr><th>Flag</th><th>Behavior</th><th>Like</th><th>Linux Support</th></tr>
+    <tr>
+      <td><code>O_SYNC</code></td>
+      <td>Every <code>write()</code> flushes data + <b>all</b> metadata to disk</td>
+      <td><code>fsync()</code> after every write</td>
+      <td>Full support (kernel 2.6.33+)</td>
+    </tr>
+    <tr>
+      <td><code>O_DSYNC</code></td>
+      <td>Every <code>write()</code> flushes data + <b>essential</b> metadata</td>
+      <td><code>fdatasync()</code> after every write</td>
+      <td>Kernel 2.6.33+ (previously aliased to O_SYNC)</td>
+    </tr>
+    <tr>
+      <td><code>O_RSYNC</code></td>
+      <td>With O_SYNC/O_DSYNC: pending writes flushed <b>before reads</b></td>
+      <td>Read consistency guarantee</td>
+      <td>Not yet implemented (planned)</td>
+    </tr>
+  </table>
+
+  <div class="jvm-card">
+    <h4>Best Practice: Use fdatasync() Instead of O_SYNC</h4>
+<pre><span class="lang-label">C</span><span class="comment">// BAD: Every single write blocks on disk</span>
+int fd = open("log.txt", O_WRONLY | O_SYNC);
+for (int i = 0; i &lt; 1000; i++)
+    write(fd, record[i], sizeof(record[i]));   <span class="comment">// 1000 disk flushes!</span>
+
+<span class="comment">// GOOD: Batch writes, then sync once</span>
+int fd = open("log.txt", O_WRONLY);
+for (int i = 0; i &lt; 1000; i++)
+    write(fd, record[i], sizeof(record[i]));   <span class="comment">// 1000 fast writes to page cache</span>
+fdatasync(fd);                                  <span class="comment">// 1 disk flush at the end</span></pre>
+  </div>
+
+  <!-- ===== 13.4 SUMMARY DIAGRAM ===== -->
+  <h3 id="ch13-summary-diagram">13.4 Summary of I/O Buffering</h3>
+
+  <p>The following shows the complete flow of data from user code to physical disk, with all the control points where you can force or disable buffering:</p>
+
+  <div class="jvm-card">
+    <h4>The Complete Data Flow</h4>
+<pre style="font-size:.82em;">
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         USER SPACE                                     │
+│                                                                         │
+│  Your Code: printf("data"), fprintf(), fwrite(), fputc()               │
+│                    │                                                    │
+│         ┌──────────▼──────────┐                                        │
+│         │  stdio BUFFER       │ ← fflush() to force flush              │
+│         │  (8192 bytes/BUFSIZ)│ ← setbuf(NULL) to disable              │
+│         │  _IOFBF / _IOLBF   │ ← setvbuf() to configure               │
+│         └──────────┬──────────┘                                        │
+│                    │ write() syscall (when buffer full / fflush)        │
+├────────────────────┼────────────────────────────────────────────────────┤
+│                    │           KERNEL SPACE                             │
+│         ┌──────────▼──────────┐                                        │
+│         │  PAGE CACHE         │ ← fsync(fd) to force flush             │
+│         │  (dynamic, up to   │ ← fdatasync(fd) for data only          │
+│         │   all available RAM)│ ← sync() to flush ALL files            │
+│         │                     │ ← O_SYNC to make every write sync      │
+│         └──────────┬──────────┘                                        │
+│                    │ Kernel writeback (pdflush/kthread, every 30s)      │
+├────────────────────┼────────────────────────────────────────────────────┤
+│         ┌──────────▼──────────┐  HARDWARE                              │
+│         │  DISK HW CACHE      │                                        │
+│         │  (volatile DRAM     │ ← hdparm -W0 to disable                │
+│         │   on the drive)     │                                        │
+│         └──────────┬──────────┘                                        │
+│         ┌──────────▼──────────┐                                        │
+│         │  PHYSICAL MEDIA     │  Platters (HDD) / Flash cells (SSD)    │
+│         │  (non-volatile)     │  ← Only here is data truly safe!       │
+│         └─────────────────────┘                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  O_DIRECT bypasses the page cache entirely:
+  Your Code → write() → DMA → Disk (no page cache!)
+</pre>
+  </div>
+
+  <!-- ===== 13.5 POSIX_FADVISE ===== -->
+  <h3 id="ch13-fadvise">13.5 Advising the Kernel About I/O Patterns: posix_fadvise()</h3>
+
+  <p><code>posix_fadvise()</code> lets you tell the kernel <em>how</em> you plan to access a file, so it can optimize the buffer cache and read-ahead behavior. It&rsquo;s a hint &mdash; the kernel may ignore it, but smart use can dramatically improve performance.</p>
+
+<pre><span class="lang-label">C</span>#define _XOPEN_SOURCE 600
+#include &lt;fcntl.h&gt;
+
+int posix_fadvise(int fd, off_t offset, off_t len, int advice);
+<span class="comment">// Returns 0 on success, or a positive error number on error</span>
+<span class="comment">// len = 0 means "from offset to end of file"</span></pre>
+
+  <div class="diagram-box">
+    <img src="images/ch13_07_posix_fadvise.png" alt="posix_fadvise() Advice Values">
+    <div class="caption">Six advice values for posix_fadvise() &mdash; each changes how the kernel manages the page cache</div>
+  </div>
+
+  <table class="kv-table">
+    <tr><th>Advice</th><th>Read-Ahead</th><th>Effect on Linux</th><th>Example Use</th></tr>
+    <tr>
+      <td><code>POSIX_FADV_NORMAL</code></td>
+      <td>128 KB (default)</td>
+      <td>Default behavior</td>
+      <td>General file access</td>
+    </tr>
+    <tr>
+      <td><code>POSIX_FADV_SEQUENTIAL</code></td>
+      <td>256 KB (2&times; default)</td>
+      <td>Doubles read-ahead window</td>
+      <td>Video streaming, log processing, file copy</td>
+    </tr>
+    <tr>
+      <td><code>POSIX_FADV_RANDOM</code></td>
+      <td>Disabled</td>
+      <td>Turns off read-ahead (wasteful for random access)</td>
+      <td>Database index lookups, random seeks</td>
+    </tr>
+    <tr>
+      <td><code>POSIX_FADV_WILLNEED</code></td>
+      <td>Pre-fetch now</td>
+      <td>Loads specified region into page cache immediately</td>
+      <td>Pre-loading config files, warm-up</td>
+    </tr>
+    <tr>
+      <td><code>POSIX_FADV_DONTNEED</code></td>
+      <td>N/A</td>
+      <td>Evicts specified region from page cache</td>
+      <td>After processing a large temp file</td>
+    </tr>
+    <tr>
+      <td><code>POSIX_FADV_NOREUSE</code></td>
+      <td>N/A</td>
+      <td>Currently no effect on Linux</td>
+      <td>One-time sequential scan</td>
+    </tr>
+  </table>
+
+  <div class="jvm-card">
+    <h4>Real-World Example: Video Streaming Server</h4>
+<pre><span class="lang-label">C</span>int fd = open("movie.mp4", O_RDONLY);
+
+<span class="comment">// Tell kernel we'll read sequentially → double the read-ahead window</span>
+posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+
+<span class="comment">// Pre-load the first 10MB into page cache before client starts playing</span>
+posix_fadvise(fd, 0, 10 * 1024 * 1024, POSIX_FADV_WILLNEED);
+
+<span class="comment">// Stream to client...</span>
+while ((n = read(fd, buf, 65536)) > 0) {
+    send(client_fd, buf, n, 0);
+
+    <span class="comment">// After sending, tell kernel we're done with those pages</span>
+    posix_fadvise(fd, bytes_sent - n, n, POSIX_FADV_DONTNEED);
+    bytes_sent += n;
+}
+<span class="comment">// Result: only ~256KB of page cache used instead of entire file!</span></pre>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+      <span class="terminal-title">See read-ahead settings</span>
+    </div>
+<pre><span class="comment"># Check current read-ahead for a block device (in 512-byte sectors)</span>
+<span class="prompt">$</span> blockdev --getra /dev/sda
+256    <span class="comment">← 256 sectors = 128 KB (default)</span>
+
+<span class="comment"># Set read-ahead to 2048 sectors (1 MB) for sequential workloads</span>
+<span class="prompt">$</span> sudo blockdev --setra 2048 /dev/sda
+
+<span class="comment"># Check page cache usage for a specific file</span>
+<span class="prompt">$</span> vmtouch /tmp/testfile
+           Files: 1
+     Directories: 0
+  Resident Pages: 25600/25600  100M/100M  100%
+         Elapsed: 0.002 seconds
+
+<span class="comment"># Evict a file from page cache</span>
+<span class="prompt">$</span> vmtouch -e /tmp/testfile
+           Evicted Pages: 25600</pre>
+  </div>
+
+  <!-- ===== 13.6 DIRECT I/O ===== -->
+  <h3 id="ch13-direct-io">13.6 Bypassing the Buffer Cache: Direct I/O (O_DIRECT)</h3>
+
+  <p>Direct I/O transfers data straight from user space to the disk device, completely <b>bypassing</b> the kernel&rsquo;s page cache. This sounds fast but usually <b>degrades performance</b> for normal applications because you lose read-ahead, I/O clustering, and shared caching.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch13_06_direct_io.png" alt="Direct I/O bypassing buffer cache">
+    <div class="caption">O_DIRECT bypasses the kernel page cache entirely &mdash; used by databases that manage their own caching</div>
+  </div>
+
+  <div class="info-box warning">
+    <strong>Direct I/O Is NOT Faster for Most Applications!</strong>
+    Direct I/O is intended for applications that have their own sophisticated caching layer (like databases). For normal applications, the kernel&rsquo;s page cache provides:
+    <ul>
+      <li>Sequential read-ahead (pre-fetching)</li>
+      <li>I/O clustering (combining small I/Os into large ones)</li>
+      <li>Shared caching (multiple processes reading the same file share one copy in RAM)</li>
+    </ul>
+    All of these optimizations are <b>lost</b> with O_DIRECT.
+  </div>
+
+<pre><span class="lang-label">C</span>#define _GNU_SOURCE
+#include &lt;fcntl.h&gt;
+
+<span class="comment">// Open with direct I/O</span>
+int fd = open("datafile", O_RDONLY | O_DIRECT);
+
+<span class="comment">// Buffer MUST be aligned to block size (512 bytes)</span>
+void *buf;
+posix_memalign(&amp;buf, 512, 4096);   <span class="comment">// 512-byte aligned, 4096-byte buffer</span>
+
+<span class="comment">// Offset MUST be multiple of block size</span>
+lseek(fd, 4096, SEEK_SET);         <span class="comment">// OK: 4096 is multiple of 512</span>
+<span class="comment">// lseek(fd, 1000, SEEK_SET);      // FAIL: EINVAL!</span>
+
+<span class="comment">// Length MUST be multiple of block size</span>
+read(fd, buf, 4096);               <span class="comment">// OK: 4096 is multiple of 512</span>
+<span class="comment">// read(fd, buf, 1000);            // FAIL: EINVAL!</span></pre>
+
+  <h4>Alignment Requirements Summary</h4>
+  <table class="kv-table">
+    <tr><th>Requirement</th><th>Must Be Multiple Of</th><th>Violation Error</th></tr>
+    <tr><td>Data buffer address</td><td>Physical block size (512 bytes)</td><td>EINVAL</td></tr>
+    <tr><td>File offset</td><td>Physical block size (512 bytes)</td><td>EINVAL</td></tr>
+    <tr><td>Transfer length</td><td>Physical block size (512 bytes)</td><td>EINVAL</td></tr>
+  </table>
+
+  <div class="jvm-card">
+    <h4>Who Uses O_DIRECT and Why</h4>
+    <table class="kv-table">
+      <tr><th>Application</th><th>Why O_DIRECT</th><th>Their Own Cache</th></tr>
+      <tr>
+        <td><b>MySQL InnoDB</b></td>
+        <td>Has its own buffer pool, kernel cache would be wasteful double-caching</td>
+        <td><code>innodb_buffer_pool_size</code> (often 70-80% of RAM)</td>
+      </tr>
+      <tr>
+        <td><b>Oracle Database</b></td>
+        <td>System Global Area (SGA) manages all caching internally</td>
+        <td>SGA buffer cache</td>
+      </tr>
+      <tr>
+        <td><b>PostgreSQL</b></td>
+        <td>Optional (<code>debug_io_direct</code>), mostly uses kernel cache</td>
+        <td><code>shared_buffers</code></td>
+      </tr>
+      <tr>
+        <td><b>RocksDB / LevelDB</b></td>
+        <td>LSM-tree writes are sequential; own block cache for reads</td>
+        <td><code>block_cache</code></td>
+      </tr>
+      <tr>
+        <td><b>QEMU/KVM</b></td>
+        <td>Guest OS has its own page cache; host cache = double-caching</td>
+        <td>Guest kernel page cache</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+      <span class="terminal-title">Direct I/O demo with dd</span>
+    </div>
+<pre><span class="comment"># Normal I/O (uses page cache)</span>
+<span class="prompt">$</span> dd if=/dev/zero of=/tmp/testdio bs=4096 count=25600 2>&1
+25600+0 records out
+104857600 bytes (105 MB) copied, 0.11 s, 953 MB/s
+
+<span class="comment"># Direct I/O (bypasses page cache)</span>
+<span class="prompt">$</span> dd if=/dev/zero of=/tmp/testdio bs=4096 count=25600 oflag=direct 2>&1
+25600+0 records out
+104857600 bytes (105 MB) copied, 0.52 s, 202 MB/s
+<span class="comment"># ← Much slower! No page cache buffering</span>
+
+<span class="comment"># Check if a file is cached in page cache</span>
+<span class="prompt">$</span> vmtouch /tmp/testdio
+  Resident Pages: 0/25600  0/100M  0%     <span class="comment">← 0% cached after direct I/O</span>
+
+<span class="comment"># Compare: after normal I/O, the file is 100% cached</span>
+<span class="prompt">$</span> dd if=/dev/zero of=/tmp/testdio bs=4096 count=25600 2>/dev/null
+<span class="prompt">$</span> vmtouch /tmp/testdio
+  Resident Pages: 25600/25600  100M/100M  100%  <span class="comment">← 100% cached!</span>
+
+<span class="comment"># Check if MySQL uses O_DIRECT</span>
+<span class="prompt">$</span> mysql -e "SHOW VARIABLES LIKE 'innodb_flush_method'"
++---------------------+----------+
+| Variable_name       | Value    |
++---------------------+----------+
+| innodb_flush_method | O_DIRECT |
++---------------------+----------+</pre>
+  </div>
+
+  <div class="info-box danger">
+    <strong>Coherency Warning</strong>
+    If one process opens a file with <code>O_DIRECT</code> and another opens it normally (buffered), there is <b>no coherency</b> between the buffer cache and the direct I/O. The buffered process may read stale data. Always use the same access method for all processes accessing the same file.
+  </div>
+
+  <!-- ===== 13.7 MIXING STDIO AND SYSTEM CALLS ===== -->
+  <h3 id="ch13-mixing">13.7 Mixing Library Functions and System Calls for File I/O</h3>
+
+  <p>You can mix <code>printf()</code>/<code>fprintf()</code> (stdio) with <code>read()</code>/<code>write()</code> (system calls) on the same file &mdash; but you <b>must</b> understand the buffering implications or your output order will be wrong.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch13_08_mixing_stdio_syscall.png" alt="Mixing stdio and System Calls">
+    <div class="caption">The classic ordering bug: write() bypasses stdio's buffer, causing output to appear before printf()</div>
+  </div>
+
+  <h4>fileno() and fdopen() &mdash; Converting Between streams and fds</h4>
+<pre><span class="lang-label">C</span>#include &lt;stdio.h&gt;
+
+<span class="comment">// Get the raw file descriptor underlying a stdio stream</span>
+int fileno(FILE *stream);
+<span class="comment">// Returns fd on success, -1 on error</span>
+<span class="comment">// Use: when you need to call read()/write()/fsync() on a FILE*</span>
+
+<span class="comment">// Wrap a raw fd in a stdio stream</span>
+FILE *fdopen(int fd, const char *mode);
+<span class="comment">// Returns FILE* on success, NULL on error</span>
+<span class="comment">// Use: when you have a socket/pipe fd and want printf()-style I/O</span></pre>
+
+  <div class="jvm-card">
+    <h4>The Classic Bug: Output Ordering</h4>
+<pre><span class="lang-label">C</span><span class="comment">// This code produces UNEXPECTED output!</span>
+printf("To man the world is twofold, ");       <span class="comment">// → stdio buffer (NOT flushed yet)</span>
+write(STDOUT_FILENO,
+      "in accordance with his twofold attitude.\n", 41);  <span class="comment">// → kernel directly</span>
+
+<span class="comment">// OUTPUT (wrong order!):</span>
+<span class="comment">//   in accordance with his twofold attitude.</span>
+<span class="comment">//   To man the world is twofold,</span>
+<span class="comment">//</span>
+<span class="comment">// WHY: write() goes directly to kernel, bypassing stdio buffer</span>
+<span class="comment">//      printf() data sits in stdio buffer until program exit</span>
+
+<span class="comment">// FIX: flush stdio before using write()</span>
+printf("To man the world is twofold, ");
+fflush(stdout);  <span class="comment">// ← Force stdio buffer to kernel NOW</span>
+write(STDOUT_FILENO, "in accordance with his twofold attitude.\n", 41);
+
+<span class="comment">// OUTPUT (correct!):</span>
+<span class="comment">//   To man the world is twofold, in accordance with his twofold attitude.</span></pre>
+  </div>
+
+  <div class="jvm-card">
+    <h4>Proper Flush Sequence for Durability</h4>
+<pre><span class="lang-label">C</span><span class="comment">// To guarantee data is on DISK (not just in kernel buffer):</span>
+FILE *fp = fopen("critical.log", "w");
+
+fprintf(fp, "Transaction %d committed\n", txn_id);
+
+<span class="comment">// Step 1: Flush stdio buffer → kernel page cache</span>
+fflush(fp);
+
+<span class="comment">// Step 2: Flush kernel page cache → physical disk</span>
+fsync(fileno(fp));
+
+<span class="comment">// NOW the data is guaranteed to be on the physical disk</span>
+<span class="comment">// This is exactly what the exercise asks about:</span>
+<span class="comment">//   fflush(fp);           ← stdio → kernel</span>
+<span class="comment">//   fsync(fileno(fp));    ← kernel → disk</span>
+<span class="comment">// BOTH steps are needed for full durability!</span></pre>
+  </div>
+
+  <div class="jvm-card">
+    <h4>Socket I/O with fdopen()</h4>
+<pre><span class="lang-label">C</span><span class="comment">// Sockets and pipes return raw file descriptors</span>
+int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+connect(sock_fd, ...);
+
+<span class="comment">// Wrap in a stdio stream for convenient printf-style I/O</span>
+FILE *sock_stream = fdopen(sock_fd, "r+");
+
+fprintf(sock_stream, "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n");
+fflush(sock_stream);   <span class="comment">// CRITICAL: must flush before expecting response</span>
+
+char response[4096];
+fgets(response, sizeof(response), sock_stream);
+printf("Response: %s\n", response);</pre>
+  </div>
+
+  <!-- ===== REAL-WORLD ESPRESSO EXAMPLE ===== -->
+  <h3 id="ch13-realworld">Real-World: I/O Buffering in Espresso &amp; ZooKeeper</h3>
+
+  <p>Let&rsquo;s trace how these buffering concepts appear in production systems at LinkedIn.</p>
+
+  <div class="jvm-card">
+    <h4>ZooKeeper &mdash; Transaction Log (WAL) Durability</h4>
+<pre style="font-size:.85em;">
+Client Request: "Create /election/leader-00001"
+    │
+    ▼
+┌────────────────────────────────────────────┐
+│ ZK Leader Process                          │
+│                                            │
+│  1. Serialize transaction to byte[]        │
+│  2. BufferedOutputStream.write(txnBytes)   │ ← Java stdio-equivalent buffer
+│  3. flush()                                │ ← Flushes Java buffer → OS
+│  4. FileChannel.force(false)               │ ← fdatasync() — data to disk!
+│     ├── false = data integrity only        │    (skips timestamp metadata)
+│     └── true  = file integrity (like fsync)│
+│                                            │
+│  5. Only AFTER force() returns:            │
+│     Send ACK to followers                  │
+│     Respond to client: "Created OK"        │
+└────────────────────────────────────────────┘
+
+Why fdatasync and not fsync?
+→ ZK writes ~1000s of txns/sec
+→ fsync = 2 disk ops (data + metadata)
+→ fdatasync = 1 disk op (data only)
+→ 2x throughput improvement for ZK commits!
+</pre>
+  </div>
+
+  <div class="jvm-card">
+    <h4>Espresso (MySQL Storage) &mdash; InnoDB&rsquo;s Double Buffering Avoidance</h4>
+<pre style="font-size:.85em;">
+Espresso Router → Espresso Storage Node (MySQL + InnoDB)
+
+InnoDB Configuration:
+  innodb_flush_method = O_DIRECT     ← Bypasses kernel page cache!
+  innodb_buffer_pool_size = 12G      ← InnoDB's own cache (70% of RAM)
+  innodb_flush_log_at_trx_commit = 1 ← fsync redo log every commit
+
+Why O_DIRECT for data files?
+┌─────────────────────────────────────────┐
+│ WITHOUT O_DIRECT (double caching):      │
+│                                         │
+│  InnoDB Buffer Pool (12 GB)             │
+│      ↕ redundant copy                   │
+│  Kernel Page Cache (eats more RAM)      │
+│      ↕                                  │
+│  Disk                                   │
+│                                         │
+│  Problem: 12 GB data cached TWICE       │
+│  = 24 GB of RAM wasted!                 │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ WITH O_DIRECT (single caching):         │
+│                                         │
+│  InnoDB Buffer Pool (12 GB)             │
+│      ↕ O_DIRECT — skip page cache       │
+│  Disk                                   │
+│                                         │
+│  12 GB used, 12 GB freed for other use! │
+└─────────────────────────────────────────┘
+
+But the REDO LOG still uses fsync():
+  → Write redo log entry
+  → fsync(redo_log_fd)    ← Must be on disk before ACK!
+  → Return success to Espresso Router
+</pre>
+  </div>
+
+  <div class="jvm-card">
+    <h4>Kafka Broker &mdash; Sequential I/O + Page Cache = Magic</h4>
+<pre style="font-size:.85em;">
+Kafka takes the OPPOSITE approach to MySQL:
+It RELIES on the kernel page cache instead of managing its own.
+
+Producer → Kafka Broker:
+
+1. Receive message batch
+2. write(segment_fd, batch, len)     ← Normal buffered write
+   → Data goes to page cache (fast!)
+   → Kernel page cache IS the "Kafka cache"
+
+3. Consumer reads same partition:
+   read(segment_fd, buf, len)        ← Served from page cache!
+   → Zero disk I/O if data is recent
+   → sendfile(consumer_fd, segment_fd, ...) for zero-copy
+
+4. Kafka does NOT call fsync() per message!
+   → Relies on replication (3 brokers) for durability
+   → log.flush.interval.messages = Long.MAX_VALUE (never!)
+   → Kernel writeback thread handles flushing (~30s)
+
+Why this works:
+  → Kafka writes SEQUENTIALLY → read-ahead is perfect
+  → posix_fadvise(SEQUENTIAL) would double throughput
+  → Page cache shared between producer writes and consumer reads
+  → No double-caching penalty (unlike InnoDB without O_DIRECT)
+
+Throughput: 100+ MB/s per broker with spinning disks!
+</pre>
+  </div>
+
+  <!-- ===== EXERCISES ===== -->
+  <h3 id="ch13-exercises">Exercises</h3>
+
+  <div class="jvm-card">
+    <h4>Exercise 13-3: What Does This Do?</h4>
+<pre><span class="lang-label">C</span>fflush(fp);
+fsync(fileno(fp));</pre>
+    <p><b>Answer:</b></p>
+    <ol>
+      <li><code>fflush(fp)</code> &mdash; Flush the <b>stdio user-space buffer</b> to the kernel page cache via <code>write()</code></li>
+      <li><code>fsync(fileno(fp))</code> &mdash; Flush the <b>kernel page cache</b> for this file to the physical disk</li>
+    </ol>
+    <p>Together, these two calls guarantee that all data written via <code>fprintf()</code>/<code>fwrite()</code> to the stream <code>fp</code> is on the <b>physical disk</b>. Neither call alone is sufficient &mdash; <code>fflush()</code> only gets data to the kernel, and <code>fsync()</code> only flushes what&rsquo;s already in the kernel buffer (not what&rsquo;s still in stdio&rsquo;s user-space buffer).</p>
+  </div>
+
+  <div class="jvm-card">
+    <h4>Exercise 13-4: Why Does Output Differ?</h4>
+<pre><span class="lang-label">C</span>printf("If I had more time, \n");
+write(STDOUT_FILENO, "I would have written you a shorter letter.\n", 43);</pre>
+    <p><b>Answer:</b></p>
+    <ul>
+      <li><b>Terminal output:</b> <code>printf()</code> output appears first because stdout is <b>line-buffered</b> when connected to a terminal, and the <code>\n</code> triggers a flush. So both outputs appear in order.</li>
+      <li><b>File output</b> (<code>./prog > output.txt</code>): <code>printf()</code> output appears <b>second</b> because stdout is <b>fully-buffered</b> when redirected to a file. The <code>\n</code> doesn&rsquo;t trigger a flush. The <code>write()</code> bypasses stdio and goes directly to the kernel, while <code>printf()</code> data sits in the stdio buffer until the program exits.</li>
+    </ul>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+      <span class="terminal-title">Quick Reference: I/O Buffering Commands</span>
+    </div>
+<pre><span class="comment"># ═══════════════ PAGE CACHE INFO ═══════════════</span>
+<span class="prompt">$</span> free -h                          <span class="comment"># buff/cache column shows page cache size</span>
+<span class="prompt">$</span> cat /proc/meminfo | grep -i cache
+<span class="prompt">$</span> vmtouch filename                 <span class="comment"># Check if file is in page cache</span>
+<span class="prompt">$</span> vmtouch -e filename              <span class="comment"># Evict file from page cache</span>
+
+<span class="comment"># ═══════════════ DIRTY PAGES ═══════════════</span>
+<span class="prompt">$</span> grep -i dirty /proc/meminfo      <span class="comment"># Current dirty pages</span>
+<span class="prompt">$</span> cat /proc/sys/vm/dirty_ratio     <span class="comment"># Max % RAM dirty before blocking</span>
+<span class="prompt">$</span> cat /proc/sys/vm/dirty_background_ratio  <span class="comment"># Start background flush</span>
+<span class="prompt">$</span> cat /proc/sys/vm/dirty_expire_centisecs  <span class="comment"># Max age before flush (cs)</span>
+<span class="prompt">$</span> cat /proc/sys/vm/dirty_writeback_centisecs <span class="comment"># Writeback thread interval</span>
+
+<span class="comment"># ═══════════════ SYNC &amp; FLUSH ═══════════════</span>
+<span class="prompt">$</span> sync                             <span class="comment"># Flush ALL dirty pages to disk</span>
+<span class="prompt">$</span> echo 1 > /proc/sys/vm/drop_caches  <span class="comment"># Free page cache (after sync)</span>
+<span class="prompt">$</span> echo 3 > /proc/sys/vm/drop_caches  <span class="comment"># Free page cache + dentries + inodes</span>
+
+<span class="comment"># ═══════════════ DISK CACHE ═══════════════</span>
+<span class="prompt">$</span> hdparm -W /dev/sda               <span class="comment"># Check disk write cache status</span>
+<span class="prompt">$</span> hdparm -W0 /dev/sda              <span class="comment"># Disable disk write cache (slower!)</span>
+<span class="prompt">$</span> hdparm -W1 /dev/sda              <span class="comment"># Enable disk write cache</span>
+
+<span class="comment"># ═══════════════ READ-AHEAD ═══════════════</span>
+<span class="prompt">$</span> blockdev --getra /dev/sda        <span class="comment"># Read-ahead in 512-byte sectors</span>
+<span class="prompt">$</span> blockdev --setra 2048 /dev/sda   <span class="comment"># Set read-ahead to 1 MB</span>
+
+<span class="comment"># ═══════════════ I/O MONITORING ═══════════════</span>
+<span class="prompt">$</span> iostat -x 1                      <span class="comment"># Per-device I/O stats every 1 second</span>
+<span class="prompt">$</span> iotop -o                         <span class="comment"># Show processes doing I/O</span>
+<span class="prompt">$</span> strace -e read,write,fsync cmd   <span class="comment"># Trace I/O syscalls</span>
+<span class="prompt">$</span> blktrace -d /dev/sda -o trace    <span class="comment"># Block-level I/O tracing</span>
+
+<span class="comment"># ═══════════════ FILE SYSTEM ═══════════════</span>
+<span class="prompt">$</span> stat -f /                        <span class="comment"># Filesystem block size</span>
+<span class="prompt">$</span> tune2fs -l /dev/sda1 | grep Block <span class="comment"># ext4 block size</span>
+<span class="prompt">$</span> getconf PAGE_SIZE                <span class="comment"># Kernel page size (usually 4096)</span></pre>
+  </div>
 
   <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
 </div>
