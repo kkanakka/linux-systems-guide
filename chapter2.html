@@ -91,7 +91,7 @@
 <div class="container">
 
 <div class="toc" id="toc">
-  <h2>Table of Contents (21 Sections)</h2>
+  <h2>Table of Contents (22 Sections)</h2>
   <div class="toc-grid">
     <a href="#sec-1">2.1 The Core OS: The Kernel</a>
     <a href="#sec-2">2.2 The Shell</a>
@@ -114,6 +114,7 @@
     <a href="#sec-19">2.19 The /proc File System</a>
     <a href="#sec-20">2.20 Summary &amp; Cheat Sheet</a>
     <a href="#sec-21" style="color:var(--accent4);font-weight:600;">Ch.13 &mdash; File I/O Buffering</a>
+    <a href="#sec-22" style="color:var(--accent3);font-weight:600;">Ch.56&ndash;61 &mdash; Sockets &amp; Networking</a>
   </div>
 </div>
 
@@ -3108,6 +3109,532 @@ write(STDOUT_FILENO, "I would have written you a shorter letter.\n", 43);</pre>
 <span class="prompt">$</span> tune2fs -l /dev/sda1 | grep Block <span class="comment"># ext4 block size</span>
 <span class="prompt">$</span> getconf PAGE_SIZE                <span class="comment"># Kernel page size (usually 4096)</span></pre>
   </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 22: SOCKETS & NETWORKING (Chapters 56-61) ==================== -->
+<div class="section" id="sec-22">
+  <div class="section-num">Chapters 56&ndash;61</div>
+  <h2>Sockets &amp; Networking</h2>
+
+  <p>Sockets are the universal IPC mechanism that allow data to be exchanged between applications &mdash; either on the <b>same host</b> or on <b>different hosts</b> connected by a network. The sockets API first appeared in 4.2BSD (1983) and has been ported to virtually every operating system. These chapters cover everything from basic socket concepts through TCP/IP internals and server design patterns.</p>
+
+  <!-- ===== 56.1 SOCKET OVERVIEW ===== -->
+  <h3 id="ch56-overview">56.1 What Is a Socket?</h3>
+
+  <p>A socket is an endpoint for communication. Think of it as a &ldquo;plug&rdquo; that applications use to send and receive data. Every socket is created with three properties:</p>
+
+  <ul>
+    <li><b>Domain</b> &mdash; Where can it communicate? (same host? across a network?)</li>
+    <li><b>Type</b> &mdash; How does data flow? (reliable stream? unreliable datagrams?)</li>
+    <li><b>Protocol</b> &mdash; Which transport protocol? (usually 0 = let the kernel choose)</li>
+  </ul>
+
+  <p>The fundamental call is: <code>fd = socket(domain, type, protocol);</code> &mdash; it returns a <b>file descriptor</b>, just like <code>open()</code>. Because sockets are file descriptors, you can use <code>read()</code>, <code>write()</code>, and <code>close()</code> on them.</p>
+
+  <!-- ===== COMMUNICATION DOMAINS ===== -->
+  <h3 id="ch56-domains">56.1.1 Communication Domains</h3>
+
+  <p>The domain determines <b>how sockets are addressed</b> and <b>whether communication stays local or crosses a network</b>.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch56_01_socket_domains.png" alt="Socket Communication Domains: AF_UNIX, AF_INET, AF_INET6" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table" style="margin-top:16px;">
+    <tr><th>Domain</th><th>Constant</th><th>Communication</th><th>Address Format</th><th>Address Structure</th></tr>
+    <tr><td>UNIX</td><td><code>AF_UNIX</code></td><td>Same host (via kernel)</td><td>Filesystem pathname</td><td><code>sockaddr_un</code></td></tr>
+    <tr><td>IPv4</td><td><code>AF_INET</code></td><td>Via IPv4 network</td><td>32-bit IP + 16-bit port</td><td><code>sockaddr_in</code></td></tr>
+    <tr><td>IPv6</td><td><code>AF_INET6</code></td><td>Via IPv6 network</td><td>128-bit IP + 16-bit port</td><td><code>sockaddr_in6</code></td></tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>AF vs PF</strong><br>
+    You may see <code>PF_UNIX</code> instead of <code>AF_UNIX</code> in old code. <b>AF</b> = Address Family, <b>PF</b> = Protocol Family. In practice, they are always identical values. Modern code uses <code>AF_*</code> constants exclusively.
+  </div>
+
+  <!-- ===== SOCKET TYPES ===== -->
+  <h3 id="ch56-types">56.1.2 Socket Types: Stream vs Datagram</h3>
+
+  <div class="diagram-container">
+    <img src="images/ch56_09_stream_vs_datagram.png" alt="Stream vs Datagram Sockets comparison" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table" style="margin-top:16px;">
+    <tr><th>Property</th><th>Stream (<code>SOCK_STREAM</code>)</th><th>Datagram (<code>SOCK_DGRAM</code>)</th></tr>
+    <tr><td>Reliable delivery?</td><td style="color:#2ea043;font-weight:bold;">Yes</td><td style="color:#d73a49;font-weight:bold;">No</td></tr>
+    <tr><td>Message boundaries?</td><td style="color:#d73a49;font-weight:bold;">No (byte stream)</td><td style="color:#2ea043;font-weight:bold;">Yes</td></tr>
+    <tr><td>Connection-oriented?</td><td style="color:#2ea043;font-weight:bold;">Yes</td><td style="color:#d73a49;font-weight:bold;">No</td></tr>
+    <tr><td>In-order delivery?</td><td style="color:#2ea043;font-weight:bold;">Yes</td><td style="color:#d73a49;font-weight:bold;">No</td></tr>
+    <tr><td>Transport protocol</td><td>TCP</td><td>UDP</td></tr>
+    <tr><td>Analogy</td><td>Telephone call</td><td>Postal mail</td></tr>
+    <tr><td>Use cases</td><td>HTTP, SSH, FTP, databases</td><td>DNS, streaming, gaming, NTP</td></tr>
+  </table>
+
+  <!-- ===== STREAM SOCKETS ===== -->
+  <h3 id="ch56-stream">56.2 Stream Sockets &mdash; The Telephone Call</h3>
+
+  <p>Stream sockets provide a <b>reliable, bidirectional, byte-stream</b> channel. The analogy is a telephone call: you install a phone (<code>socket</code>), get a number (<code>bind</code>), turn it on (<code>listen</code>), and pick up when it rings (<code>accept</code>).</p>
+
+  <div class="diagram-container">
+    <img src="images/ch56_02_stream_socket_flow.png" alt="Stream Socket System Call Flow" style="max-width:100%;">
+  </div>
+
+  <h4>Key System Calls for Stream Sockets</h4>
+
+  <table class="metric-table">
+    <tr><th>System Call</th><th>Who</th><th>Purpose</th></tr>
+    <tr><td><code>socket()</code></td><td>Both</td><td>Create a new socket &rarr; returns a file descriptor</td></tr>
+    <tr><td><code>bind()</code></td><td>Server</td><td>Assign a well-known address (IP:port or pathname) so clients can find us</td></tr>
+    <tr><td><code>listen()</code></td><td>Server</td><td>Mark socket as <b>passive</b> &mdash; ready to accept connections. The <code>backlog</code> parameter limits pending connections</td></tr>
+    <tr><td><code>accept()</code></td><td>Server</td><td>Wait for and accept a connection &rarr; returns a <b>new</b> socket fd for this client. The listening socket stays open for more</td></tr>
+    <tr><td><code>connect()</code></td><td>Client</td><td>Perform an <b>active open</b> &mdash; establish connection to the server&rsquo;s address</td></tr>
+    <tr><td><code>read()/write()</code></td><td>Both</td><td>Transfer data in both directions. Also: <code>send()</code>/<code>recv()</code> for socket-specific features</td></tr>
+    <tr><td><code>close()</code></td><td>Both</td><td>Terminate the connection. Connection is torn down when all FDs are closed</td></tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>Active vs Passive Sockets</strong><br>
+    <b>Passive (listening)</b>: Created by <code>listen()</code>. Can only accept incoming connections. This is the server.<br>
+    <b>Active (connected)</b>: Created by <code>socket()</code> and used with <code>connect()</code>. This is the client.<br>
+    <code>accept()</code> returns a <b>new active socket</b> connected to the peer &mdash; the listening socket itself is never used for data transfer.
+  </div>
+
+  <!-- ===== DATAGRAM SOCKETS ===== -->
+  <h3 id="ch56-dgram">56.3 Datagram Sockets &mdash; The Postal System</h3>
+
+  <p>Datagram sockets are like the postal system: each message is an independent &ldquo;letter&rdquo; (datagram) with a destination address. No connection is needed. Messages may be lost, arrive out of order, or be duplicated.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch56_03_datagram_socket_flow.png" alt="Datagram Socket System Call Flow" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>System Call</th><th>Purpose</th></tr>
+    <tr><td><code>sendto(sockfd, buf, len, flags, dest_addr, addrlen)</code></td><td>Send a datagram to a specific address. Each call sends one complete message</td></tr>
+    <tr><td><code>recvfrom(sockfd, buf, len, flags, src_addr, addrlen)</code></td><td>Receive a datagram and learn the sender&rsquo;s address (so you can reply)</td></tr>
+  </table>
+
+  <div class="info-box warning">
+    <strong>Connected Datagram Sockets</strong><br>
+    You <em>can</em> call <code>connect()</code> on a datagram socket. This doesn&rsquo;t establish a connection &mdash; it just sets a <b>default peer address</b>. After that, you can use <code>write()</code> instead of <code>sendto()</code>, and only datagrams from that peer are delivered. Useful when sending many datagrams to the same destination.
+  </div>
+
+  <!-- ===== TCP/IP PROTOCOL LAYERS ===== -->
+  <h3 id="ch58-layers">58.1 TCP/IP Protocol Layers</h3>
+
+  <p>TCP/IP is a <b>layered protocol stack</b>. Each layer handles one aspect of communication and shields higher layers from the complexity below. The key principle is <b>transparency</b> &mdash; your application doesn&rsquo;t need to understand IP routing or Ethernet framing.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch58_04_tcp_ip_layers.png" alt="TCP/IP Protocol Stack — 4 Layers" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Layer</th><th>Name</th><th>Protocol(s)</th><th>What It Does</th><th>Where It Runs</th></tr>
+    <tr><td>4</td><td>Application</td><td>HTTP, SSH, DNS, FTP</td><td>Application-level communication</td><td>User space</td></tr>
+    <tr><td>3</td><td>Transport</td><td>TCP, UDP</td><td>End-to-end delivery, port numbers, reliability (TCP)</td><td>Kernel</td></tr>
+    <tr><td>2</td><td>Network</td><td>IP (v4/v6)</td><td>Routing, addressing, fragmentation</td><td>Kernel</td></tr>
+    <tr><td>1</td><td>Data-Link</td><td>Ethernet, Wi-Fi</td><td>Physical frame transmission, MAC addressing</td><td>Driver + Hardware</td></tr>
+  </table>
+
+  <!-- ===== ENCAPSULATION ===== -->
+  <h3 id="ch58-encap">58.2 Data Encapsulation</h3>
+
+  <p>As data travels down the stack, each layer wraps it with its own header (and sometimes trailer). This is <b>encapsulation</b>. At the receiver, headers are stripped in reverse order.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch58_05_encapsulation.png" alt="Data Encapsulation in TCP/IP" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Layer</th><th>Unit Name</th><th>Header Added</th><th>Key Information</th></tr>
+    <tr><td>Application</td><td>Message / Data</td><td>Application-specific</td><td>HTTP headers, request body, etc.</td></tr>
+    <tr><td>Transport</td><td>TCP Segment / UDP Datagram</td><td>TCP/UDP header (20+ bytes)</td><td>Source &amp; dest ports, seq/ack numbers, flags, checksum</td></tr>
+    <tr><td>Network</td><td>IP Datagram</td><td>IP header (20&ndash;60 bytes)</td><td>Source &amp; dest IP addresses, TTL, protocol ID</td></tr>
+    <tr><td>Data-Link</td><td>Frame</td><td>Ethernet header (14 bytes) + trailer (4 bytes CRC)</td><td>Source &amp; dest MAC addresses. Max payload = MTU (1500 bytes)</td></tr>
+  </table>
+
+  <!-- ===== IP ===== -->
+  <h3 id="ch58-ip">58.3 The Internet Protocol (IP)</h3>
+
+  <p>IP is the <b>network layer</b> protocol. It transmits data as <b>datagrams</b> &mdash; independent packets routed through the network. Key properties:</p>
+
+  <ul>
+    <li><b>Connectionless</b> &mdash; no virtual circuit; each datagram is routed independently</li>
+    <li><b>Unreliable</b> &mdash; best-effort delivery; no guarantee packets arrive, arrive in order, or arrive only once</li>
+    <li><b>Fragmentation</b> &mdash; if a datagram exceeds the path MTU, IP breaks it into fragments and reassembles at the destination</li>
+  </ul>
+
+  <table class="metric-table">
+    <tr><th>Feature</th><th>IPv4</th><th>IPv6</th></tr>
+    <tr><td>Address size</td><td>32 bits (4 bytes)</td><td>128 bits (16 bytes)</td></tr>
+    <tr><td>Address notation</td><td>Dotted decimal: <code>192.168.1.5</code></td><td>Hex-string: <code>2001:db8::1</code></td></tr>
+    <tr><td>Max datagram</td><td>65,535 bytes</td><td>65,575 bytes (+ jumbogram option)</td></tr>
+    <tr><td>Loopback</td><td><code>127.0.0.1</code> (<code>INADDR_LOOPBACK</code>)</td><td><code>::1</code></td></tr>
+    <tr><td>Wildcard</td><td><code>0.0.0.0</code> (<code>INADDR_ANY</code>)</td><td><code>::</code> (<code>in6addr_any</code>)</td></tr>
+    <tr><td>Header checksum</td><td>Yes</td><td>No (relies on transport layer)</td></tr>
+    <tr><td>Min reassembly buffer</td><td>576 bytes</td><td>1500 bytes</td></tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>IPv4 Addressing</strong><br>
+    An IPv4 address has two parts: <b>Network ID</b> (identifies the network) and <b>Host ID</b> (identifies the host within that network). The boundary is defined by a <b>network mask</b> (e.g., <code>/24</code> means 24 bits for network, 8 for host). <b>Subnetting</b> further divides the host portion into subnet ID + host ID.
+  </div>
+
+  <!-- ===== PORT NUMBERS ===== -->
+  <h3 id="ch58-ports">58.4 Port Numbers</h3>
+
+  <p>Ports identify <b>which application</b> on a host should receive the data. Combined with an IP address, a port creates a unique endpoint.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch58_13_port_numbers.png" alt="Port Numbers and TCP/UDP Identification" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Range</th><th>Name</th><th>Who Uses Them</th><th>Requires Privilege?</th></tr>
+    <tr><td>0&ndash;1023</td><td>Well-known / Privileged</td><td>IANA-assigned services (SSH=22, HTTP=80, HTTPS=443)</td><td>Yes (<code>CAP_NET_BIND_SERVICE</code> or root)</td></tr>
+    <tr><td>1024&ndash;49151</td><td>Registered</td><td>Application-specific (MySQL=3306, PostgreSQL=5432)</td><td>No</td></tr>
+    <tr><td>49152&ndash;65535</td><td>Ephemeral / Dynamic</td><td>Kernel-assigned to client sockets that don&rsquo;t call <code>bind()</code></td><td>No</td></tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>TCP Connection = 4-Tuple</strong><br>
+    A TCP connection is uniquely identified by: <code>{ local-IP, local-port, remote-IP, remote-port }</code>. This means the <b>same server port</b> (e.g., port 80) can handle thousands of simultaneous connections &mdash; each has a different remote IP:port combination.
+  </div>
+
+  <!-- ===== TCP vs UDP ===== -->
+  <h3 id="ch58-tcp-udp">58.5 TCP vs UDP</h3>
+
+  <h4>TCP &mdash; Transmission Control Protocol</h4>
+  <p>TCP provides a <b>reliable, connection-oriented, bidirectional byte stream</b>. It handles all the complexity of reliable networking so your application doesn&rsquo;t have to.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch58_14_tcp_reliability.png" alt="TCP Reliability Mechanisms" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>TCP Feature</th><th>What It Does</th><th>How</th></tr>
+    <tr><td>Sequence numbers</td><td>Ensures data arrives in order; detects duplicates</td><td>Each byte gets a logical sequence number; ISN is random</td></tr>
+    <tr><td>Acknowledgements</td><td>Confirms data was received</td><td>Receiver sends ACK with next expected byte number</td></tr>
+    <tr><td>Retransmission</td><td>Handles lost segments</td><td>Timer-based; retransmit if ACK not received before timeout (RTO)</td></tr>
+    <tr><td>Flow control</td><td>Prevents overwhelming the receiver</td><td>Sliding window; receiver advertises available buffer space</td></tr>
+    <tr><td>Congestion control</td><td>Prevents overwhelming the network</td><td>Slow start + congestion avoidance algorithms</td></tr>
+    <tr><td>Checksums</td><td>Detects transmission errors</td><td>16-bit checksum over header + data + pseudo-header</td></tr>
+  </table>
+
+  <h4>UDP &mdash; User Datagram Protocol</h4>
+  <p>UDP adds only <b>port numbers</b> and a <b>checksum</b> to IP. It&rsquo;s connectionless and unreliable, but has lower overhead. Use UDP when:</p>
+  <ul>
+    <li>Speed matters more than reliability (streaming video/audio)</li>
+    <li>Single request-response exchanges (DNS lookups &mdash; 1 RTT vs 2 RTT for TCP)</li>
+    <li>Broadcasting / multicasting to many hosts at once</li>
+    <li>The application implements its own reliability (e.g., QUIC)</li>
+  </ul>
+
+  <!-- ===== UNIX DOMAIN SOCKETS ===== -->
+  <h3 id="ch57-unix">57. UNIX Domain Sockets</h3>
+
+  <p>UNIX domain sockets allow communication between processes <b>on the same host</b> without going through the network stack. They&rsquo;re faster than TCP loopback (<code>127.0.0.1</code>) because data never leaves the kernel.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch57_11_unix_domain.png" alt="UNIX Domain Sockets — Local IPC via the Filesystem" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Feature</th><th>Detail</th></tr>
+    <tr><td>Address format</td><td>Filesystem pathname (e.g., <code>/tmp/my.sock</code>). Created by <code>bind()</code>, shows as type <code>s</code> in <code>ls -l</code></td></tr>
+    <tr><td>Stream sockets</td><td>Reliable, ordered, byte-stream &mdash; like a bidirectional pipe</td></tr>
+    <tr><td>Datagram sockets</td><td><b>Reliable</b> (unlike UDP!) &mdash; delivered in order, never lost or duplicated</td></tr>
+    <tr><td><code>socketpair()</code></td><td>Creates 2 connected sockets in one call. Commonly used with <code>fork()</code> for parent-child IPC</td></tr>
+    <tr><td>Abstract namespace</td><td>Linux-only: <code>sun_path[0] = '\0'</code>, no filesystem entry, auto-cleaned on close</td></tr>
+    <tr><td>Permissions</td><td>Socket file permissions control who can connect (write permission required)</td></tr>
+    <tr><td>Passing file descriptors</td><td>Can send open FDs between processes using <code>sendmsg()</code>/<code>recvmsg()</code> with ancillary data</td></tr>
+    <tr><td>Passing credentials</td><td>Receiver can verify sender&rsquo;s UID/GID/PID for authentication</td></tr>
+  </table>
+
+  <div class="info-box warning">
+    <strong>When to Use UNIX vs Internet Domain</strong><br>
+    For same-host communication, prefer <b>UNIX domain sockets</b> because:
+    (1) faster &mdash; no network stack overhead,
+    (2) file permissions for access control,
+    (3) can pass file descriptors and credentials.
+    Use Internet domain sockets when you need network communication or want a single codebase for both local and remote.
+  </div>
+
+  <!-- ===== TCP/IP NETWORKING ===== -->
+  <h3 id="ch58-internet">58.6 Internets and Routing</h3>
+
+  <p>An <b>internet</b> (lowercase) is a network of networks. A <b>router</b> connects different subnetworks, forwarding IP datagrams between them. Each router interface has a different IP address (one per subnet). The <b>Internet</b> (uppercase) is the global TCP/IP internet.</p>
+
+  <div class="info-box note">
+    <strong>Key Networking Concepts</strong><br>
+    <b>MTU (Maximum Transmission Unit)</b>: Max frame size for a data-link layer (Ethernet = 1500 bytes).<br>
+    <b>Path MTU</b>: The minimum MTU across all links from source to destination.<br>
+    <b>Fragmentation</b>: IP splits oversized datagrams into fragments. Reassembled at destination. Generally undesirable &mdash; TCP avoids it via path MTU discovery.<br>
+    <b>Multihomed host</b>: A host with multiple network interfaces (and thus multiple IP addresses).
+  </div>
+
+  <!-- ===== BYTE ORDER ===== -->
+  <h3 id="ch59-byteorder">59.1 Network Byte Order</h3>
+
+  <p>Different CPUs store multi-byte integers differently. <b>Big-endian</b> stores the most significant byte first; <b>little-endian</b> (x86) stores the least significant byte first. Network protocols always use <b>big-endian</b> (network byte order).</p>
+
+  <div class="diagram-container">
+    <img src="images/ch59_15_byte_order.png" alt="Byte Order and Conversion Functions" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Function</th><th>Direction</th><th>Size</th><th>Use Case</th></tr>
+    <tr><td><code>htons()</code></td><td>Host &rarr; Network</td><td>16-bit</td><td>Port numbers</td></tr>
+    <tr><td><code>htonl()</code></td><td>Host &rarr; Network</td><td>32-bit</td><td>IPv4 addresses</td></tr>
+    <tr><td><code>ntohs()</code></td><td>Network &rarr; Host</td><td>16-bit</td><td>Port numbers</td></tr>
+    <tr><td><code>ntohl()</code></td><td>Network &rarr; Host</td><td>32-bit</td><td>IPv4 addresses</td></tr>
+  </table>
+
+  <p><b>Rule</b>: Always convert before putting values into <code>sockaddr</code> structures, even on big-endian machines (functions are no-ops there, but code stays portable).</p>
+
+  <!-- ===== DNS ===== -->
+  <h3 id="ch59-dns">59.2 Domain Name System (DNS)</h3>
+
+  <p>DNS is a <b>distributed hierarchical database</b> that maps hostnames to IP addresses (and vice versa). It replaced the old <code>/etc/hosts</code> approach that couldn&rsquo;t scale beyond a few thousand hosts.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch59_12_dns_hierarchy.png" alt="DNS Hierarchy and Resolution" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Concept</th><th>Explanation</th></tr>
+    <tr><td>FQDN</td><td>Fully Qualified Domain Name &mdash; ends with a dot: <code>www.kernel.org.</code></td></tr>
+    <tr><td>TLD</td><td>Top-Level Domain: generic (<code>.com</code>, <code>.org</code>, <code>.net</code>) or country (<code>.uk</code>, <code>.de</code>)</td></tr>
+    <tr><td>Recursive query</td><td>Client asks local DNS server to fully resolve the name (most common)</td></tr>
+    <tr><td>Iterative query</td><td>Local DNS server walks the hierarchy: root &rarr; TLD &rarr; domain &rarr; answer</td></tr>
+    <tr><td>Caching</td><td>DNS servers cache results to avoid repeating lookups. TTL controls cache lifetime</td></tr>
+    <tr><td><code>/etc/resolv.conf</code></td><td>Configures the local DNS resolver (nameserver addresses, search domains)</td></tr>
+    <tr><td><code>/etc/hosts</code></td><td>Local hostname-to-IP mappings; checked before DNS. Still used for <code>localhost</code></td></tr>
+  </table>
+
+  <!-- ===== ADDRESS CONVERSION ===== -->
+  <h3 id="ch59-convert">59.3 Host and Service Name Conversion</h3>
+
+  <p>The modern functions for converting between names and addresses:</p>
+
+  <table class="metric-table">
+    <tr><th>Function</th><th>Purpose</th><th>Replaces (obsolete)</th></tr>
+    <tr><td><code>getaddrinfo()</code></td><td>Hostname + service name &rarr; socket address structures (works for IPv4 &amp; IPv6)</td><td><code>gethostbyname()</code> + <code>getservbyname()</code></td></tr>
+    <tr><td><code>getnameinfo()</code></td><td>Socket address &rarr; hostname + service name strings</td><td><code>gethostbyaddr()</code> + <code>getservbyport()</code></td></tr>
+    <tr><td><code>freeaddrinfo()</code></td><td>Free the linked list returned by <code>getaddrinfo()</code></td><td>&mdash;</td></tr>
+    <tr><td><code>inet_pton()</code></td><td>Presentation string (e.g., <code>"192.168.1.5"</code>) &rarr; binary IP address</td><td><code>inet_aton()</code></td></tr>
+    <tr><td><code>inet_ntop()</code></td><td>Binary IP address &rarr; presentation string</td><td><code>inet_ntoa()</code></td></tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>The /etc/services File</strong><br>
+    Maps service names to port numbers: <code>ssh 22/tcp</code>, <code>http 80/tcp</code>, <code>dns 53/udp</code>. Used by <code>getaddrinfo()</code> and <code>getnameinfo()</code> for name&harr;port translation. It&rsquo;s just a record &mdash; not a reservation mechanism.
+  </div>
+
+  <!-- ===== TCP THREE-WAY HANDSHAKE ===== -->
+  <h3 id="ch61-handshake">61.1 TCP Connection Establishment (Three-Way Handshake)</h3>
+
+  <p>Before any data can flow, TCP establishes a connection using a <b>three-way handshake</b>. This synchronizes sequence numbers between the two endpoints.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch61_06_tcp_handshake.png" alt="TCP Three-Way Handshake" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Step</th><th>Segment</th><th>Client State</th><th>Server State</th><th>What Happens</th></tr>
+    <tr><td>0</td><td>&mdash;</td><td>CLOSED</td><td>LISTEN</td><td>Server calls <code>listen()</code>, waits at <code>accept()</code></td></tr>
+    <tr><td>1</td><td>SYN (Seq=M)</td><td>SYN_SENT</td><td>LISTEN</td><td>Client calls <code>connect()</code>; sends its initial sequence number M</td></tr>
+    <tr><td>2</td><td>SYN+ACK (Seq=N, Ack=M+1)</td><td>SYN_SENT</td><td>SYN_RECV</td><td>Server acknowledges M, sends its own ISN N</td></tr>
+    <tr><td>3</td><td>ACK (Ack=N+1)</td><td>ESTABLISHED</td><td>ESTABLISHED</td><td>Client acknowledges N. Both endpoints ready. <code>connect()</code> and <code>accept()</code> return</td></tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>Why SYN Consumes a Sequence Number</strong><br>
+    The SYN (and FIN) flags each consume 1 byte of sequence-number space. This is so they can be <b>unambiguously acknowledged</b> &mdash; the ACK for SYN M is M+1, not M.
+  </div>
+
+  <!-- ===== TCP TERMINATION ===== -->
+  <h3 id="ch61-termination">61.2 TCP Connection Termination (Four-Way Close)</h3>
+
+  <p>Either side can initiate the close. The one that calls <code>close()</code> first performs the <b>active close</b>; the other performs the <b>passive close</b>.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch61_07_tcp_termination.png" alt="TCP Connection Termination" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Step</th><th>Segment</th><th>Active Close State</th><th>Passive Close State</th></tr>
+    <tr><td>1</td><td>FIN M</td><td>FIN_WAIT1</td><td>CLOSE_WAIT</td></tr>
+    <tr><td>2</td><td>ACK M+1</td><td>FIN_WAIT2</td><td>CLOSE_WAIT</td></tr>
+    <tr><td>3</td><td>FIN N</td><td>FIN_WAIT2</td><td>LAST_ACK</td></tr>
+    <tr><td>4</td><td>ACK N+1</td><td>TIME_WAIT</td><td>CLOSED</td></tr>
+    <tr><td>5</td><td>(2MSL timeout)</td><td>CLOSED</td><td>&mdash;</td></tr>
+  </table>
+
+  <!-- ===== TCP STATE MACHINE ===== -->
+  <h3 id="ch61-states">61.3 TCP State Machine</h3>
+
+  <p>A TCP endpoint is modeled as a <b>state machine</b>. Understanding these states is essential for debugging network issues (they appear in <code>netstat</code> output).</p>
+
+  <div class="diagram-container">
+    <img src="images/ch61_08_tcp_state_machine.png" alt="TCP State Machine" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>State</th><th>Meaning</th><th>Which Side?</th></tr>
+    <tr><td>LISTEN</td><td>Waiting for incoming connections</td><td>Server</td></tr>
+    <tr><td>SYN_SENT</td><td>Sent SYN, waiting for SYN+ACK</td><td>Client</td></tr>
+    <tr><td>SYN_RECV</td><td>Received SYN, sent SYN+ACK, waiting for ACK</td><td>Server</td></tr>
+    <tr><td style="color:#2ea043;font-weight:bold;">ESTABLISHED</td><td>Connection open &mdash; data can flow</td><td>Both</td></tr>
+    <tr><td>FIN_WAIT1</td><td>Sent FIN, waiting for ACK</td><td>Active closer</td></tr>
+    <tr><td>FIN_WAIT2</td><td>Received ACK of FIN, waiting for peer&rsquo;s FIN</td><td>Active closer</td></tr>
+    <tr><td>CLOSE_WAIT</td><td>Received FIN, waiting for app to call <code>close()</code></td><td>Passive closer</td></tr>
+    <tr><td>LAST_ACK</td><td>Sent FIN, waiting for final ACK</td><td>Passive closer</td></tr>
+    <tr><td style="color:#d73a49;font-weight:bold;">TIME_WAIT</td><td>Waiting 2&times;MSL (60s on Linux) before fully closing</td><td>Active closer</td></tr>
+    <tr><td>CLOSING</td><td>Both sides sent FIN simultaneously (rare)</td><td>Both</td></tr>
+  </table>
+
+  <!-- ===== TIME_WAIT ===== -->
+  <h3 id="ch61-timewait">61.4 The TIME_WAIT State</h3>
+
+  <p>The most confusing TCP state. The endpoint that performs the <b>active close</b> enters TIME_WAIT and stays for <b>2 &times; MSL</b> (Maximum Segment Lifetime). On Linux, MSL = 30 seconds, so TIME_WAIT = <b>60 seconds</b>.</p>
+
+  <div class="info-box warning">
+    <strong>Why TIME_WAIT Exists (Two Reasons)</strong><br>
+    <b>1. Reliable termination:</b> If the final ACK is lost, the peer will retransmit its FIN. The TIME_WAIT state ensures the endpoint is still alive to resend that ACK.<br><br>
+    <b>2. Prevent stale segments:</b> Old duplicate segments from a previous connection must expire before the same 4-tuple can be reused. TIME_WAIT guarantees this.
+  </div>
+
+  <div class="info-box note">
+    <strong>The EADDRINUSE Problem</strong><br>
+    When a server restarts, it may fail to <code>bind()</code> with &ldquo;Address already in use&rdquo; because the old socket is still in TIME_WAIT. The fix is the <b><code>SO_REUSEADDR</code></b> socket option:<br>
+    <code>setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &amp;optval, sizeof(optval));</code><br>
+    This allows binding to a port that has a TCP in TIME_WAIT. Every TCP server should set this option. Do NOT try to disable TIME_WAIT itself &mdash; it provides important reliability guarantees.
+  </div>
+
+  <!-- ===== TCP HEADER ===== -->
+  <h3 id="ch61-header">61.5 TCP Segment Header</h3>
+
+  <div class="diagram-container">
+    <img src="images/ch61_16_tcp_header.png" alt="TCP Segment Header Format" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Field</th><th>Size</th><th>Purpose</th></tr>
+    <tr><td>Source / Dest Port</td><td>16 bits each</td><td>Identify sender and receiver applications</td></tr>
+    <tr><td>Sequence Number</td><td>32 bits</td><td>Position of first data byte in the stream</td></tr>
+    <tr><td>Acknowledgement #</td><td>32 bits</td><td>Next byte expected from peer (valid when ACK flag set)</td></tr>
+    <tr><td>Data Offset</td><td>4 bits</td><td>Header length in 32-bit words (min 5 = 20 bytes, max 15 = 60 bytes)</td></tr>
+    <tr><td>Flags (8 bits)</td><td>1 bit each</td><td>SYN, ACK, FIN, RST, PSH, URG, ECE, CWR</td></tr>
+    <tr><td>Window Size</td><td>16 bits</td><td>Receiver&rsquo;s available buffer space (flow control)</td></tr>
+    <tr><td>Checksum</td><td>16 bits</td><td>Error detection over header + data + pseudo-header</td></tr>
+    <tr><td>Urgent Pointer</td><td>16 bits</td><td>Offset of urgent data (valid when URG flag set)</td></tr>
+    <tr><td>Options</td><td>0&ndash;40 bytes</td><td>MSS, window scaling, timestamps, SACK, etc.</td></tr>
+  </table>
+
+  <!-- ===== SERVER DESIGN ===== -->
+  <h3 id="ch60-server">60. Server Design Patterns</h3>
+
+  <p>Network servers must decide how to handle multiple clients. The choice depends on expected load and request complexity.</p>
+
+  <div class="diagram-container">
+    <img src="images/ch60_10_server_designs.png" alt="Server Design Patterns" style="max-width:100%;">
+  </div>
+
+  <table class="metric-table">
+    <tr><th>Design</th><th>How It Works</th><th>Pros</th><th>Cons</th><th>Best For</th></tr>
+    <tr><td><b>Iterative</b></td><td>Handle one client fully, then the next</td><td>Simple code</td><td>Clients wait in line</td><td>Quick request-response (UDP echo)</td></tr>
+    <tr><td><b>Concurrent (fork)</b></td><td><code>fork()</code> a child for each client</td><td>Handles many clients simultaneously</td><td><code>fork()</code> overhead per connection</td><td>Most TCP servers</td></tr>
+    <tr><td><b>Concurrent (thread)</b></td><td>New thread per client</td><td>Lighter than fork</td><td>Shared memory complexity</td><td>Thread-safe servers</td></tr>
+    <tr><td><b>Pre-forked pool</b></td><td>Create N workers at startup</td><td>No fork cost per connection</td><td>Pool sizing, worker coordination</td><td>High-load web servers</td></tr>
+    <tr><td><b>Event-driven</b></td><td>Single process, I/O multiplexing (<code>epoll</code>/<code>select</code>)</td><td>Handles thousands of connections with minimal overhead</td><td>Complex state management, no CPU parallelism</td><td>Very high concurrency (Nginx, Redis, Node.js)</td></tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>The inetd Superserver</strong><br>
+    Instead of running a daemon for every service, <b>inetd</b> monitors all configured ports using <code>select()</code>. When a connection arrives, it <code>fork()</code>s and <code>exec()</code>s the appropriate server program, with the socket already connected on file descriptors 0, 1, and 2. This drastically simplifies server code and reduces the number of running processes.
+  </div>
+
+  <!-- ===== ADVANCED TOPICS ===== -->
+  <h3 id="ch61-advanced">61.6 Advanced Socket Topics</h3>
+
+  <h4>shutdown() &mdash; Half-Close</h4>
+  <p>Unlike <code>close()</code>, which shuts down both directions, <code>shutdown()</code> can close just one half of the connection:</p>
+  <table class="metric-table">
+    <tr><th>Flag</th><th>Effect</th><th>Use Case</th></tr>
+    <tr><td><code>SHUT_RD</code></td><td>Close reading half</td><td>Rarely useful for TCP (behavior varies across implementations)</td></tr>
+    <tr><td><code>SHUT_WR</code></td><td>Close writing half &mdash; peer sees EOF</td><td>Signal &ldquo;I&rsquo;m done sending&rdquo; while still reading responses. Used by SSH, HTTP</td></tr>
+    <tr><td><code>SHUT_RDWR</code></td><td>Close both halves</td><td>Like <code>close()</code>, but affects all FDs sharing the same open file description</td></tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>shutdown() vs close()</strong><br>
+    <code>close()</code> closes the <b>file descriptor</b>. If other FDs reference the same socket (via <code>dup()</code> or <code>fork()</code>), the connection stays open. <code>shutdown()</code> operates on the <b>open file description</b>, so it affects all FDs. Also, <code>shutdown()</code> doesn&rsquo;t close the FD itself &mdash; you still need <code>close()</code>.
+  </div>
+
+  <h4>sendfile() &mdash; Zero-Copy Transfer</h4>
+  <p><code>sendfile(out_fd, in_fd, offset, count)</code> transfers data from a file directly to a socket <b>without copying through user space</b>. This is much faster for serving static files (web servers). The data goes: disk &rarr; kernel buffer cache &rarr; socket send buffer &rarr; network, all without a user-space copy.</p>
+
+  <h4>recv() and send() Flags</h4>
+  <table class="metric-table">
+    <tr><th>Flag</th><th>Used By</th><th>Effect</th></tr>
+    <tr><td><code>MSG_DONTWAIT</code></td><td>Both</td><td>Non-blocking I/O for this call only (per-call <code>O_NONBLOCK</code>)</td></tr>
+    <tr><td><code>MSG_PEEK</code></td><td><code>recv()</code></td><td>Read data without removing it from the buffer</td></tr>
+    <tr><td><code>MSG_WAITALL</code></td><td><code>recv()</code></td><td>Block until all requested bytes are received</td></tr>
+    <tr><td><code>MSG_NOSIGNAL</code></td><td><code>send()</code></td><td>Don&rsquo;t generate <code>SIGPIPE</code> if peer closed &mdash; return <code>EPIPE</code> instead</td></tr>
+    <tr><td><code>MSG_MORE</code></td><td><code>send()</code></td><td>More data coming &mdash; cork the socket (like <code>TCP_CORK</code> per-call)</td></tr>
+  </table>
+
+  <h4>Partial Reads and Writes</h4>
+  <p>Stream sockets may transfer fewer bytes than requested (partial I/O). This can happen when the socket buffer is partially full, a signal interrupts, or the connection is reset. Always loop your reads/writes, or use wrapper functions like <code>readn()</code>/<code>writen()</code> that restart automatically.</p>
+
+  <h4>TCP_CORK and TCP_NODELAY</h4>
+  <table class="metric-table">
+    <tr><th>Option</th><th>Effect</th><th>Use Case</th></tr>
+    <tr><td><code>TCP_CORK</code></td><td>Buffer all output into a single TCP segment (up to 200ms or segment limit)</td><td>Send HTTP headers + body as one segment. Enable before <code>write()</code>, disable after <code>sendfile()</code></td></tr>
+    <tr><td><code>TCP_NODELAY</code></td><td>Disable Nagle&rsquo;s algorithm &mdash; send small packets immediately</td><td>Interactive applications where latency matters (SSH, gaming)</td></tr>
+  </table>
+
+  <h4>Monitoring and Debugging</h4>
+  <table class="metric-table">
+    <tr><th>Tool</th><th>Purpose</th><th>Common Usage</th></tr>
+    <tr><td><code>netstat -an</code></td><td>Show all sockets and their states</td><td>Find connections in TIME_WAIT, CLOSE_WAIT, ESTABLISHED</td></tr>
+    <tr><td><code>ss -tnp</code></td><td>Modern replacement for netstat (faster)</td><td>Same information, plus process names</td></tr>
+    <tr><td><code>tcpdump</code></td><td>Capture and display live network traffic</td><td><code>tcpdump -t -N 'port 8080'</code> &mdash; monitor packets on port 8080</td></tr>
+    <tr><td><code>wireshark</code></td><td>GUI packet analyzer</td><td>Deep protocol inspection with filters</td></tr>
+    <tr><td><code>lsof -i</code></td><td>List open Internet sockets by process</td><td>Find which process is using a port</td></tr>
+  </table>
+
+  <!-- ===== SUMMARY ===== -->
+  <h3 id="ch56-summary">Sockets Summary &amp; Quick Reference</h3>
+
+  <div class="info-box note" style="font-size:.95em;">
+    <strong>Socket System Call Cheat Sheet</strong><br><br>
+    <b>Create:</b> <code>fd = socket(domain, type, protocol)</code><br>
+    <b>Name:</b> <code>bind(fd, addr, addrlen)</code><br>
+    <b>Listen:</b> <code>listen(fd, backlog)</code><br>
+    <b>Accept:</b> <code>new_fd = accept(fd, addr, &amp;addrlen)</code><br>
+    <b>Connect:</b> <code>connect(fd, addr, addrlen)</code><br>
+    <b>Send:</b> <code>write(fd, buf, len)</code> or <code>send(fd, buf, len, flags)</code> or <code>sendto(fd, buf, len, flags, addr, addrlen)</code><br>
+    <b>Receive:</b> <code>read(fd, buf, len)</code> or <code>recv(fd, buf, len, flags)</code> or <code>recvfrom(fd, buf, len, flags, addr, &amp;addrlen)</code><br>
+    <b>Close:</b> <code>close(fd)</code> or <code>shutdown(fd, how)</code><br>
+    <b>Info:</b> <code>getsockname(fd, addr, &amp;len)</code>, <code>getpeername(fd, addr, &amp;len)</code><br>
+    <b>Options:</b> <code>getsockopt(fd, level, optname, &amp;val, &amp;len)</code>, <code>setsockopt(fd, level, optname, &amp;val, len)</code>
+  </div>
+
+  <table class="metric-table">
+    <tr><th>When You Need</th><th>Use</th></tr>
+    <tr><td>Reliable, ordered byte stream across a network</td><td>TCP socket (<code>AF_INET</code> + <code>SOCK_STREAM</code>)</td></tr>
+    <tr><td>Fast, connectionless messages across a network</td><td>UDP socket (<code>AF_INET</code> + <code>SOCK_DGRAM</code>)</td></tr>
+    <tr><td>Fast, reliable local IPC (same host)</td><td>UNIX stream socket (<code>AF_UNIX</code> + <code>SOCK_STREAM</code>)</td></tr>
+    <tr><td>Local IPC with message boundaries</td><td>UNIX datagram socket (<code>AF_UNIX</code> + <code>SOCK_DGRAM</code>)</td></tr>
+    <tr><td>Pass file descriptors between processes</td><td>UNIX domain socket + <code>sendmsg()</code> ancillary data</td></tr>
+    <tr><td>Bidirectional pipe for parent-child</td><td><code>socketpair(AF_UNIX, SOCK_STREAM, 0, fds)</code></td></tr>
+    <tr><td>High-performance file serving</td><td><code>sendfile()</code> + <code>TCP_CORK</code></td></tr>
+    <tr><td>Hostname &harr; IP resolution</td><td><code>getaddrinfo()</code> / <code>getnameinfo()</code></td></tr>
+  </table>
 
   <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
 </div>
