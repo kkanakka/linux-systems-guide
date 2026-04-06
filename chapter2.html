@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linux Fundamental Concepts - Complete Guide</title>
+<style>
+  :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--text-muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--accent3:#d2a8ff;--accent4:#f0883e;--red:#f85149;--code-bg:#0d1117;--card:#1c2128}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;font-size:16px}
+  .container{max-width:1100px;margin:0 auto;padding:0 24px}
+  .hero{background:linear-gradient(135deg,#1a1e2e 0%,#0d1117 50%,#0a1628 100%);border-bottom:1px solid var(--border);padding:80px 0 60px;text-align:center}
+  .hero h1{font-size:3em;font-weight:800;margin-bottom:16px}
+  .hero h1 span{color:var(--accent)}
+  .hero p{font-size:1.2em;color:var(--text-muted);max-width:700px;margin:0 auto 30px}
+  .hero .badge{display:inline-block;background:var(--surface);border:1px solid var(--border);padding:6px 16px;border-radius:20px;font-size:.85em;color:var(--accent2);margin:4px}
+  .nav-link{display:inline-block;background:var(--surface);border:1px solid var(--accent);padding:8px 20px;border-radius:8px;color:var(--accent);text-decoration:none;margin:8px 4px;font-size:.9em;transition:all .2s}
+  .nav-link:hover{background:var(--accent);color:var(--bg)}
+  .toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;margin:40px auto;max-width:900px}
+  .toc h2{font-size:1.4em;margin-bottom:16px;color:var(--accent)}
+  .toc-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}
+  .toc a{color:var(--text);text-decoration:none;border-bottom:1px dashed var(--border);transition:color .2s;font-size:.95em;display:block;padding:4px 0}
+  .toc a:hover{color:var(--accent);border-bottom-color:var(--accent)}
+  .section{margin:60px 0;padding-top:20px;border-top:1px solid var(--border)}
+  .section-num{font-size:.85em;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+  .section h2{font-size:2em;font-weight:700;margin-bottom:20px;background:linear-gradient(90deg,var(--accent),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .section h3{font-size:1.4em;margin:30px 0 12px;color:var(--accent2);border-left:3px solid var(--accent2);padding-left:12px}
+  .section h4{font-size:1.15em;margin:20px 0 8px;color:var(--accent3)}
+  .section p{margin:12px 0}
+  .section ul,.section ol{margin:12px 0 12px 24px}
+  .section li{margin:6px 0}
+  .diagram-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin:24px 0;text-align:center}
+  .diagram-box img{max-width:100%;border-radius:8px;border:1px solid var(--border)}
+  .diagram-box .caption{margin-top:12px;font-size:.9em;color:var(--text-muted);font-style:italic}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:20px;overflow-x:auto;margin:16px 0;font-family:'SF Mono','Fira Code',Consolas,monospace;font-size:.88em;line-height:1.6;position:relative}
+  pre .lang-label{position:absolute;top:8px;right:12px;font-size:.75em;color:var(--text-muted);background:var(--surface);padding:2px 8px;border-radius:4px}
+  code{font-family:'SF Mono','Fira Code',Consolas,monospace;font-size:.9em}
+  :not(pre)>code{background:var(--surface);padding:2px 6px;border-radius:4px;color:var(--accent);border:1px solid var(--border)}
+  .terminal{background:#000;border:1px solid #333;border-radius:8px;padding:0;margin:16px 0;overflow:hidden}
+  .terminal-bar{background:#1a1a2e;padding:8px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #333}
+  .terminal-dot{width:12px;height:12px;border-radius:50%}
+  .terminal-dot.red{background:#f85149}.terminal-dot.yellow{background:#d29922}.terminal-dot.green{background:#3fb950}
+  .terminal-title{color:#8b949e;font-size:.8em;margin-left:8px}
+  .terminal pre{margin:0;border:none;border-radius:0;padding:16px 20px;background:#000;color:#e6edf3}
+  .prompt{color:#3fb950}.output{color:#c9d1d9}.comment{color:#6e7681}
+  .info-box{border-radius:8px;padding:16px 20px;margin:16px 0;border-left:4px solid}
+  .info-box.note{background:rgba(88,166,255,.1);border-left-color:var(--accent)}
+  .info-box.warning{background:rgba(240,136,62,.1);border-left-color:var(--accent4)}
+  .info-box.danger{background:rgba(248,81,73,.1);border-left-color:var(--red)}
+  .info-box.success{background:rgba(63,185,80,.1);border-left-color:var(--accent2)}
+  .info-box strong{display:block;margin-bottom:4px}
+  .kv-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.95em}
+  .kv-table th,.kv-table td{border:1px solid var(--border);padding:10px 16px;text-align:left}
+  .kv-table th{background:var(--surface);color:var(--accent);font-weight:600}
+  .kv-table td{background:var(--card)}
+  .kv-table tr:hover td{background:var(--surface)}
+  .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0}
+  .compare-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px}
+  .compare-card h4{margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .back-top{text-align:right;margin:30px 0 0}
+  .back-top a{color:var(--text-muted);text-decoration:none;font-size:.85em}
+  .back-top a:hover{color:var(--accent)}
+  footer{background:var(--surface);border-top:1px solid var(--border);padding:40px 0;margin-top:80px;text-align:center;color:var(--text-muted);font-size:.9em}
+  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+  @media(max-width:768px){.hero h1{font-size:2em}.compare-grid,.toc-grid{grid-template-columns:1fr}.container{padding:0 16px}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Linux <span>Fundamental Concepts</span></h1>
+    <p>A complete visual guide to the kernel, shells, users, files, processes, IPC, signals, threads, and more &mdash; with diagrams and real Linux commands for every concept.</p>
+    <div class="badge">Based on The Linux Programming Interface &mdash; Chapter 2</div>
+    <br>
+    <a class="nav-link" href="index.html">&larr; Chapter 6: Processes &amp; Programs</a>
+    <a class="nav-link" href="java-memory.html">Java Memory Architecture &rarr;</a>
+  </div>
+</div>
+
+<div class="container">
+
+<div class="toc" id="toc">
+  <h2>Table of Contents (20 Sections)</h2>
+  <div class="toc-grid">
+    <a href="#sec-1">2.1 The Core OS: The Kernel</a>
+    <a href="#sec-2">2.2 The Shell</a>
+    <a href="#sec-3">2.3 Users and Groups</a>
+    <a href="#sec-4">2.4 Directory Hierarchy, Links &amp; Files</a>
+    <a href="#sec-5">2.5 File I/O Model</a>
+    <a href="#sec-6">2.6 Programs</a>
+    <a href="#sec-7">2.7 Processes</a>
+    <a href="#sec-8">2.8 Memory Mappings</a>
+    <a href="#sec-9">2.9 Static and Shared Libraries</a>
+    <a href="#sec-10">2.10 Interprocess Communication</a>
+    <a href="#sec-11">2.11 Signals</a>
+    <a href="#sec-12">2.12 Threads</a>
+    <a href="#sec-13">2.13 Process Groups &amp; Job Control</a>
+    <a href="#sec-14">2.14 Sessions &amp; Controlling Terminals</a>
+    <a href="#sec-15">2.15 Pseudoterminals</a>
+    <a href="#sec-16">2.16 Date and Time</a>
+    <a href="#sec-17">2.17 Client-Server Architecture</a>
+    <a href="#sec-18">2.18 Realtime</a>
+    <a href="#sec-19">2.19 The /proc File System</a>
+    <a href="#sec-20">2.20 Summary &amp; Cheat Sheet</a>
+  </div>
+</div>
+
+<!-- ==================== SECTION 1: KERNEL ==================== -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 2.1</div>
+  <h2>The Core Operating System: The Kernel</h2>
+  <p>The term <em>operating system</em> has two meanings: the entire software package (kernel + tools + GUI), or more narrowly, the <strong>kernel</strong> &mdash; the central software that manages and allocates computer resources (CPU, RAM, devices). This book focuses on the kernel.</p>
+  <p>The kernel simplifies programming by providing a software layer to manage limited resources. The kernel executable lives at <code>/boot/vmlinuz</code> (the <em>z</em> means it's compressed).</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_01_kernel_architecture.png" alt="Kernel Architecture">
+    <div class="caption">Figure 1: The Linux kernel sits between user-space applications and hardware, providing 6 core services.</div>
+  </div>
+
+  <h3>Tasks Performed by the Kernel</h3>
+  <table class="kv-table">
+    <tr><th>Task</th><th>Description</th></tr>
+    <tr><td><strong>Process Scheduling</strong></td><td>Linux is a <em>preemptive multitasking</em> OS. Multiple processes reside in memory; the kernel scheduler decides which gets CPU time and for how long (not the processes themselves).</td></tr>
+    <tr><td><strong>Memory Management</strong></td><td>Virtual memory isolates processes from each other and the kernel. Only needed pages stay in RAM; rest goes to swap. More processes can run simultaneously.</td></tr>
+    <tr><td><strong>File System</strong></td><td>Provides a hierarchical file system on disk. Create, read, update, delete files and directories.</td></tr>
+    <tr><td><strong>Process Creation/Termination</strong></td><td>Loads programs into memory, allocates resources, and frees them when processes finish.</td></tr>
+    <tr><td><strong>Device Access</strong></td><td>Provides a standardized interface to all devices (keyboards, disks, network cards), arbitrating access among multiple processes.</td></tr>
+    <tr><td><strong>Networking</strong></td><td>Transmits and receives network packets on behalf of user processes, including routing.</td></tr>
+    <tr><td><strong>System Call API</strong></td><td>Processes request kernel services via <em>system calls</em> &mdash; the kernel entry points.</td></tr>
+  </table>
+
+  <h3>User Mode vs Kernel Mode</h3>
+  <p>Modern CPUs operate in at least two modes. <strong>User mode</strong>: can only access user-space memory, cannot execute privileged instructions. <strong>Kernel mode</strong>: can access all memory and execute any instruction (halt, I/O, MMU). The CPU switches modes during system calls, interrupts, and exceptions.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_02_user_kernel_mode.png" alt="User Mode vs Kernel Mode">
+    <div class="caption">Figure 2: Hardware enforces the separation between user mode and kernel mode. User-mode programs cannot access kernel memory.</div>
+  </div>
+
+  <h3>Process vs Kernel View</h3>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4 style="color:var(--accent)">Process View</h4>
+      <ul>
+        <li>Doesn't know when it will be scheduled</li>
+        <li>Doesn't know where it is in physical RAM</li>
+        <li>Doesn't know disk locations of its files</li>
+        <li>Cannot directly communicate with other processes</li>
+        <li>Cannot create/terminate itself directly</li>
+        <li>Cannot talk to hardware directly</li>
+      </ul>
+    </div>
+    <div class="compare-card">
+      <h4 style="color:var(--accent2)">Kernel View</h4>
+      <ul>
+        <li>Knows and controls everything</li>
+        <li>Decides CPU scheduling order and duration</li>
+        <li>Maintains all process data structures</li>
+        <li>Maps virtual memory to physical RAM</li>
+        <li>Mediates all IPC</li>
+        <li>Handles all device I/O</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Kernel Exploration</span></div>
+  <pre><span class="prompt">$</span> uname -r                      <span class="comment"># Kernel version</span>
+5.15.0-91-generic
+
+<span class="prompt">$</span> uname -a                      <span class="comment"># Full system info</span>
+Linux myhost 5.15.0-91-generic #101-Ubuntu SMP x86_64 GNU/Linux
+
+<span class="prompt">$</span> cat /proc/version              <span class="comment"># Detailed kernel version</span>
+Linux version 5.15.0-91-generic (buildd@lcy02-amd64-060) (gcc ...)
+
+<span class="prompt">$</span> ls /boot/vmlinuz*              <span class="comment"># Kernel binary on disk</span>
+/boot/vmlinuz-5.15.0-91-generic
+
+<span class="prompt">$</span> lsmod | head -10               <span class="comment"># Loaded kernel modules</span>
+<span class="prompt">$</span> dmesg | tail -20               <span class="comment"># Kernel ring buffer messages</span>
+<span class="prompt">$</span> sysctl -a | head -10           <span class="comment"># Kernel parameters</span>
+<span class="prompt">$</span> cat /proc/sys/kernel/osrelease <span class="comment"># Another way to get version</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 2: SHELL ==================== -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2.2</div>
+  <h2>The Shell</h2>
+  <p>A <strong>shell</strong> is a user-space program that reads commands and executes programs. Unlike Windows where the command interpreter is part of the kernel, UNIX shells are ordinary user processes. Different users can run different shells simultaneously.</p>
+
+  <h3>Major Shells</h3>
+  <table class="kv-table">
+    <tr><th>Shell</th><th>Binary</th><th>Key Features</th></tr>
+    <tr><td><strong>Bourne shell</strong></td><td><code>sh</code></td><td>The original. I/O redirection, pipelines, variables, functions, background execution. Written by Steve Bourne.</td></tr>
+    <tr><td><strong>C shell</strong></td><td><code>csh</code></td><td>C-like syntax. Added command history, line editing, job control, aliases. By Bill Joy (BSD). Not backward-compatible with sh.</td></tr>
+    <tr><td><strong>Korn shell</strong></td><td><code>ksh</code></td><td>Backward-compatible with sh. Added C shell interactive features. By David Korn (AT&amp;T).</td></tr>
+    <tr><td><strong>Bash</strong></td><td><code>bash</code></td><td>GNU reimplementation of Bourne shell. Most widely used on Linux. Combines sh compatibility with csh/ksh interactive features. POSIX conformant.</td></tr>
+    <tr><td><strong>Zsh</strong></td><td><code>zsh</code></td><td>Extended Bourne shell with many improvements. Default on macOS. Powerful completion, theming.</td></tr>
+  </table>
+
+  <p>Shells serve two purposes: <strong>interactive use</strong> (typing commands) and <strong>script interpretation</strong> (executing shell scripts &mdash; text files containing commands).</p>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Shell Exploration</span></div>
+  <pre><span class="prompt">$</span> echo $SHELL                 <span class="comment"># Current user's login shell</span>
+/bin/zsh
+
+<span class="prompt">$</span> cat /etc/shells              <span class="comment"># All available shells</span>
+/bin/bash
+/bin/csh
+/bin/dash
+/bin/ksh
+/bin/sh
+/bin/tcsh
+/bin/zsh
+
+<span class="prompt">$</span> echo $0                     <span class="comment"># Currently running shell</span>
+zsh
+
+<span class="prompt">$</span> bash --version              <span class="comment"># Bash version</span>
+<span class="prompt">$</span> ps -p $$                    <span class="comment"># Process info for current shell</span>
+<span class="prompt">$</span> chsh -l                     <span class="comment"># List available shells (some systems)</span>
+<span class="prompt">$</span> chsh -s /bin/bash           <span class="comment"># Change login shell</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 3: USERS/GROUPS ==================== -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 2.3</div>
+  <h2>Users and Groups</h2>
+  <p>Every user has a unique <strong>login name</strong> (username) and numeric <strong>user ID (UID)</strong>. Users can belong to one or more <strong>groups</strong>, each with a <strong>group ID (GID)</strong>. The <strong>superuser</strong> (root, UID 0) bypasses all permission checks.</p>
+
+  <h3>Key Files</h3>
+  <table class="kv-table">
+    <tr><th>File</th><th>Contains</th></tr>
+    <tr><td><code>/etc/passwd</code></td><td>User accounts: username, UID, GID, home directory, login shell. (Password field usually <code>x</code> &mdash; actual hash in shadow file.)</td></tr>
+    <tr><td><code>/etc/shadow</code></td><td>Encrypted passwords. Readable only by root.</td></tr>
+    <tr><td><code>/etc/group</code></td><td>Groups: group name, GID, comma-separated list of member usernames.</td></tr>
+  </table>
+
+  <h3>Superuser and Capabilities</h3>
+  <p>The superuser (UID 0, <code>root</code>) can do anything. Since kernel 2.2, Linux divides superuser privileges into <strong>capabilities</strong> (e.g., <code>CAP_KILL</code>, <code>CAP_NET_ADMIN</code>) so a process can have a subset of root powers.</p>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">User &amp; Group Exploration</span></div>
+  <pre><span class="prompt">$</span> whoami                       <span class="comment"># Current username</span>
+kkanakka
+
+<span class="prompt">$</span> id                           <span class="comment"># UID, GID, and all groups</span>
+uid=8785(kkanakka) gid=20(staff) groups=20(staff),80(admin),...
+
+<span class="prompt">$</span> id -u                        <span class="comment"># Just the UID</span>
+<span class="prompt">$</span> id -g                        <span class="comment"># Just the primary GID</span>
+<span class="prompt">$</span> groups                       <span class="comment"># Groups current user belongs to</span>
+
+<span class="prompt">$</span> cat /etc/passwd | head -5    <span class="comment"># User database</span>
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+
+<span class="prompt">$</span> cat /etc/group | head -5     <span class="comment"># Group database</span>
+root:x:0:
+daemon:x:1:
+bin:x:2:
+
+<span class="prompt">$</span> getent passwd kkanakka       <span class="comment"># Look up specific user</span>
+<span class="prompt">$</span> getent group admin           <span class="comment"># Look up specific group</span>
+<span class="prompt">$</span> last | head -10              <span class="comment"># Recent login history</span>
+<span class="prompt">$</span> w                            <span class="comment"># Who is logged in and what they're doing</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 4: FILESYSTEM ==================== -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 2.4</div>
+  <h2>Single Directory Hierarchy, Directories, Links, and Files</h2>
+  <p>Linux has a <strong>single hierarchical directory structure</strong> rooted at <code>/</code>. Unlike Windows, there are no drive letters &mdash; all disks are mounted into this one tree.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_03_directory_hierarchy.png" alt="Linux Directory Hierarchy">
+    <div class="caption">Figure 3: The Linux filesystem is a single tree rooted at /. All files, devices, and even virtual filesystems (/proc) are part of this hierarchy.</div>
+  </div>
+
+  <h3>File Types</h3>
+  <table class="kv-table">
+    <tr><th>Type</th><th>Symbol</th><th>Description</th></tr>
+    <tr><td>Regular file</td><td><code>-</code></td><td>Ordinary data files (text, binary, images)</td></tr>
+    <tr><td>Directory</td><td><code>d</code></td><td>Contains filename-to-inode mappings (links)</td></tr>
+    <tr><td>Symbolic link</td><td><code>l</code></td><td>Points to another filename (can dangle if target deleted)</td></tr>
+    <tr><td>Block device</td><td><code>b</code></td><td>Disk drives (<code>/dev/sda</code>)</td></tr>
+    <tr><td>Character device</td><td><code>c</code></td><td>Terminals, serial ports (<code>/dev/tty</code>)</td></tr>
+    <tr><td>Named pipe (FIFO)</td><td><code>p</code></td><td>IPC mechanism with a filesystem name</td></tr>
+    <tr><td>Socket</td><td><code>s</code></td><td>IPC endpoint (<code>/var/run/docker.sock</code>)</td></tr>
+  </table>
+
+  <h3>Hard Links vs Symbolic Links</h3>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4 style="color:var(--accent)">Hard Link</h4>
+      <ul><li>Direct pointer to the same inode</li><li>File is deleted only when ALL hard links are removed</li><li>Cannot cross filesystem boundaries</li><li>Cannot link to directories (usually)</li><li><code>ln file hardlink</code></li></ul>
+    </div>
+    <div class="compare-card">
+      <h4 style="color:var(--accent2)">Symbolic (Soft) Link</h4>
+      <ul><li>Contains the pathname of another file</li><li>Can dangle if target is deleted</li><li>Can cross filesystems</li><li>Can link to directories</li><li><code>ln -s file symlink</code></li></ul>
+    </div>
+  </div>
+
+  <h3>File Permissions</h3>
+  <p>Three categories: <strong>owner (u)</strong>, <strong>group (g)</strong>, <strong>other (o)</strong>. Three permissions each: <strong>read (r=4)</strong>, <strong>write (w=2)</strong>, <strong>execute (x=1)</strong>.</p>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Filesystem Exploration</span></div>
+  <pre><span class="prompt">$</span> ls -la /                     <span class="comment"># Root directory listing</span>
+<span class="prompt">$</span> pwd                          <span class="comment"># Current working directory</span>
+<span class="prompt">$</span> cd /var/log                  <span class="comment"># Change directory (absolute)</span>
+<span class="prompt">$</span> cd ../tmp                    <span class="comment"># Change directory (relative)</span>
+
+<span class="comment"># File type identification</span>
+<span class="prompt">$</span> file /bin/ls                 <span class="comment"># Identify file type</span>
+/bin/ls: ELF 64-bit LSB pie executable, x86-64
+
+<span class="prompt">$</span> stat /etc/passwd             <span class="comment"># Detailed file metadata</span>
+<span class="prompt">$</span> ls -li /etc/passwd           <span class="comment"># Show inode number</span>
+
+<span class="comment"># Links</span>
+<span class="prompt">$</span> ln file hardlink             <span class="comment"># Create hard link</span>
+<span class="prompt">$</span> ln -s file symlink           <span class="comment"># Create symbolic link</span>
+<span class="prompt">$</span> readlink -f symlink          <span class="comment"># Resolve symlink to real path</span>
+<span class="prompt">$</span> find / -inum 12345           <span class="comment"># Find all hard links to inode</span>
+
+<span class="comment"># Permissions</span>
+<span class="prompt">$</span> ls -la file.txt              <span class="comment"># View permissions</span>
+-rw-r--r-- 1 user group 1024 Apr 5 file.txt
+<span class="prompt">$</span> chmod 755 script.sh          <span class="comment"># Set permissions (rwxr-xr-x)</span>
+<span class="prompt">$</span> chown user:group file        <span class="comment"># Change owner and group</span>
+
+<span class="comment"># Disk usage</span>
+<span class="prompt">$</span> df -h                        <span class="comment"># Filesystem disk space</span>
+<span class="prompt">$</span> du -sh /var/log              <span class="comment"># Directory size</span>
+<span class="prompt">$</span> mount | column -t            <span class="comment"># Show mounted filesystems</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 5: FILE I/O ==================== -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 2.5</div>
+  <h2>File I/O Model</h2>
+  <p>UNIX's defining I/O feature is <strong>universality of I/O</strong>: the same system calls (<code>open()</code>, <code>read()</code>, <code>write()</code>, <code>close()</code>) work on ALL file types &mdash; regular files, devices, pipes, sockets. The kernel translates these into the appropriate operations.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_04_file_io_model.png" alt="File I/O Model">
+    <div class="caption">Figure 4: File descriptors are small integers referencing open files. fd 0/1/2 are stdin/stdout/stderr. The VFS layer in the kernel routes I/O to the correct subsystem.</div>
+  </div>
+
+  <h3>File Descriptors</h3>
+  <table class="kv-table">
+    <tr><th>FD</th><th>Name</th><th>C stream</th><th>Purpose</th></tr>
+    <tr><td>0</td><td>stdin</td><td><code>stdin</code></td><td>Standard input (keyboard by default)</td></tr>
+    <tr><td>1</td><td>stdout</td><td><code>stdout</code></td><td>Standard output (terminal by default)</td></tr>
+    <tr><td>2</td><td>stderr</td><td><code>stderr</code></td><td>Standard error (terminal by default)</td></tr>
+  </table>
+  <p>The <strong>stdio library</strong> (<code>fopen</code>, <code>fprintf</code>, <code>fgets</code>) is layered on top of system calls (<code>open</code>, <code>write</code>, <code>read</code>), adding buffering for efficiency.</p>
+
+  <!-- ---- EVERYTHING IS A FILE ---- -->
+  <h3>Everything Is a File &mdash; Same write() for Everything</h3>
+  <p>Whether you're writing to a text file, sending data over a network, or piping to another process &mdash; your code uses the <strong>same calls</strong>: <code>open()</code>, <code>read()</code>, <code>write()</code>, <code>close()</code>.</p>
+
+  <pre><span class="lang-label">C</span>
+// Writing to a REGULAR FILE
+int fd = open("/home/user/data.txt", O_WRONLY);  // fd = 3
+write(fd, "hello", 5);         // 5 = number of bytes ("hello" = 5 chars)
+close(fd);
+
+// Writing to a NETWORK SOCKET
+int fd = socket(AF_INET, SOCK_STREAM, 0);        // fd = 4
+connect(fd, server_addr, ...);
+write(fd, "hello", 5);         // SAME write() call!
+close(fd);
+
+// Writing to a PIPE
+int pipefd[2];
+pipe(pipefd);                  // pipefd[0]=read end, pipefd[1]=write end
+write(pipefd[1], "hello", 5); // SAME write() call!
+close(pipefd[1]);</pre>
+
+  <div class="info-box success">
+    <strong>write(fd, "hello", 5) &mdash; what does the 5 mean?</strong>
+    It's the <strong>number of bytes</strong> to write. <code>"hello"</code> = h, e, l, l, o = 5 characters = 5 bytes.<br>
+    <code>write(fd, "hello", 5)</code> &rarr; where=fd, what="hello", how many bytes=5.
+  </div>
+
+  <!-- ---- VFS ROUTING ---- -->
+  <h3>VFS: The Kernel Router for I/O</h3>
+  <p>When you call <code>write(fd, ...)</code>, the kernel's <strong>Virtual File System (VFS)</strong> looks up what type of resource that fd points to and routes the data to the correct subsystem.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_fio_vfs_routing.png" alt="VFS Routing">
+    <div class="caption">Figure 4b: The VFS is a router inside the kernel. Your program uses one simple interface (read/write), the kernel handles the complexity of where data actually goes.</div>
+  </div>
+
+  <h4>Real Example: Opening Multiple Resources</h4>
+  <p>Every time you <code>open()</code> something, the kernel assigns the next available fd number:</p>
+  <pre><span class="lang-label">C</span>
+// Program starts with fd 0, 1, 2 already open (stdin/stdout/stderr)
+
+int fd3 = open("/desktop/kiran.txt", O_WRONLY | O_CREAT);   // fd 3
+write(fd3, "my notes", 8);
+
+int fd4 = open("/music/song.mp3", O_RDONLY);                // fd 4
+read(fd4, buffer, 4096);
+
+int fd5 = open("/var/log/app.log", O_WRONLY | O_APPEND);    // fd 5
+write(fd5, "error occurred\n", 15);
+
+int fd6 = socket(AF_INET, SOCK_STREAM, 0);                 // fd 6
+connect(fd6, db_address, ...);
+write(fd6, "SELECT * FROM users", 19);                      // database = socket!
+
+unlink("/desktop/old_file.txt");   // delete a file &mdash; no fd needed, just a syscall</pre>
+
+  <p>Resulting fd table for this process:</p>
+  <pre>  fd 0 &rarr; stdin           (keyboard)
+  fd 1 &rarr; stdout          (terminal)
+  fd 2 &rarr; stderr          (terminal)
+  fd 3 &rarr; kiran.txt       (regular file)
+  fd 4 &rarr; song.mp3        (regular file)
+  fd 5 &rarr; app.log         (regular file)
+  fd 6 &rarr; DB connection   (socket)</pre>
+
+  <!-- ---- FD IS PER-PROCESS ---- -->
+  <h3>File Descriptors Are Per-Process, Not Per-Machine</h3>
+  <p>Each process has its own <strong>independent fd table</strong>. fd 3 in Process A has nothing to do with fd 3 in Process B.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_fio_fd_per_process.png" alt="FD Per-Process">
+    <div class="caption">Figure 4c: Each process has its own fd table. fd 3 means different things in different processes. Limits exist at per-process and machine-wide levels.</div>
+  </div>
+
+  <!-- ---- ULIMIT AND FD LIMITS ---- -->
+  <h3>File Descriptor Limits: ulimit -n</h3>
+  <p><code>ulimit -n</code> is <strong>per process</strong>, not per machine.</p>
+
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">FD Limits Explained</span></div>
+  <pre><span class="prompt">$</span> ulimit -n
+1024          <span class="comment"># each SINGLE process can open max 1024 fds</span>
+
+<span class="comment"># So if you have 3 processes running:</span>
+<span class="comment"># Process A → can open up to 1024 fds</span>
+<span class="comment"># Process B → can open up to 1024 fds</span>
+<span class="comment"># Process C → can open up to 1024 fds</span>
+<span class="comment"># Total possible = 3 × 1024 = 3072 fds across machine</span>
+
+<span class="comment"># But the MACHINE-WIDE cap is separate:</span>
+<span class="prompt">$</span> cat /proc/sys/fs/file-max
+100000        <span class="comment"># total fds ALL processes on the machine can share</span>
+
+<span class="comment"># Even if each process is allowed 1024, if 100 processes</span>
+<span class="comment"># together hit 100000, no more fds for anyone.</span></pre></div>
+
+  <h4>Changing the Limits</h4>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Increase FD Limits</span></div>
+  <pre><span class="comment"># Increase per-process limit (temporary, current shell only)</span>
+<span class="prompt">$</span> ulimit -n 65535
+
+<span class="comment"># Increase per-process limit (permanent)</span>
+<span class="comment"># edit /etc/security/limits.conf:</span>
+kiran  hard  nofile  65535
+kiran  soft  nofile  65535
+
+<span class="comment"># Increase machine-wide limit</span>
+<span class="prompt">$</span> sudo sysctl -w fs.file-max=200000</pre></div>
+
+  <div class="info-box warning">
+    <strong>Why does this matter?</strong>
+    A web server like Nginx handles thousands of connections. Each connection = 1 socket = 1 fd. Default 1024 is way too low &mdash; production servers bump <code>ulimit -n</code> to 65535 or higher.
+  </div>
+
+  <!-- ---- FD VS INODE ---- -->
+  <h3>File Descriptor vs Inode</h3>
+  <p>An <strong>fd</strong> is a temporary handle your process holds. An <strong>inode</strong> is the permanent identity of a file on disk. Multiple fds (from different processes or even the same process) can point to the same inode.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_fio_fd_vs_inode.png" alt="FD vs Inode">
+    <div class="caption">Figure 4d: fds are temporary per-process handles. Inodes are permanent per-file identities on disk. Multiple fds can point to the same inode, each with independent read/write positions.</div>
+  </div>
+
+  <table class="kv-table">
+    <tr><th>Property</th><th>File Descriptor (fd)</th><th>Inode</th></tr>
+    <tr><td>Lifetime</td><td>Temporary &mdash; dies when process exits or calls <code>close()</code></td><td>Permanent &mdash; lives while file exists on disk</td></tr>
+    <tr><td>Scope</td><td>Per-process (each process has its own table)</td><td>System-wide (one inode per file on the filesystem)</td></tr>
+    <tr><td>What is it?</td><td>A small integer (3, 4, 5...)</td><td>Metadata: size, owner, permissions, disk block locations</td></tr>
+    <tr><td>Relationship</td><td>Many fds can point to one inode</td><td>One inode per file, multiple hard links share it</td></tr>
+    <tr><td>Read/write position</td><td>Each fd has its own independent offset</td><td>N/A &mdash; inode stores file data, not cursor position</td></tr>
+  </table>
+
+  <pre><span class="lang-label">Example</span>
+<span class="comment"># Same file opened twice in one process &mdash; different fds, same inode:</span>
+fd 3 = open("kiran.txt")   &rarr; inode 12345, position=0
+fd 4 = open("kiran.txt")   &rarr; inode 12345, position=0 (independent)
+
+<span class="comment"># Two processes opening the same file:</span>
+Process A: fd 3 ──┐
+                   ├──&rarr; inode 12345 &rarr; /home/kiran/data.txt (on disk)
+Process B: fd 5 ──┘
+
+<span class="comment"># close(fd) tells the kernel "I'm done with this number, reuse it."</span>
+<span class="comment"># So if you close fd 3, the next open() might give you fd 3 again.</span></pre>
+
+  <!-- ---- SOCKETS: LOCAL VS NETWORK ---- -->
+  <h3>Sockets: Local vs Network &mdash; Do You Need a Port?</h3>
+
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4 style="color:var(--accent2)">Local (UNIX Domain Socket)</h4>
+      <ul>
+        <li><strong>No port needed</strong> &mdash; just a file path</li>
+        <li>e.g., <code>/var/run/docker.sock</code></li>
+        <li>Data goes through kernel directly</li>
+        <li>No network stack involved</li>
+        <li>Fastest IPC between processes on same machine</li>
+        <li><code>socket(AF_UNIX, ...)</code></li>
+      </ul>
+    </div>
+    <div class="compare-card">
+      <h4 style="color:var(--accent)">Cross-Machine (TCP/IP Socket)</h4>
+      <ul>
+        <li><strong>Port required</strong> + IP address</li>
+        <li>e.g., <code>10.0.0.2:8080</code></li>
+        <li>Goes through full network stack</li>
+        <li>All 7 OSI layers involved</li>
+        <li>Works across the internet</li>
+        <li><code>socket(AF_INET, ...)</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="diagram-box">
+    <img src="images/ch2_fio_local_vs_network_socket.png" alt="Local vs Network Socket">
+    <div class="caption">Figure 4e: UNIX domain sockets skip the entire network stack &mdash; just a file path, no port. TCP/IP sockets need an IP address + port and traverse every network layer.</div>
+  </div>
+
+  <!-- ---- OSI 7 LAYERS ---- -->
+  <h3>The OSI 7-Layer Model: Full Network Path</h3>
+  <p>When two programs on <strong>different machines</strong> communicate via a socket, data passes through all 7 OSI layers. The <strong>Socket API</strong> is the door your code uses to enter the stack.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_fio_osi_7_layers.png" alt="OSI 7-Layer Model">
+    <div class="caption">Figure 4f: The complete OSI model. Layer 7 (Application) is closest to you. Layer 1 (Physical) is closest to the wire. Each layer communicates logically with its peer on the other machine.</div>
+  </div>
+
+  <table class="kv-table">
+    <tr><th>#</th><th>Layer</th><th>What It Does</th><th>Examples</th></tr>
+    <tr><td style="color:var(--red);font-weight:700">7</td><td><strong>Application</strong></td><td>Your app's protocol &mdash; closest to YOU</td><td>HTTP, FTP, DNS, SSH, SMTP</td></tr>
+    <tr><td style="color:var(--accent4);font-weight:700">6</td><td><strong>Presentation</strong></td><td>Encryption, encoding, compression</td><td>SSL/TLS, JPEG, ASCII, gzip</td></tr>
+    <tr><td style="color:#d29922;font-weight:700">5</td><td><strong>Session</strong></td><td>Establish, manage, terminate connections</td><td>NetBIOS, RPC, session tokens</td></tr>
+    <tr><td style="color:var(--accent2);font-weight:700">4</td><td><strong>Transport</strong></td><td>End-to-end delivery, adds <strong>port numbers</strong></td><td>TCP (reliable), UDP (fast)</td></tr>
+    <tr><td style="color:var(--accent);font-weight:700">3</td><td><strong>Network</strong></td><td>Routing, adds <strong>IP addresses</strong></td><td>IP, ICMP, routing protocols</td></tr>
+    <tr><td style="color:var(--accent3);font-weight:700">2</td><td><strong>Data Link</strong></td><td>Framing, adds <strong>MAC addresses</strong>, error check</td><td>Ethernet, WiFi, ARP</td></tr>
+    <tr><td style="font-weight:700">1</td><td><strong>Physical</strong></td><td>Bits on the wire &mdash; closest to the WIRE</td><td>Cable, fiber, radio, voltage</td></tr>
+  </table>
+
+  <p><strong>Easy to remember:</strong> Layer 1 is the floor (physical stuff you can touch). Layer 7 is the ceiling (apps you interact with).</p>
+
+  <!-- ---- DATA ENCAPSULATION ---- -->
+  <h3>Data Encapsulation: Wrapping and Unwrapping</h3>
+  <p>When data goes <strong>down</strong> the stack on Machine A, each layer wraps it with a header. When it arrives on Machine B and goes <strong>up</strong>, each layer strips its header.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_fio_data_encapsulation.png" alt="Data Encapsulation">
+    <div class="caption">Figure 4g: Each layer adds its own header as data travels down. The packet grows like Russian nesting dolls. On the receiving side, each layer peels off its header to deliver the original data.</div>
+  </div>
+
+  <pre><span class="lang-label">Encapsulation Step by Step</span>
+Sender (going DOWN):
+  App data:                    [Hello]
+  Transport adds port:         [TCP:8080 | Hello]
+  Network adds IP:             [IP:10.0.0.1&rarr;10.0.0.2 | TCP | Hello]
+  Data Link adds MAC:          [ETH:MAC_A&rarr;MAC_B | IP | TCP | Hello | CRC]
+  Physical:                    0101010110110...
+
+Receiver (going UP):
+  Physical:                    receives bits
+  Data Link:                   strips ETH header, checks MAC &rarr; [IP | TCP | Hello]
+  Network:                     strips IP header, checks dest IP &rarr; [TCP | Hello]
+  Transport:                   strips TCP header, delivers to port 8080 &rarr; [Hello]
+  Application:                 receives "Hello"</pre>
+
+  <div class="info-box note">
+    <strong>Locally, you skip all this!</strong>
+    UNIX domain sockets (<code>AF_UNIX</code>) talk through the kernel directly &mdash; no TCP, no IP, no Ethernet, no physical layer. That's why local sockets are much faster.
+  </div>
+
+  <!-- ---- ORIGINAL TROUBLESHOOTING ---- -->
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">File I/O Exploration</span></div>
+  <pre><span class="comment"># View open file descriptors of a process</span>
+<span class="prompt">$</span> ls -la /proc/$$/fd           <span class="comment"># Current shell's open files</span>
+<span class="prompt">$</span> ls -la /dev/fd/              <span class="comment"># Symlink to /proc/self/fd</span>
+
+<span class="comment"># See what files a process has open</span>
+<span class="prompt">$</span> lsof -p $$                   <span class="comment"># List open files for current shell</span>
+<span class="prompt">$</span> lsof -i :80                  <span class="comment"># What process uses port 80?</span>
+<span class="prompt">$</span> lsof /var/log/syslog         <span class="comment"># Who has this file open?</span>
+
+<span class="comment"># I/O redirection in shell</span>
+<span class="prompt">$</span> command &gt; file.txt           <span class="comment"># Redirect stdout to file</span>
+<span class="prompt">$</span> command 2&gt; errors.txt        <span class="comment"># Redirect stderr to file</span>
+<span class="prompt">$</span> command &amp;&gt; both.txt          <span class="comment"># Redirect both stdout and stderr</span>
+<span class="prompt">$</span> command &lt; input.txt          <span class="comment"># Redirect stdin from file</span>
+
+<span class="comment"># Trace system calls (see actual open/read/write)</span>
+<span class="prompt">$</span> strace -e trace=open,read,write cat /etc/hostname
+open("/etc/hostname", O_RDONLY) = 3
+read(3, "myhost\n", 131072) = 7
+write(1, "myhost\n", 7) = 7
+
+<span class="comment"># FD limit checks</span>
+<span class="prompt">$</span> ulimit -n                    <span class="comment"># Per-process fd limit</span>
+<span class="prompt">$</span> cat /proc/sys/fs/file-max    <span class="comment"># Machine-wide fd limit</span>
+<span class="prompt">$</span> cat /proc/sys/fs/file-nr     <span class="comment"># Currently allocated fds</span>
+<span class="prompt">$</span> ls /proc/$$/fd | wc -l       <span class="comment"># How many fds current process has open</span>
+
+<span class="comment"># Socket exploration</span>
+<span class="prompt">$</span> ss -xln                      <span class="comment"># UNIX domain sockets (local, no port)</span>
+<span class="prompt">$</span> ss -tuln                     <span class="comment"># TCP/UDP sockets (network, with ports)</span>
+<span class="prompt">$</span> ls -la /var/run/*.sock        <span class="comment"># Common UNIX socket locations</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 6: PROGRAMS ==================== -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 2.6</div>
+  <h2>Programs</h2>
+  <p>Programs exist in two forms: <strong>source code</strong> (human-readable, e.g., C) and <strong>binary executables</strong> (machine-language). Compilation and linking converts source to binary. <strong>Scripts</strong> are text files processed by an interpreter (shell, Python).</p>
+
+  <h3>Filters</h3>
+  <p>A <strong>filter</strong> reads from stdin, transforms the data, and writes to stdout. Filters are the building blocks of UNIX pipelines.</p>
+  <table class="kv-table">
+    <tr><th>Filter</th><th>Purpose</th></tr>
+    <tr><td><code>cat</code></td><td>Concatenate and display files</td></tr>
+    <tr><td><code>grep</code></td><td>Search for patterns in text</td></tr>
+    <tr><td><code>sort</code></td><td>Sort lines</td></tr>
+    <tr><td><code>wc</code></td><td>Count lines, words, characters</td></tr>
+    <tr><td><code>tr</code></td><td>Translate/delete characters</td></tr>
+    <tr><td><code>sed</code></td><td>Stream editor (find/replace)</td></tr>
+    <tr><td><code>awk</code></td><td>Pattern scanning and processing</td></tr>
+  </table>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Programs &amp; Pipelines</span></div>
+  <pre><span class="comment"># Compile a C program</span>
+<span class="prompt">$</span> gcc -o hello hello.c         <span class="comment"># Source → binary</span>
+<span class="prompt">$</span> file hello                   <span class="comment"># Verify it's an ELF binary</span>
+
+<span class="comment"># Pipeline: chain filters together</span>
+<span class="prompt">$</span> ps aux | grep nginx | wc -l  <span class="comment"># Count nginx processes</span>
+<span class="prompt">$</span> cat /var/log/syslog | grep error | sort | uniq -c | sort -rn | head
+<span class="comment"># ^ Find errors, sort, count unique ones, show top errors</span>
+
+<span class="prompt">$</span> which ls                     <span class="comment"># Find where a command lives</span>
+/usr/bin/ls
+<span class="prompt">$</span> type ls                      <span class="comment"># Is it a builtin, alias, or file?</span>
+<span class="prompt">$</span> whereis gcc                  <span class="comment"># Find binary, source, and man page</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 7: PROCESSES ==================== -->
+<div class="section" id="sec-7">
+  <div class="section-num">Section 2.7</div>
+  <h2>Processes</h2>
+  <p>A <strong>process</strong> is an instance of an executing program. The kernel loads code into virtual memory, allocates resources, and tracks the process via kernel data structures. From the kernel's view, processes are entities among which resources must be shared.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_05_fork_exec.png" alt="Process Creation: fork() and exec()">
+    <div class="caption">Figure 5: fork() creates a child as a copy of the parent. exec() replaces the child's program with a new one. Together they create new processes running new programs.</div>
+  </div>
+
+  <h3>Process Memory Layout</h3>
+  <p>A process has four logical segments: <strong>Text</strong> (code), <strong>Data</strong> (static variables), <strong>Heap</strong> (dynamic allocation), <strong>Stack</strong> (local variables, call frames).</p>
+
+  <h3>Process Creation: fork() + exec()</h3>
+  <ul>
+    <li><code>fork()</code> creates a child that is a <em>copy</em> of the parent (text shared, data/heap/stack copied)</li>
+    <li>The child typically calls <code>exec()</code> to load a new program, replacing all segments</li>
+    <li><code>fork()</code> returns child's PID to parent, returns 0 to child</li>
+  </ul>
+
+  <h3>Process Termination</h3>
+  <ul>
+    <li><code>exit(status)</code> or <code>_exit(status)</code> &mdash; voluntary termination</li>
+    <li>Killed by a signal (e.g., SIGKILL) &mdash; involuntary</li>
+    <li>Status 0 = success, nonzero = error</li>
+    <li>Parent collects status with <code>wait()</code></li>
+    <li>Check last command's exit status: <code>echo $?</code></li>
+  </ul>
+
+  <h3>Process Credentials (UIDs/GIDs)</h3>
+  <table class="kv-table">
+    <tr><th>ID</th><th>Purpose</th></tr>
+    <tr><td><strong>Real UID/GID</strong></td><td>Who you really are. Inherited from parent. Login shell gets these from <code>/etc/passwd</code>.</td></tr>
+    <tr><td><strong>Effective UID/GID</strong></td><td>Used for permission checks. Usually same as real. Changed by set-user-ID programs.</td></tr>
+    <tr><td><strong>Supplementary GIDs</strong></td><td>Additional groups the process belongs to.</td></tr>
+  </table>
+
+  <h3>Special Processes</h3>
+  <table class="kv-table">
+    <tr><th>Process</th><th>Details</th></tr>
+    <tr><td><strong>init (PID 1)</strong></td><td>Parent of all processes. Created by kernel at boot from <code>/sbin/init</code>. Runs as root. Cannot be killed. Adopts orphaned processes.</td></tr>
+    <tr><td><strong>Daemons</strong></td><td>Long-lived background processes. No controlling terminal. Examples: <code>sshd</code>, <code>httpd</code>, <code>syslogd</code>, <code>cron</code>.</td></tr>
+  </table>
+
+  <h3>Resource Limits</h3>
+  <p>Each process has soft and hard limits on resources (open files, memory, CPU time). Set with <code>setrlimit()</code> system call or <code>ulimit</code> shell command. Inherited by child processes via <code>fork()</code>.</p>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Process Exploration</span></div>
+  <pre><span class="comment"># List processes</span>
+<span class="prompt">$</span> ps aux                       <span class="comment"># All processes, detailed</span>
+<span class="prompt">$</span> ps -ef                       <span class="comment"># All processes, full format</span>
+<span class="prompt">$</span> ps -p 1 -o pid,ppid,comm    <span class="comment"># Specific process</span>
+<span class="prompt">$</span> pstree -p                    <span class="comment"># Process tree with PIDs</span>
+<span class="prompt">$</span> top                          <span class="comment"># Interactive process monitor</span>
+<span class="prompt">$</span> htop                         <span class="comment"># Better interactive monitor</span>
+
+<span class="comment"># Process details</span>
+<span class="prompt">$</span> echo $$                      <span class="comment"># Current PID</span>
+<span class="prompt">$</span> echo $PPID                   <span class="comment"># Parent PID</span>
+<span class="prompt">$</span> echo $?                      <span class="comment"># Last command's exit status</span>
+<span class="prompt">$</span> cat /proc/$$/status          <span class="comment"># Full process status</span>
+
+<span class="comment"># Resource limits</span>
+<span class="prompt">$</span> ulimit -a                    <span class="comment"># Show all limits</span>
+<span class="prompt">$</span> ulimit -n                    <span class="comment"># Max open files</span>
+<span class="prompt">$</span> ulimit -s                    <span class="comment"># Stack size (KB)</span>
+<span class="prompt">$</span> ulimit -u                    <span class="comment"># Max user processes</span>
+
+<span class="comment"># Daemons</span>
+<span class="prompt">$</span> systemctl list-units --type=service  <span class="comment"># List all services</span>
+<span class="prompt">$</span> systemctl status sshd        <span class="comment"># Check specific daemon</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 8: MEMORY MAPPINGS ==================== -->
+<div class="section" id="sec-8">
+  <div class="section-num">Section 2.8</div>
+  <h2>Memory Mappings</h2>
+  <p>The <code>mmap()</code> system call creates a new <strong>memory mapping</strong> in a process's virtual address space. There are two types: <strong>file mappings</strong> (backed by a file on disk) and <strong>anonymous mappings</strong> (no backing file, pages zeroed).</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_06_memory_mappings.png" alt="Memory Mappings">
+    <div class="caption">Figure 6: File mappings let you access file contents directly through memory pointers. Anonymous mappings provide zero-filled memory (used by malloc for large allocations).</div>
+  </div>
+
+  <h3>Private vs Shared Mappings</h3>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4 style="color:var(--accent)">Private Mapping</h4>
+      <ul><li>Changes NOT visible to other processes</li><li>Changes NOT written to underlying file</li><li>Copy-on-write semantics</li><li>Used for: loading program text, private data</li></ul>
+    </div>
+    <div class="compare-card">
+      <h4 style="color:var(--accent2)">Shared Mapping</h4>
+      <ul><li>Changes visible to all processes sharing the mapping</li><li>Changes written through to the underlying file</li><li>Used for: memory-mapped I/O, shared memory IPC</li></ul>
+    </div>
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Memory Mapping Exploration</span></div>
+  <pre><span class="comment"># View memory mappings of a process</span>
+<span class="prompt">$</span> cat /proc/$$/maps            <span class="comment"># Memory map of current shell</span>
+55d3a000-55d3c000 r--p  /usr/bin/zsh      <span class="comment"># text (read-only, private)</span>
+55d3c000-55d60000 r-xp  /usr/bin/zsh      <span class="comment"># text (executable)</span>
+7f8a2000-7f8a4000 rw-p  [heap]            <span class="comment"># heap</span>
+7ffc1000-7ffc3000 rw-p  [stack]           <span class="comment"># stack</span>
+
+<span class="prompt">$</span> pmap $$                      <span class="comment"># Prettier memory map</span>
+<span class="prompt">$</span> cat /proc/$$/smaps | head -30 <span class="comment"># Detailed memory stats per mapping</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 9: LIBRARIES ==================== -->
+<div class="section" id="sec-9">
+  <div class="section-num">Section 2.9</div>
+  <h2>Static and Shared Libraries</h2>
+  <p>Object libraries bundle compiled code for reuse. <strong>Static libraries</strong> (<code>.a</code>) are copied into executables at link time. <strong>Shared libraries</strong> (<code>.so</code>) are loaded at run time by the dynamic linker, saving disk and memory.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_07_static_shared_libs.png" alt="Static vs Shared Libraries">
+    <div class="caption">Figure 7: Static libraries duplicate code in every executable. Shared libraries keep one copy in memory, shared by all processes &mdash; saving disk, RAM, and simplifying updates.</div>
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Library Exploration</span></div>
+  <pre><span class="comment"># Show shared library dependencies</span>
+<span class="prompt">$</span> ldd /usr/bin/ls              <span class="comment"># What shared libs does ls need?</span>
+  linux-vdso.so.1
+  libselinux.so.1 =&gt; /lib/x86_64-linux-gnu/libselinux.so.1
+  libc.so.6 =&gt; /lib/x86_64-linux-gnu/libc.so.6
+  /lib64/ld-linux-x86-64.so.2   <span class="comment"># ← The dynamic linker itself</span>
+
+<span class="comment"># Find a library file</span>
+<span class="prompt">$</span> ldconfig -p | grep libssl    <span class="comment"># Search library cache</span>
+
+<span class="comment"># Static library tools</span>
+<span class="prompt">$</span> ar t /usr/lib/libc.a         <span class="comment"># List objects in static library</span>
+<span class="prompt">$</span> nm /usr/lib/libm.a | head    <span class="comment"># Symbols in static library</span>
+
+<span class="comment"># Check if binary is statically or dynamically linked</span>
+<span class="prompt">$</span> file /usr/bin/ls
+ELF 64-bit LSB pie executable, <strong>dynamically linked</strong>
+
+<span class="comment"># Trace library loading at runtime</span>
+<span class="prompt">$</span> LD_DEBUG=libs ls 2&gt;&amp;1 | head <span class="comment"># Debug dynamic linker</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 10: IPC ==================== -->
+<div class="section" id="sec-10">
+  <div class="section-num">Section 2.10</div>
+  <h2>Interprocess Communication and Synchronization</h2>
+  <p>Cooperating processes need ways to communicate and synchronize. Linux provides a rich set of IPC mechanisms, some from System V, others from BSD.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_08_ipc_mechanisms.png" alt="IPC Mechanisms">
+    <div class="caption">Figure 8: Linux provides 7 main IPC mechanisms. Pipes and FIFOs for byte streams, sockets for network-capable communication, message queues for discrete messages, semaphores for synchronization, and shared memory for fastest data sharing.</div>
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">IPC Exploration</span></div>
+  <pre><span class="comment"># Pipes in action (shell)</span>
+<span class="prompt">$</span> ls -l | sort -k5n | head     <span class="comment"># Pipeline of 3 processes</span>
+<span class="prompt">$</span> mkfifo /tmp/myfifo           <span class="comment"># Create a named pipe (FIFO)</span>
+
+<span class="comment"># System V IPC status</span>
+<span class="prompt">$</span> ipcs                         <span class="comment"># Show all IPC resources</span>
+<span class="prompt">$</span> ipcs -m                      <span class="comment"># Shared memory segments</span>
+<span class="prompt">$</span> ipcs -q                      <span class="comment"># Message queues</span>
+<span class="prompt">$</span> ipcs -s                      <span class="comment"># Semaphore sets</span>
+<span class="prompt">$</span> ipcrm -m &lt;shmid&gt;             <span class="comment"># Remove shared memory segment</span>
+
+<span class="comment"># Sockets</span>
+<span class="prompt">$</span> ss -tuln                     <span class="comment"># Show listening TCP/UDP sockets</span>
+<span class="prompt">$</span> ss -xln                      <span class="comment"># Show UNIX domain sockets</span>
+<span class="prompt">$</span> netstat -tlnp                <span class="comment"># Alternative (older)</span>
+
+<span class="comment"># File locks</span>
+<span class="prompt">$</span> lslocks                      <span class="comment"># Show active file locks</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 11: SIGNALS ==================== -->
+<div class="section" id="sec-11">
+  <div class="section-num">Section 2.11</div>
+  <h2>Signals</h2>
+  <p>Signals are <strong>software interrupts</strong> that notify a process of an event. They can be sent by the kernel, another process, or the process itself. A process can ignore a signal, be killed by it, be suspended, or handle it with a custom function.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_09_signals.png" alt="Signals">
+    <div class="caption">Figure 9: Signals flow from sources (kernel, other processes, self) through pending/blocked states to one of four actions: default, ignore, custom handler, or block.</div>
+  </div>
+
+  <h3>Signal Lifecycle</h3>
+  <ol>
+    <li><strong>Generated</strong> &mdash; kernel, another process, or self sends the signal</li>
+    <li><strong>Pending</strong> &mdash; signal is queued, waiting to be delivered</li>
+    <li><strong>Blocked (optional)</strong> &mdash; added to process's signal mask, stays pending until unblocked</li>
+    <li><strong>Delivered</strong> &mdash; process takes action (default, ignore, or handler)</li>
+  </ol>
+
+  <div class="info-box danger">
+    <strong>SIGKILL (9) and SIGSTOP cannot be caught, blocked, or ignored!</strong>
+    These are the kernel's guaranteed way to kill or stop any process.
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Signal Exploration</span></div>
+  <pre><span class="comment"># List all signals</span>
+<span class="prompt">$</span> kill -l
+ 1) SIGHUP    2) SIGINT    3) SIGQUIT   4) SIGILL    5) SIGTRAP
+ 6) SIGABRT   9) SIGKILL  10) SIGUSR1  11) SIGSEGV  13) SIGPIPE
+14) SIGALRM  15) SIGTERM  17) SIGCHLD  18) SIGCONT  19) SIGSTOP
+20) SIGTSTP  28) SIGWINCH
+
+<span class="comment"># Send signals</span>
+<span class="prompt">$</span> kill -SIGTERM 1234           <span class="comment"># Polite termination request</span>
+<span class="prompt">$</span> kill -9 1234                 <span class="comment"># Force kill (SIGKILL)</span>
+<span class="prompt">$</span> kill -STOP 1234              <span class="comment"># Suspend process</span>
+<span class="prompt">$</span> kill -CONT 1234              <span class="comment"># Resume suspended process</span>
+<span class="prompt">$</span> killall nginx                <span class="comment"># Kill all processes by name</span>
+<span class="prompt">$</span> pkill -f "python script"     <span class="comment"># Kill by command pattern</span>
+
+<span class="comment"># Keyboard signals</span>
+<span class="comment"># Ctrl+C  → SIGINT  (interrupt)</span>
+<span class="comment"># Ctrl+\  → SIGQUIT (quit + core dump)</span>
+<span class="comment"># Ctrl+Z  → SIGTSTP (suspend to background)</span>
+
+<span class="comment"># Check pending/blocked signals</span>
+<span class="prompt">$</span> cat /proc/$$/status | grep -i sig
+SigPnd: 0000000000000000
+SigBlk: 0000000000010000
+SigIgn: 0000000000380004
+SigCgt: 000000004b817efb</pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 12: THREADS ==================== -->
+<div class="section" id="sec-12">
+  <div class="section-num">Section 2.12</div>
+  <h2>Threads</h2>
+  <p>A process can have multiple <strong>threads of execution</strong>. Threads share the same virtual memory (text, data, heap) and file descriptors, but each has its own <strong>stack</strong>. They communicate via shared global variables, synchronized with mutexes and condition variables.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_10_threads_vs_processes.png" alt="Threads vs Processes">
+    <div class="caption">Figure 10: Processes have full isolation (separate memory). Threads share everything except the stack &mdash; lighter to create, easier to share data, but a crash in one thread kills the entire process.</div>
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Thread Exploration</span></div>
+  <pre><span class="comment"># Show threads of a process</span>
+<span class="prompt">$</span> ps -T -p 1234                <span class="comment"># Show threads (SPID column)</span>
+<span class="prompt">$</span> ps -eLf | grep nginx         <span class="comment"># All threads of nginx</span>
+
+<span class="comment"># /proc thread info</span>
+<span class="prompt">$</span> ls /proc/1234/task/           <span class="comment"># Each thread has a directory here</span>
+<span class="prompt">$</span> cat /proc/1234/status | grep Threads
+Threads:    4
+
+<span class="comment"># top with thread view</span>
+<span class="prompt">$</span> top -H                        <span class="comment"># Show individual threads</span>
+<span class="prompt">$</span> htop                          <span class="comment"># Press H to toggle thread view</span>
+
+<span class="comment"># Count threads per process</span>
+<span class="prompt">$</span> ps -eo pid,nlwp,comm --sort=-nlwp | head
+<span class="comment"># nlwp = Number of Light Weight Processes (threads)</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 13: PROCESS GROUPS ==================== -->
+<div class="section" id="sec-13">
+  <div class="section-num">Section 2.13</div>
+  <h2>Process Groups and Shell Job Control</h2>
+  <p>The shell places each command (or pipeline) in a new <strong>process group</strong>. All processes in a group share the same <strong>process group ID (PGID)</strong>. Job-control shells let you suspend, resume, and move jobs between foreground and background.</p>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Job Control</span></div>
+  <pre><span class="comment"># Start a background job</span>
+<span class="prompt">$</span> sleep 300 &amp;                   <span class="comment"># Run in background</span>
+[1] 12345
+
+<span class="prompt">$</span> jobs                          <span class="comment"># List all jobs</span>
+[1]+  Running  sleep 300 &amp;
+
+<span class="prompt">$</span> fg %1                         <span class="comment"># Bring job 1 to foreground</span>
+<span class="comment"># Press Ctrl+Z to suspend it</span>
+[1]+  Stopped  sleep 300
+
+<span class="prompt">$</span> bg %1                         <span class="comment"># Resume in background</span>
+<span class="prompt">$</span> kill %1                       <span class="comment"># Kill job 1</span>
+
+<span class="comment"># View process groups</span>
+<span class="prompt">$</span> ps -o pid,pgid,sid,comm       <span class="comment"># Show PGID and SID</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 14: SESSIONS ==================== -->
+<div class="section" id="sec-14">
+  <div class="section-num">Section 2.14</div>
+  <h2>Sessions, Controlling Terminals, and Controlling Processes</h2>
+  <p>A <strong>session</strong> is a collection of process groups. The <strong>session leader</strong> (usually the login shell) creates the session and establishes the <strong>controlling terminal</strong>. The <strong>foreground process group</strong> receives keyboard signals (Ctrl+C, Ctrl+Z).</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_11_sessions_jobcontrol.png" alt="Sessions and Job Control">
+    <div class="caption">Figure 11: A session contains multiple process groups (jobs). Only the foreground job receives terminal input. Background jobs run independently. Ctrl+C sends SIGINT to the entire foreground process group.</div>
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Session Exploration</span></div>
+  <pre><span class="prompt">$</span> ps -o pid,pgid,sid,tty,comm  <span class="comment"># Show session ID and TTY</span>
+   PID  PGID   SID TTY      COMMAND
+  1000  1000  1000 pts/0    bash        <span class="comment"># Session leader</span>
+  1050  1050  1000 pts/0    vim         <span class="comment"># Same session, different PGID</span>
+
+<span class="prompt">$</span> tty                           <span class="comment"># Show controlling terminal</span>
+/dev/pts/0
+
+<span class="prompt">$</span> who                           <span class="comment"># Who is logged in and their terminals</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 15: PSEUDOTERMINALS ==================== -->
+<div class="section" id="sec-15">
+  <div class="section-num">Section 2.15</div>
+  <h2>Pseudoterminals</h2>
+  <p>A <strong>pseudoterminal (pty)</strong> is a pair of virtual devices: a <strong>master</strong> and a <strong>slave</strong>. The slave behaves like a real terminal, allowing terminal-oriented programs to run without a physical terminal. Used by terminal emulators (xterm, gnome-terminal), SSH, and screen/tmux.</p>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Pseudoterminal Exploration</span></div>
+  <pre><span class="prompt">$</span> tty                           <span class="comment"># Which pty am I using?</span>
+/dev/pts/0                       <span class="comment"># pts = pseudo-terminal slave</span>
+
+<span class="prompt">$</span> ls /dev/pts/                  <span class="comment"># List active pseudo-terminals</span>
+0  1  2  ptmx
+
+<span class="prompt">$</span> w                             <span class="comment"># See which users are on which ptys</span>
+USER     TTY      FROM        WHAT
+alice    pts/0    10.0.0.5    bash
+bob      pts/1    10.0.0.6    vim</pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 16: DATE/TIME ==================== -->
+<div class="section" id="sec-16">
+  <div class="section-num">Section 2.16</div>
+  <h2>Date and Time</h2>
+  <p>Two types of time matter to processes:</p>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4 style="color:var(--accent)">Real (Wall Clock) Time</h4>
+      <p><strong>Calendar time</strong>: seconds since the <strong>Epoch</strong> (midnight Jan 1, 1970 UTC). <strong>Elapsed time</strong>: duration from process start.</p>
+    </div>
+    <div class="compare-card">
+      <h4 style="color:var(--accent2)">Process (CPU) Time</h4>
+      <p>Total CPU time used. Split into <strong>user time</strong> (executing user code) and <strong>system time</strong> (executing kernel code on behalf of the process).</p>
+    </div>
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Time Exploration</span></div>
+  <pre><span class="prompt">$</span> date                         <span class="comment"># Current date and time</span>
+Sun Apr  5 10:45:00 PDT 2026
+
+<span class="prompt">$</span> date +%s                     <span class="comment"># Seconds since Epoch</span>
+1775590700
+
+<span class="prompt">$</span> date -d @0                   <span class="comment"># The Epoch itself</span>
+Thu Jan  1 00:00:00 UTC 1970
+
+<span class="prompt">$</span> uptime                       <span class="comment"># System uptime and load averages</span>
+10:45:00 up 30 days, 5:23, 3 users, load average: 0.15, 0.20, 0.18
+
+<span class="comment"># Measure real/user/system time of a command</span>
+<span class="prompt">$</span> time ls -lR /usr &gt; /dev/null
+real    0m0.543s                 <span class="comment"># Wall clock time</span>
+user    0m0.120s                 <span class="comment"># CPU time in user mode</span>
+sys     0m0.380s                 <span class="comment"># CPU time in kernel mode</span>
+
+<span class="prompt">$</span> cat /proc/uptime              <span class="comment"># Uptime in seconds</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 17: CLIENT-SERVER ==================== -->
+<div class="section" id="sec-17">
+  <div class="section-num">Section 2.17</div>
+  <h2>Client-Server Architecture</h2>
+  <p>A <strong>client</strong> sends request messages to a <strong>server</strong>, which performs the service and sends back responses. They communicate using IPC mechanisms (sockets, pipes, shared memory). They can be on the same host or across a network.</p>
+
+  <h3>Why Use a Server?</h3>
+  <ul>
+    <li><strong>Efficiency</strong> &mdash; one shared resource (e.g., database) instead of duplicating on every machine</li>
+    <li><strong>Control &amp; Security</strong> &mdash; centralized access control and coordination</li>
+    <li><strong>Heterogeneous environments</strong> &mdash; clients and server can run on different OS/hardware</li>
+  </ul>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Client-Server Exploration</span></div>
+  <pre><span class="comment"># See what servers are listening</span>
+<span class="prompt">$</span> ss -tuln                     <span class="comment"># TCP/UDP listening sockets</span>
+State  Recv-Q Send-Q Local Address:Port  Peer Address:Port
+LISTEN 0      128    0.0.0.0:22          0.0.0.0:*          <span class="comment"># sshd</span>
+LISTEN 0      128    0.0.0.0:80          0.0.0.0:*          <span class="comment"># httpd</span>
+LISTEN 0      128    0.0.0.0:443         0.0.0.0:*          <span class="comment"># https</span>
+
+<span class="comment"># See active connections</span>
+<span class="prompt">$</span> ss -tun                      <span class="comment"># Established connections</span>
+<span class="prompt">$</span> lsof -i :22                  <span class="comment"># Who's using port 22?</span>
+
+<span class="comment"># Test connectivity</span>
+<span class="prompt">$</span> curl -I http://localhost      <span class="comment"># HTTP request to server</span>
+<span class="prompt">$</span> nc -zv server.com 443        <span class="comment"># Test if port is open</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 18: REALTIME ==================== -->
+<div class="section" id="sec-18">
+  <div class="section-num">Section 2.18</div>
+  <h2>Realtime</h2>
+  <p><strong>Realtime applications</strong> must respond within a guaranteed deadline. Examples: assembly lines, ATMs, aircraft navigation. Traditional UNIX is <em>not</em> a realtime OS, but Linux has been moving toward full native realtime support.</p>
+  <p>POSIX.1b extensions for realtime include: asynchronous I/O, shared memory, memory-mapped files, memory locking, realtime clocks/timers, alternative scheduling policies, realtime signals, message queues, and semaphores.</p>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Realtime Exploration</span></div>
+  <pre><span class="comment"># Check if kernel has PREEMPT_RT (realtime patch)</span>
+<span class="prompt">$</span> uname -v
+#101-Ubuntu SMP PREEMPT_DYNAMIC    <span class="comment"># PREEMPT means some RT support</span>
+
+<span class="comment"># View scheduling policies</span>
+<span class="prompt">$</span> chrt -m                       <span class="comment"># Show min/max priorities</span>
+SCHED_OTHER min/max priority : 0/0
+SCHED_FIFO  min/max priority : 1/99
+SCHED_RR    min/max priority : 1/99
+
+<span class="comment"># Check a process's scheduling policy</span>
+<span class="prompt">$</span> chrt -p 1                     <span class="comment"># Scheduling policy of PID 1</span>
+pid 1's current scheduling policy: SCHED_OTHER
+pid 1's current scheduling priority: 0
+
+<span class="comment"># Run a command with realtime priority</span>
+<span class="prompt">$</span> sudo chrt -f 50 ./my_realtime_app  <span class="comment"># FIFO policy, priority 50</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 19: /PROC ==================== -->
+<div class="section" id="sec-19">
+  <div class="section-num">Section 2.19</div>
+  <h2>The /proc File System</h2>
+  <p><code>/proc</code> is a <strong>virtual file system</strong> that provides an interface to kernel data structures. No actual files on disk &mdash; the kernel generates content on-the-fly when you read. Contents are human-readable text, parseable by scripts. Writing to <code>/proc/sys/*</code> changes kernel parameters at runtime.</p>
+
+  <div class="diagram-box">
+    <img src="images/ch2_12_proc_filesystem.png" alt="The /proc File System">
+    <div class="caption">Figure 12: /proc provides per-process info via /proc/PID/ directories and system-wide info via files like cpuinfo, meminfo, and tunables under /proc/sys/.</div>
+  </div>
+
+  <h3>Troubleshooting Commands</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">/proc Exploration - The Ultimate Troubleshooting Tool</span></div>
+  <pre><span class="comment"># === System-wide info ===</span>
+<span class="prompt">$</span> cat /proc/cpuinfo | head -20  <span class="comment"># CPU details</span>
+<span class="prompt">$</span> cat /proc/meminfo | head -10  <span class="comment"># Memory stats</span>
+<span class="prompt">$</span> cat /proc/version             <span class="comment"># Kernel version</span>
+<span class="prompt">$</span> cat /proc/uptime              <span class="comment"># Seconds since boot</span>
+<span class="prompt">$</span> cat /proc/loadavg             <span class="comment"># Load averages</span>
+<span class="prompt">$</span> cat /proc/filesystems          <span class="comment"># Supported filesystems</span>
+<span class="prompt">$</span> cat /proc/mounts              <span class="comment"># Mounted filesystems</span>
+<span class="prompt">$</span> cat /proc/net/tcp             <span class="comment"># TCP connections</span>
+<span class="prompt">$</span> cat /proc/interrupts          <span class="comment"># IRQ counters</span>
+
+<span class="comment"># === Per-process info (replace $$ with any PID) ===</span>
+<span class="prompt">$</span> cat /proc/$$/status           <span class="comment"># Name, State, PID, PPID, UIDs, memory</span>
+<span class="prompt">$</span> cat /proc/$$/cmdline | tr '\0' ' '  <span class="comment"># Command line</span>
+<span class="prompt">$</span> cat /proc/$$/environ | tr '\0' '\n' <span class="comment"># Environment vars</span>
+<span class="prompt">$</span> cat /proc/$$/maps             <span class="comment"># Memory mappings</span>
+<span class="prompt">$</span> ls -la /proc/$$/fd/           <span class="comment"># Open file descriptors</span>
+<span class="prompt">$</span> cat /proc/$$/limits           <span class="comment"># Resource limits</span>
+<span class="prompt">$</span> cat /proc/$$/io               <span class="comment"># I/O statistics</span>
+<span class="prompt">$</span> cat /proc/$$/stat             <span class="comment"># Raw process stats</span>
+<span class="prompt">$</span> ls /proc/$$/task/             <span class="comment"># Thread IDs</span>
+<span class="prompt">$</span> readlink /proc/$$/cwd         <span class="comment"># Current working directory</span>
+<span class="prompt">$</span> readlink /proc/$$/exe         <span class="comment"># Executable path</span>
+
+<span class="comment"># === Tunables (read/write) ===</span>
+<span class="prompt">$</span> cat /proc/sys/kernel/pid_max          <span class="comment"># Max PID</span>
+<span class="prompt">$</span> cat /proc/sys/kernel/hostname         <span class="comment"># Hostname</span>
+<span class="prompt">$</span> cat /proc/sys/vm/swappiness           <span class="comment"># Swap tendency (0-100)</span>
+<span class="prompt">$</span> cat /proc/sys/net/ipv4/ip_forward     <span class="comment"># IP forwarding</span>
+<span class="prompt">$</span> echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward  <span class="comment"># Enable forwarding</span></pre></div>
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 20: SUMMARY ==================== -->
+<div class="section" id="sec-20">
+  <div class="section-num">Section 2.20</div>
+  <h2>Summary &amp; Complete Command Cheat Sheet</h2>
+
+  <table class="kv-table">
+    <tr><th>Concept</th><th>Key Takeaway</th></tr>
+    <tr><td><strong>Kernel</strong></td><td>Central software managing CPU, RAM, devices. Lives at <code>/boot/vmlinuz</code>. Provides process scheduling, memory management, filesystem, device access, networking, and system call API.</td></tr>
+    <tr><td><strong>User/Kernel Mode</strong></td><td>CPU operates in two modes. User mode: restricted access. Kernel mode: full access. Transitions via system calls, interrupts, exceptions.</td></tr>
+    <tr><td><strong>Shell</strong></td><td>User-space command interpreter. Major shells: sh, csh, ksh, bash, zsh. Used interactively and for scripts.</td></tr>
+    <tr><td><strong>Users &amp; Groups</strong></td><td>Each user has UID, each group has GID. Root (UID 0) is superuser. Linux capabilities provide fine-grained privileges.</td></tr>
+    <tr><td><strong>Filesystem</strong></td><td>Single hierarchy rooted at /. File types: regular, directory, symlink, device, pipe, socket. Permissions: rwx for user/group/other.</td></tr>
+    <tr><td><strong>File I/O</strong></td><td>Universal I/O: same syscalls for all file types. File descriptors: 0=stdin, 1=stdout, 2=stderr. stdio library layered on top.</td></tr>
+    <tr><td><strong>Programs</strong></td><td>Source code compiled to binary. Filters read stdin, transform, write stdout. Pipelines chain filters.</td></tr>
+    <tr><td><strong>Processes</strong></td><td>Running program instance. Created with fork()+exec(). Has PID, PPID, credentials (UIDs/GIDs). init (PID 1) is ancestor of all.</td></tr>
+    <tr><td><strong>Memory Mappings</strong></td><td>mmap() maps files or anonymous memory into process address space. Private or shared. Used for loading programs, large mallocs, IPC.</td></tr>
+    <tr><td><strong>Libraries</strong></td><td>Static (.a): copied into executable. Shared (.so): loaded at runtime, shared in memory. Dynamic linker resolves at runtime.</td></tr>
+    <tr><td><strong>IPC</strong></td><td>7 mechanisms: signals, pipes, FIFOs, sockets, message queues, semaphores, shared memory. Sockets work across network.</td></tr>
+    <tr><td><strong>Signals</strong></td><td>Software interrupts. Generated by kernel/process/self. Actions: default, ignore, handler, block. SIGKILL/SIGSTOP cannot be caught.</td></tr>
+    <tr><td><strong>Threads</strong></td><td>Share memory within a process. Own stack only. Lighter than processes. Need mutexes for synchronization.</td></tr>
+    <tr><td><strong>Sessions &amp; Jobs</strong></td><td>Session = collection of process groups. Foreground job gets terminal. Ctrl+C/Z send signals to foreground group.</td></tr>
+    <tr><td><strong>Pseudoterminals</strong></td><td>Master-slave virtual device pair. Slave acts like a terminal. Used by terminal emulators, SSH, screen/tmux.</td></tr>
+    <tr><td><strong>Time</strong></td><td>Real time (wall clock, Epoch-based) vs CPU time (user + system). Measured with <code>time</code> command.</td></tr>
+    <tr><td><strong>Client-Server</strong></td><td>Client sends requests, server responds. Can be on same or different hosts. Communicate via IPC/sockets.</td></tr>
+    <tr><td><strong>Realtime</strong></td><td>Guaranteed response deadlines. POSIX.1b extensions. Linux PREEMPT_RT patch for hard realtime.</td></tr>
+    <tr><td><strong>/proc</strong></td><td>Virtual filesystem exposing kernel data. Per-process info at /proc/PID/. System tunables at /proc/sys/. Human-readable text.</td></tr>
+  </table>
+
+  <h3>Master Troubleshooting Cheat Sheet</h3>
+  <div class="terminal"><div class="terminal-bar"><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="terminal-title">Complete Linux Troubleshooting Commands</span></div>
+  <pre><span class="comment"># ═══════════════ SYSTEM INFO ═══════════════</span>
+<span class="prompt">$</span> uname -a                     <span class="comment"># Kernel &amp; system info</span>
+<span class="prompt">$</span> cat /etc/os-release           <span class="comment"># Distribution info</span>
+<span class="prompt">$</span> uptime                       <span class="comment"># Uptime &amp; load averages</span>
+<span class="prompt">$</span> dmesg | tail                 <span class="comment"># Kernel messages</span>
+<span class="prompt">$</span> journalctl -xe               <span class="comment"># System logs</span>
+
+<span class="comment"># ═══════════════ PROCESSES ═══════════════</span>
+<span class="prompt">$</span> ps aux --sort=-%mem | head   <span class="comment"># Top memory consumers</span>
+<span class="prompt">$</span> ps aux --sort=-%cpu | head   <span class="comment"># Top CPU consumers</span>
+<span class="prompt">$</span> top / htop                   <span class="comment"># Interactive process monitor</span>
+<span class="prompt">$</span> pstree -p                    <span class="comment"># Process tree</span>
+<span class="prompt">$</span> strace -p PID                <span class="comment"># Trace system calls of running process</span>
+<span class="prompt">$</span> ltrace -p PID                <span class="comment"># Trace library calls</span>
+
+<span class="comment"># ═══════════════ MEMORY ═══════════════</span>
+<span class="prompt">$</span> free -h                      <span class="comment"># RAM and swap usage</span>
+<span class="prompt">$</span> cat /proc/meminfo            <span class="comment"># Detailed memory stats</span>
+<span class="prompt">$</span> vmstat 1 5                   <span class="comment"># Virtual memory stats every 1s</span>
+<span class="prompt">$</span> pmap PID                     <span class="comment"># Memory map of a process</span>
+<span class="prompt">$</span> slabtop                      <span class="comment"># Kernel slab cache usage</span>
+
+<span class="comment"># ═══════════════ DISK &amp; FILESYSTEM ═══════════════</span>
+<span class="prompt">$</span> df -h                        <span class="comment"># Filesystem disk space</span>
+<span class="prompt">$</span> du -sh /var/*                <span class="comment"># Directory sizes</span>
+<span class="prompt">$</span> iostat -x 1                  <span class="comment"># Disk I/O stats</span>
+<span class="prompt">$</span> iotop                        <span class="comment"># I/O usage per process</span>
+<span class="prompt">$</span> lsblk                        <span class="comment"># Block device layout</span>
+<span class="prompt">$</span> mount | column -t            <span class="comment"># Mounted filesystems</span>
+
+<span class="comment"># ═══════════════ NETWORK ═══════════════</span>
+<span class="prompt">$</span> ss -tuln                     <span class="comment"># Listening sockets</span>
+<span class="prompt">$</span> ss -tun                      <span class="comment"># Established connections</span>
+<span class="prompt">$</span> ip addr show                 <span class="comment"># Network interfaces</span>
+<span class="prompt">$</span> ip route                     <span class="comment"># Routing table</span>
+<span class="prompt">$</span> netstat -s                   <span class="comment"># Network statistics</span>
+<span class="prompt">$</span> tcpdump -i eth0              <span class="comment"># Packet capture</span>
+
+<span class="comment"># ═══════════════ USERS &amp; SECURITY ═══════════════</span>
+<span class="prompt">$</span> w                            <span class="comment"># Who is logged in</span>
+<span class="prompt">$</span> last                         <span class="comment"># Login history</span>
+<span class="prompt">$</span> id                           <span class="comment"># Current user/group info</span>
+<span class="prompt">$</span> getfacl file                 <span class="comment"># Access control lists</span>
+<span class="prompt">$</span> getcap /usr/bin/*            <span class="comment"># File capabilities</span>
+
+<span class="comment"># ═══════════════ SIGNALS &amp; IPC ═══════════════</span>
+<span class="prompt">$</span> kill -l                      <span class="comment"># List all signals</span>
+<span class="prompt">$</span> ipcs                         <span class="comment"># System V IPC status</span>
+<span class="prompt">$</span> lslocks                      <span class="comment"># Active file locks</span>
+
+<span class="comment"># ═══════════════ /proc DEEP DIVE ═══════════════</span>
+<span class="prompt">$</span> cat /proc/PID/status         <span class="comment"># Process overview</span>
+<span class="prompt">$</span> cat /proc/PID/maps           <span class="comment"># Memory map</span>
+<span class="prompt">$</span> ls -la /proc/PID/fd/         <span class="comment"># Open files</span>
+<span class="prompt">$</span> cat /proc/PID/io             <span class="comment"># I/O counters</span>
+<span class="prompt">$</span> cat /proc/PID/limits         <span class="comment"># Resource limits</span>
+<span class="prompt">$</span> sysctl -a                    <span class="comment"># All kernel parameters</span></pre></div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="container">
+    <p>Linux Fundamental Concepts &mdash; A Visual Guide | Based on <em>The Linux Programming Interface</em> by Michael Kerrisk, Chapter 2</p>
+    <p style="margin-top:8px;"><a href="index.html" style="color:var(--accent);text-decoration:none;">&larr; Chapter 6: Processes &amp; Programs</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
