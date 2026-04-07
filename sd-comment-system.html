@@ -183,7 +183,7 @@
 <div class="hero">
   <div class="container">
     <h1>Design <span>Comment System</span></h1>
-    <p>A deep dive into building a scalable, threaded comment system &mdash; threading models, real-time delivery, spam moderation, cursor pagination, and data modeling at scale.</p>
+    <p>Threading Models, Real-Time Delivery, Spam Moderation, Cursor Pagination, Data Modeling at Scale &mdash; Complete Architecture Reference</p>
     <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
     <div class="nav-links">
       <a href="index.html">Home</a>
@@ -201,44 +201,57 @@
 <div class="toc">
   <h2>Table of Contents</h2>
   <ol>
-    <li><a href="#overview">Overview &amp; Scale Estimation</a></li>
-    <li><a href="#architecture">Architecture &amp; Data Model</a>
-      <ul class="sub">
-        <li><a href="#data-model">Comments Table Schema</a></li>
-        <li><a href="#arch-diagram">Architecture Diagram &amp; Walkthrough</a></li>
-      </ul>
-    </li>
-    <li><a href="#threading">Threading Approaches</a>
+    <li><a href="#intro">Introduction &amp; Requirements</a></li>
+    <li><a href="#threading">Threading Models</a>
       <ul class="sub">
         <li><a href="#adjacency">Adjacency List</a></li>
-        <li><a href="#materialized">Materialized Path</a></li>
-        <li><a href="#nested">Nested Sets</a></li>
-        <li><a href="#recommendation">Recommendation</a></li>
+        <li><a href="#materialized-path">Materialized Path</a></li>
+        <li><a href="#nested-sets">Nested Sets</a></li>
+        <li><a href="#closure-table">Closure Table (Recommended)</a></li>
+        <li><a href="#threading-comparison">Comparison Matrix</a></li>
       </ul>
     </li>
-    <li><a href="#pagination">Sorting &amp; Pagination</a></li>
-    <li><a href="#moderation">Moderation Pipeline</a></li>
+    <li><a href="#data-model">Data Model at Scale</a></li>
+    <li><a href="#write-read-path">Write Path &amp; Read Path</a></li>
+    <li><a href="#realtime">Real-Time Comment Delivery</a></li>
+    <li><a href="#pagination">Cursor-Based Pagination</a></li>
+    <li><a href="#moderation">Spam Detection &amp; Content Moderation</a></li>
+    <li><a href="#scaling">Scaling Strategy</a></li>
+    <li><a href="#observability">Observability &amp; Monitoring</a></li>
+    <li><a href="#failure-modes">Failure Modes &amp; Resilience</a></li>
     <li><a href="#linkedin">LinkedIn Mapping &amp; Interview Questions</a></li>
   </ol>
 </div>
 
-<!-- ===== SECTION 1: Overview ===== -->
-<div class="section" id="overview">
+<!-- ===== SECTION 1: Introduction & Requirements ===== -->
+<div class="section" id="intro">
   <div class="section-num">Section 01</div>
-  <h2>Overview &amp; Scale Estimation</h2>
+  <h2>Introduction &amp; Requirements</h2>
 
-  <p>A comment system powers user interactions across posts, videos, articles, news feeds, and product listings. Users can post top-level comments, reply in threads, like/dislike, and see real-time updates. The system must handle massive read-heavy traffic with low-latency rendering of threaded comment trees.</p>
+  <p>Comment systems appear deceptively simple: accept text, store it, render a list. In practice, they hide deep complexity in <strong>data modeling</strong> (representing trees efficiently), <strong>query optimization</strong> (rendering nested threads without N+1 queries), <strong>real-time delivery</strong> (pushing new comments to thousands of viewers instantly), <strong>moderation</strong> (filtering spam and toxicity at scale), and <strong>abuse prevention</strong> (rate limiting, shadow banning, trust scoring). This guide covers each of these dimensions in production-grade detail.</p>
 
   <h3>Functional Requirements</h3>
   <div class="card highlight">
     <ul>
-      <li><strong>Create comments</strong> on any entity (post, video, article, product)</li>
-      <li><strong>Threaded replies</strong> &mdash; nested conversations with configurable max depth</li>
-      <li><strong>Like / react</strong> to comments</li>
-      <li><strong>Sort</strong> by Top, Newest, or Oldest</li>
-      <li><strong>Real-time</strong> &mdash; new comments appear without page refresh</li>
-      <li><strong>Moderation</strong> &mdash; spam detection, flagging, admin review</li>
-      <li><strong>Pagination</strong> &mdash; efficient loading of large comment threads</li>
+      <li><strong>Threaded nested replies</strong> with configurable max depth (default 10 levels)</li>
+      <li><strong>Real-time delivery</strong> via WebSocket &mdash; new comments appear without page refresh</li>
+      <li><strong>Upvoting / downvoting</strong> with denormalized score aggregation</li>
+      <li><strong>Rich-text comments</strong> with sanitized HTML rendering (Markdown input, pre-rendered HTML output)</li>
+      <li><strong>@mention notifications</strong> &mdash; tag users in comments, trigger push/email/in-app notification</li>
+      <li><strong>Cursor-based pagination</strong> with multiple sort modes (Top, Newest, Oldest)</li>
+      <li><strong>Full-text search</strong> across comment bodies within a thread or globally</li>
+      <li><strong>Moderation dashboard</strong> &mdash; ML-assisted spam/toxicity scoring, community flagging, human review queue</li>
+    </ul>
+  </div>
+
+  <h3>Non-Functional Requirements</h3>
+  <div class="card warn">
+    <ul>
+      <li><strong>Sub-100ms p99 read latency</strong> for cached thread rendering</li>
+      <li><strong>50K concurrent WebSocket connections</strong> per gateway node</li>
+      <li><strong>10K comments/sec write throughput</strong> sustained across the cluster</li>
+      <li><strong>99.95% availability</strong> &mdash; no single point of failure</li>
+      <li><strong>Horizontal scalability</strong> &mdash; adding nodes increases capacity linearly</li>
     </ul>
   </div>
 
@@ -257,393 +270,1101 @@
       <div class="label">Read-to-write ratio</div>
     </div>
     <div class="scale-item">
-      <div class="number">~115</div>
-      <div class="label">Writes / second</div>
+      <div class="number">10K</div>
+      <div class="label">Writes / second peak</div>
     </div>
     <div class="scale-item">
       <div class="number">~5,800</div>
-      <div class="label">Reads / second</div>
+      <div class="label">Reads / second avg</div>
     </div>
     <div class="scale-item">
-      <div class="number">&lt; 200ms</div>
+      <div class="number">&lt; 100ms</div>
       <div class="label">p99 read latency target</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">50K</div>
+      <div class="label">WebSocket conns / node</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">99.95%</div>
+      <div class="label">Availability SLA</div>
     </div>
   </div>
 
   <div class="card warn">
-    <strong>Key Insight:</strong> The 50:1 read-to-write ratio makes aggressive caching essential. Most comment threads are read thousands of times but only written to occasionally. Hot entities (viral posts) can see 100,000+ reads per second on a single thread.
-  </div>
-</div>
-
-<!-- ===== SECTION 2: Architecture & Data Model ===== -->
-<div class="section" id="architecture">
-  <div class="section-num">Section 02</div>
-  <h2>Architecture &amp; Data Model</h2>
-
-  <p>The system is built around a <strong>Comment Service</strong> that coordinates reads and writes, backed by a partitioned database for persistence, a distributed cache for hot threads, and an event bus for asynchronous fanout.</p>
-
-  <h3>Core Components</h3>
-  <div class="tradeoff-grid">
-    <div class="card highlight">
-      <h4>Comment Service</h4>
-      <p>Stateless REST/gRPC service that handles CRUD operations, builds comment trees, and enforces business rules (max depth, rate limiting, content validation).</p>
-    </div>
-    <div class="card highlight">
-      <h4>Redis Cache</h4>
-      <p>Caches serialized comment trees per entity. Invalidated on writes. Sorted sets for paginated top-level comment lists. TTL-based eviction for cold threads.</p>
-    </div>
-    <div class="card highlight">
-      <h4>Espresso DB (Primary Store)</h4>
-      <p>Partitioned by <code>entity_id</code> so all comments for one entity live on the same shard. Supports secondary indexes on <code>parent_id</code> and <code>user_id</code>.</p>
-    </div>
-    <div class="card highlight">
-      <h4>Kafka (Event Bus)</h4>
-      <p>Publishes <code>comment.created</code>, <code>comment.liked</code>, <code>comment.flagged</code> events. Consumers update counters, trigger moderation, push real-time notifications.</p>
-    </div>
+    <strong>Key Insight:</strong> The 50:1 read-to-write ratio makes aggressive caching essential. Most comment threads are read thousands of times but only written to occasionally. Hot entities (viral posts) can see 100,000+ reads per second on a single thread. The system must handle both the common case (cold threads with single-digit reads) and the extreme case (viral threads under thundering herd).
   </div>
 
-  <h3 id="data-model">Data Model: Comments Table</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Column</th>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr><td><code>id</code></td><td>BIGINT (PK)</td><td>Snowflake-style globally unique comment ID</td></tr>
-      <tr><td><code>entity_type</code></td><td>ENUM</td><td>POST, VIDEO, ARTICLE, PRODUCT</td></tr>
-      <tr><td><code>entity_id</code></td><td>BIGINT</td><td>ID of the parent entity (partition key)</td></tr>
-      <tr><td><code>parent_id</code></td><td>BIGINT (nullable)</td><td>NULL for top-level, points to parent comment for replies</td></tr>
-      <tr><td><code>user_id</code></td><td>BIGINT</td><td>Author of the comment</td></tr>
-      <tr><td><code>content</code></td><td>TEXT</td><td>Comment body (max 2000 chars)</td></tr>
-      <tr><td><code>like_count</code></td><td>INT</td><td>Denormalized like counter</td></tr>
-      <tr><td><code>reply_count</code></td><td>INT</td><td>Denormalized direct reply counter</td></tr>
-      <tr><td><code>depth</code></td><td>TINYINT</td><td>Nesting level (0 = top-level, max 3)</td></tr>
-      <tr><td><code>status</code></td><td>ENUM</td><td>ACTIVE, DELETED, FLAGGED, SPAM</td></tr>
-      <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Creation time (used for sort + cursor)</td></tr>
-    </tbody>
-  </table>
-
-  <div class="card success">
-    <strong>Partitioning Strategy:</strong> Partition by <code>entity_id</code>. All comments for a single post/video co-locate on the same shard, making tree reconstruction a single-shard query. The <code>entity_type</code> + <code>entity_id</code> composite is the logical partition key.
-  </div>
-
-  <h3 id="arch-diagram">Architecture Diagram</h3>
+  <h3>Architecture Overview</h3>
   <div class="diagram">
-    <img src="images/sd_comment_01_architecture.png" alt="Comment System Architecture">
-    <div class="caption">Figure 1 &mdash; Comment System high-level architecture: write path, read path, and async event processing.</div>
+    <img src="images/sd_comment_02_full_architecture.png" alt="Comment System Full Architecture — 5-Layer Design">
+    <div class="caption">Figure 1 &mdash; Full system architecture showing all 5 layers: Client, Gateway, Service, Event Bus, and Data.</div>
   </div>
 
   <div class="walkthrough">
-    <h4>Write Path Walkthrough</h4>
+    <h4>Architecture Walkthrough &mdash; 5 Layers</h4>
     <ol>
-      <li><strong>Client</strong> sends <code>POST /comments</code> with entity_id, content, and optional parent_id.</li>
-      <li><strong>Comment Service</strong> validates input (depth check, rate limit, content length), generates a Snowflake ID, computes <code>depth</code> from parent.</li>
-      <li><strong>Espresso DB</strong> &mdash; comment row is inserted; <code>reply_count</code> on parent is incremented atomically.</li>
-      <li><strong>Cache Invalidation</strong> &mdash; the cached comment tree for this entity_id is invalidated in Redis.</li>
-      <li><strong>Kafka Event</strong> &mdash; a <code>comment.created</code> event is published with full comment payload.</li>
-      <li><strong>Downstream Consumers</strong> &mdash; notification service alerts the entity owner and parent comment author; moderation pipeline scores the comment for spam.</li>
+      <li><strong>Client Layer</strong> &mdash; Web/mobile clients connect via HTTPS for REST API calls and WSS for real-time WebSocket subscriptions. Clients maintain a local comment cache and use cursor tokens for pagination.</li>
+      <li><strong>Gateway Layer</strong> &mdash; API Gateway handles authentication, rate limiting (token bucket per user), request routing, and TLS termination. WebSocket Gateway maintains persistent connections and subscribes to Redis Pub/Sub channels per entity.</li>
+      <li><strong>Service Layer</strong> &mdash; Stateless Comment Service handles CRUD, tree assembly, and business logic. Moderation Service runs ML classifiers synchronously (fast pre-filter) and asynchronously (deep analysis). Notification Service fans out @mention and reply alerts.</li>
+      <li><strong>Event Bus Layer</strong> &mdash; Kafka topics (<code>comment.created</code>, <code>comment.voted</code>, <code>comment.flagged</code>, <code>comment.moderated</code>) decouple the write path from downstream consumers. Samza/Flink consumers process events for moderation, counters, search indexing, and real-time delivery.</li>
+      <li><strong>Data Layer</strong> &mdash; Primary DB (sharded by entity_id) stores comments and closure table. Redis cluster serves as L2 cache (serialized trees) and pub/sub backbone. Search index (Elasticsearch/Galene) powers full-text comment search.</li>
     </ol>
   </div>
 
   <div class="walkthrough">
-    <h4>Read Path Walkthrough</h4>
+    <h4>Write Flow &mdash; 6 Arrows</h4>
     <ol>
-      <li><strong>Client</strong> requests <code>GET /comments?entity_id=X&sort=top&cursor=abc</code></li>
-      <li><strong>Comment Service</strong> checks Redis for a cached page. On <strong>cache hit</strong>, returns immediately (&lt; 5ms).</li>
-      <li>On <strong>cache miss</strong>, queries Espresso for top-level comments (<code>parent_id IS NULL</code>) sorted by the requested order, with cursor-based pagination.</li>
-      <li>For each top-level comment, fetches up to N replies (fan-out limited to <code>depth &le; 3</code>). Tree is assembled in-memory.</li>
-      <li>Result is cached in Redis with a TTL (30s for hot entities, 5min for cold) and returned to client.</li>
+      <li><strong>Client &rarr; API Gateway</strong> &mdash; <code>POST /v1/threads/{id}/comments</code> with body, parent_id, and auth token.</li>
+      <li><strong>API Gateway &rarr; Comment Service</strong> &mdash; Rate limit check passes, request forwarded with authenticated user context.</li>
+      <li><strong>Comment Service &rarr; Moderation Service</strong> &mdash; Synchronous pre-filter call (&lt;10ms): regex, blocklist, rate check. Returns allow/block/flag.</li>
+      <li><strong>Comment Service &rarr; Primary DB</strong> &mdash; Serializable transaction: INSERT comment + INSERT closure entries + INCREMENT parent reply_count.</li>
+      <li><strong>Comment Service &rarr; Kafka</strong> &mdash; Publish <code>comment.created</code> event with full payload.</li>
+      <li><strong>Comment Service &rarr; Client</strong> &mdash; HTTP 201 with created comment including server-generated fields (id, created_at, body_html).</li>
+    </ol>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Read Flow &mdash; 3-Tier Cache</h4>
+    <ol>
+      <li><strong>L1 In-Process LRU</strong> (30s TTL, 100MB per instance, ~0ms) &mdash; Hot threads served from application memory. Highest hit rate for viral content.</li>
+      <li><strong>L2 Redis Cluster</strong> (5min TTL, serialized comment trees, ~5ms) &mdash; Shared across all service instances. Populated on L1 miss.</li>
+      <li><strong>L3 Database</strong> (closure table join, cursor pagination, DataLoader batching, ~50ms) &mdash; Full tree reconstruction from DB. Result populates both L2 and L1.</li>
     </ol>
   </div>
 </div>
 
-<!-- ===== SECTION 3: Threading Approaches ===== -->
+<!-- ===== SECTION 2: Threading Models ===== -->
 <div class="section" id="threading">
-  <div class="section-num">Section 03</div>
-  <h2>Threading Approaches</h2>
+  <div class="section-num">Section 02</div>
+  <h2>Threading Models</h2>
 
-  <p>The core challenge of a comment system is representing and querying tree-structured data efficiently. There are three classical approaches, each with distinct trade-offs.</p>
+  <p>The <strong>single most consequential architectural decision</strong> in a comment system is how to represent and query tree-structured data. The threading model determines write performance, read efficiency, move/reparent cost, and query complexity. There are four classical approaches, each with fundamentally different trade-offs. Getting this wrong means either rebuilding the data layer later or living with permanent performance limitations.</p>
 
-  <h3 id="adjacency">Adjacency List</h3>
+  <h3 id="adjacency">2.1 Adjacency List</h3>
   <div class="card highlight">
-    <p>Each comment stores a <code>parent_id</code> pointing to its parent. Top-level comments have <code>parent_id = NULL</code>. The tree is reconstructed by the application via recursive queries or in-memory assembly.</p>
+    <p>Each comment stores a <code>parent_id</code> foreign key pointing to its direct parent. Top-level comments have <code>parent_id = NULL</code>. This is the simplest model and the most natural mapping of a tree to a relational table.</p>
+    <h4>Strengths</h4>
+    <ul>
+      <li><strong>O(1) insert</strong> &mdash; just set parent_id on the new row</li>
+      <li><strong>O(1) move</strong> &mdash; update a single parent_id to reparent an entire subtree</li>
+      <li>No extra storage overhead beyond the FK column</li>
+      <li>Standard B-tree index on parent_id, no exotic index types needed</li>
+    </ul>
+    <h4>Weaknesses</h4>
+    <ul>
+      <li><strong>O(n) subtree retrieval</strong> &mdash; requires recursive CTE or multiple round-trips</li>
+      <li>Ancestor queries also require recursion</li>
+      <li>Depth computation requires traversal</li>
+    </ul>
     <pre>
 -- Fetch top-level comments
 SELECT * FROM comments
-WHERE entity_id = ? AND parent_id IS NULL
+WHERE thread_id = ? AND parent_id IS NULL
 ORDER BY created_at DESC LIMIT 20;
 
--- Fetch replies for a comment
+-- Fetch direct replies
 SELECT * FROM comments
-WHERE parent_id = ? ORDER BY created_at ASC;</pre>
+WHERE parent_id = ? ORDER BY created_at ASC;
+
+-- Recursive CTE to get full subtree (PostgreSQL)
+WITH RECURSIVE comment_tree AS (
+  SELECT id, parent_id, body_html, depth, created_at
+  FROM comments WHERE id = :root_id
+  UNION ALL
+  SELECT c.id, c.parent_id, c.body_html, c.depth, c.created_at
+  FROM comments c
+  JOIN comment_tree ct ON c.parent_id = ct.id
+)
+SELECT * FROM comment_tree ORDER BY depth, created_at;</pre>
   </div>
 
-  <h3 id="materialized">Materialized Path</h3>
+  <h3 id="materialized-path">2.2 Materialized Path</h3>
   <div class="card highlight">
-    <p>Each comment stores its full ancestry as a path string, e.g., <code>/root_id/parent_id/self_id</code>. Subtree queries become prefix matches.</p>
+    <p>Each comment stores its full ancestry as a path string, e.g., <code>/A/B/D/</code>. Subtree queries become prefix scans. Depth is computed by counting delimiters.</p>
+    <h4>Strengths</h4>
+    <ul>
+      <li><strong>O(1) insert</strong> &mdash; concatenate parent's path + own ID</li>
+      <li><strong>O(log n) subtree</strong> via <code>LIKE</code> prefix scan or GIN trigram index</li>
+      <li><strong>O(1) ancestor retrieval</strong> &mdash; split the path string</li>
+      <li>Depth = count slashes in the path</li>
+    </ul>
+    <h4>Weaknesses</h4>
+    <ul>
+      <li><strong>O(subtree) move</strong> &mdash; must rewrite path for every descendant</li>
+      <li>Path column size limits maximum depth</li>
+      <li><code>LIKE</code> prefix queries use partial index only &mdash; not as efficient as B-tree equality</li>
+      <li>Wide rows in high-depth trees</li>
+    </ul>
     <pre>
 -- Schema addition
-path VARCHAR(500)  -- e.g., "/100/205/310"
+ALTER TABLE comments ADD COLUMN path VARCHAR(500);
+-- e.g., path = '/A/B/D/'
 
--- Fetch all descendants of comment 205
+-- Insert: parent path = '/A/B/', new comment id = 'D'
+INSERT INTO comments (id, thread_id, parent_id, path, ...)
+VALUES ('D', :thread, 'B', '/A/B/D/', ...);
+
+-- Fetch all descendants of comment B
 SELECT * FROM comments
-WHERE entity_id = ? AND path LIKE '/100/205/%'
-ORDER BY path, created_at;</pre>
+WHERE thread_id = ? AND path LIKE '/A/B/%'
+ORDER BY path, created_at;
+
+-- GIN trigram index for fast prefix matching
+CREATE INDEX idx_comments_path_trgm
+ON comments USING gin (path gin_trgm_ops);</pre>
   </div>
 
-  <h3 id="nested">Nested Sets</h3>
+  <h3 id="nested-sets">2.3 Nested Sets</h3>
   <div class="card highlight">
-    <p>Each node stores <code>lft</code> and <code>rgt</code> values. A node's descendants have <code>lft</code> between the parent's <code>lft</code> and <code>rgt</code>. Reads are fast but writes require renumbering.</p>
+    <p>Each node stores <code>lft</code> and <code>rgt</code> boundary values. A node's descendants have <code>lft</code> values between the parent's <code>lft</code> and <code>rgt</code>. Reads are extremely fast (single range scan), but writes are catastrophically expensive.</p>
+    <h4>Strengths</h4>
+    <ul>
+      <li><strong>O(1) subtree read</strong> &mdash; single range scan on <code>(lft, rgt)</code></li>
+      <li>Ancestors and depth computable from boundary values</li>
+      <li>Entire tree ordered by a single <code>lft</code> sort</li>
+    </ul>
+    <h4>Weaknesses</h4>
+    <ul>
+      <li style="color: var(--red);"><strong>O(n) insert</strong> &mdash; every insert requires renumbering all nodes with <code>lft</code> or <code>rgt</code> &gt; insertion point</li>
+      <li style="color: var(--red);"><strong>Heavy write locking</strong> &mdash; renumbering touches the entire table, causing lock contention</li>
+      <li style="color: var(--red);"><strong>Impractical for high-write systems</strong> &mdash; at 10K writes/sec, renumbering is a non-starter</li>
+    </ul>
     <pre>
 -- Schema additions
-lft INT, rgt INT
+ALTER TABLE comments ADD COLUMN lft INT, ADD COLUMN rgt INT;
 
 -- Fetch all descendants of a comment
-SELECT * FROM comments
-WHERE entity_id = ? AND lft > parent.lft AND rgt < parent.rgt
-ORDER BY lft;</pre>
+SELECT child.* FROM comments child, comments parent
+WHERE child.thread_id = ?
+  AND parent.id = :parent_id
+  AND child.lft > parent.lft
+  AND child.rgt < parent.rgt
+ORDER BY child.lft;
+
+-- Insert requires gap creation (O(n) updates!)
+UPDATE comments SET rgt = rgt + 2
+WHERE thread_id = ? AND rgt >= :insertion_point;
+UPDATE comments SET lft = lft + 2
+WHERE thread_id = ? AND lft > :insertion_point;
+INSERT INTO comments (lft, rgt, ...) VALUES (:insertion_point, :insertion_point + 1, ...);</pre>
   </div>
 
-  <h3>Comparison</h3>
+  <div class="card danger">
+    <strong>Why Nested Sets Fail at Scale:</strong> Inserting a single comment into a thread with 10,000 existing comments requires updating up to 10,000 rows (all nodes with lft/rgt greater than the insertion point). At 10K writes/sec, this generates <strong>100M row updates/sec</strong> of overhead &mdash; clearly impractical.
+  </div>
+
+  <h3 id="closure-table">2.4 Closure Table (Recommended)</h3>
+  <div class="card success">
+    <h4>The Optimal Choice for Comment Systems</h4>
+    <p>A <strong>Closure Table</strong> uses a separate junction table (<code>comment_closure</code>) that stores <em>every</em> ancestor-descendant pair with its depth. This denormalizes the tree structure into a flat, indexed lookup table.</p>
+    <ul>
+      <li><strong>Insert is O(d)</strong> where d = depth of the new node. Since depth is typically capped at 10&ndash;15, this is effectively <strong>O(1)</strong>.</li>
+      <li><strong>Subtree retrieval is O(1)</strong> &mdash; a single indexed join on <code>ancestor_id</code>.</li>
+      <li><strong>Ancestor retrieval is O(1)</strong> &mdash; a single indexed join on <code>descendant_id</code>.</li>
+      <li><strong>Depth-aware queries are trivial</strong> &mdash; filter on the <code>depth</code> column.</li>
+      <li><strong>Storage trade-off: O(n&times;d) rows</strong> in the closure table, where n = comments and d = avg depth.</li>
+    </ul>
+  </div>
+
+  <h4>Closure Table Schema</h4>
+  <pre>
+CREATE TABLE comment_closure (
+  ancestor_id   UUID NOT NULL REFERENCES comments(id),
+  descendant_id UUID NOT NULL REFERENCES comments(id),
+  depth         INT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (ancestor_id, descendant_id)
+);
+
+CREATE INDEX idx_closure_descendant ON comment_closure(descendant_id, depth);
+CREATE INDEX idx_closure_ancestor   ON comment_closure(ancestor_id, depth);</pre>
+
+  <h4>Closure Table Data Example</h4>
+  <div class="card highlight">
+    <p>For a tree <code>A &rarr; B &rarr; D</code> (A is root, B is child of A, D is child of B), the closure table contains:</p>
+    <table>
+      <thead>
+        <tr><th>ancestor_id</th><th>descendant_id</th><th>depth</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>A</code></td><td><code>A</code></td><td>0</td></tr>
+        <tr><td><code>A</code></td><td><code>B</code></td><td>1</td></tr>
+        <tr><td><code>A</code></td><td><code>D</code></td><td>2</td></tr>
+        <tr><td><code>B</code></td><td><code>B</code></td><td>0</td></tr>
+        <tr><td><code>B</code></td><td><code>D</code></td><td>1</td></tr>
+        <tr><td><code>D</code></td><td><code>D</code></td><td>0</td></tr>
+      </tbody>
+    </table>
+    <p>Every node has a self-referencing entry at depth 0. Adding node E under B would insert: <code>(B,E,1)</code>, <code>(A,E,2)</code>, <code>(E,E,0)</code> &mdash; exactly <code>depth + 1</code> rows.</p>
+  </div>
+
+  <h4>Insertion SQL</h4>
+  <pre>
+-- Insert a new comment C_new under parent P
+-- Step 1: Insert the comment row
+INSERT INTO comments (id, thread_id, parent_id, body_raw, body_html, depth, ...)
+VALUES (:new_id, :thread, :parent_id, :body_raw, :body_html, :depth, ...);
+
+-- Step 2: Insert closure entries
+-- Copy all ancestors of the parent, incrementing depth by 1
+INSERT INTO comment_closure (ancestor_id, descendant_id, depth)
+SELECT ancestor_id, :new_id, depth + 1
+FROM comment_closure
+WHERE descendant_id = :parent_id;
+
+-- Step 3: Insert self-reference
+INSERT INTO comment_closure (ancestor_id, descendant_id, depth)
+VALUES (:new_id, :new_id, 0);</pre>
+
+  <h4>Query Examples</h4>
+  <pre>
+-- Get full subtree of comment A (all descendants)
+SELECT c.* FROM comments c
+JOIN comment_closure cc ON c.id = cc.descendant_id
+WHERE cc.ancestor_id = :comment_a_id AND cc.depth > 0
+ORDER BY c.depth, c.created_at;
+
+-- Get direct children only (depth = 1)
+SELECT c.* FROM comments c
+JOIN comment_closure cc ON c.id = cc.descendant_id
+WHERE cc.ancestor_id = :parent_id AND cc.depth = 1
+ORDER BY c.created_at;
+
+-- Get all ancestors of a comment (breadcrumb)
+SELECT c.* FROM comments c
+JOIN comment_closure cc ON c.id = cc.ancestor_id
+WHERE cc.descendant_id = :comment_id AND cc.depth > 0
+ORDER BY cc.depth DESC;</pre>
+
+  <h3 id="threading-comparison">Comparison Matrix</h3>
   <table>
     <thead>
       <tr>
-        <th>Criteria</th>
-        <th>Adjacency List</th>
-        <th>Materialized Path</th>
-        <th>Nested Sets</th>
+        <th>Operation</th>
+        <th>Adjacency</th>
+        <th>Mat. Path</th>
+        <th>Nested Set</th>
+        <th>Closure</th>
+        <th>Winner</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td><strong>Write complexity</strong></td>
-        <td style="color: var(--accent2);">O(1) &mdash; single insert</td>
-        <td style="color: var(--accent2);">O(1) &mdash; concat path</td>
-        <td style="color: var(--red);">O(n) &mdash; renumber siblings</td>
+        <td><strong>Insert</strong></td>
+        <td style="color: var(--accent2);">O(1)</td>
+        <td style="color: var(--accent2);">O(1)</td>
+        <td style="color: var(--red);">O(n)</td>
+        <td style="color: var(--accent2);">O(d) &asymp; O(1)</td>
+        <td><strong>Adjacency</strong></td>
       </tr>
       <tr>
-        <td><strong>Read subtree</strong></td>
-        <td style="color: var(--accent4);">Recursive / multi-query</td>
-        <td style="color: var(--accent2);">Single LIKE prefix query</td>
-        <td style="color: var(--accent2);">Single range query</td>
+        <td><strong>Get subtree</strong></td>
+        <td style="color: var(--red);">O(n) recursive</td>
+        <td style="color: var(--accent4);">O(log n) LIKE</td>
+        <td style="color: var(--accent2);">O(1) range</td>
+        <td style="color: var(--accent2);">O(1) join</td>
+        <td><strong>Closure</strong></td>
       </tr>
       <tr>
         <td><strong>Move subtree</strong></td>
-        <td style="color: var(--accent2);">Update one parent_id</td>
-        <td style="color: var(--accent4);">Update all descendant paths</td>
-        <td style="color: var(--red);">Full renumbering</td>
+        <td style="color: var(--accent2);">O(1)</td>
+        <td style="color: var(--accent4);">O(subtree)</td>
+        <td style="color: var(--red);">O(n)</td>
+        <td style="color: var(--accent4);">O(subtree)</td>
+        <td><strong>Adjacency</strong></td>
       </tr>
       <tr>
-        <td><strong>Depth limit</strong></td>
-        <td>Unlimited (but cap in practice)</td>
-        <td>Limited by path column size</td>
-        <td>Unlimited</td>
+        <td><strong>Get ancestors</strong></td>
+        <td style="color: var(--accent4);">O(d) recursive</td>
+        <td style="color: var(--accent2);">O(1) split</td>
+        <td style="color: var(--accent4);">O(log n)</td>
+        <td style="color: var(--accent2);">O(1) join</td>
+        <td><strong>Closure</strong></td>
       </tr>
       <tr>
-        <td><strong>Index friendliness</strong></td>
-        <td style="color: var(--accent2);">Standard B-tree index</td>
-        <td style="color: var(--accent4);">LIKE prefix &mdash; partial index use</td>
-        <td style="color: var(--accent2);">Range scan on (lft, rgt)</td>
+        <td><strong>Get depth</strong></td>
+        <td style="color: var(--accent4);">Recursive</td>
+        <td style="color: var(--accent2);">Count slashes</td>
+        <td style="color: var(--accent4);">Calculate</td>
+        <td style="color: var(--accent2);">Stored</td>
+        <td><strong>Closure</strong></td>
       </tr>
       <tr>
-        <td><strong>Concurrency</strong></td>
-        <td style="color: var(--accent2);">No contention</td>
-        <td style="color: var(--accent2);">No contention</td>
-        <td style="color: var(--red);">Lock contention on renumber</td>
+        <td><strong>Storage overhead</strong></td>
+        <td style="color: var(--accent2);">None</td>
+        <td style="color: var(--accent4);">Path string</td>
+        <td style="color: var(--accent2);">2 ints/row</td>
+        <td style="color: var(--accent4);">O(n&times;d) rows</td>
+        <td><strong>Adjacency</strong></td>
       </tr>
     </tbody>
   </table>
 
-  <h3 id="recommendation">Recommendation</h3>
   <div class="card success">
-    <h4>Adjacency List + Denormalized Counts</h4>
-    <p>For a high-write, real-time comment system, <strong>Adjacency List</strong> is the best choice:</p>
-    <ul>
-      <li><strong>O(1) writes</strong> with no locking or renumbering &mdash; critical at 115 writes/sec.</li>
-      <li><strong>Denormalized <code>reply_count</code></strong> and <code>like_count</code> avoid expensive aggregation queries on reads.</li>
-      <li><strong>Depth capped at 3</strong> means tree reconstruction never requires deep recursion &mdash; at most 4 queries (one per level) or a single query with application-side grouping.</li>
-      <li><strong>Cache the assembled tree</strong> in Redis. The 50:1 read ratio means most reads hit cache, making the multi-query reconstruction cost negligible.</li>
-    </ul>
-    <p>Materialized Path is a strong alternative if you need subtree queries without depth limits, but the path column becomes a liability at scale (wide rows, partial index usage).</p>
+    <h4>Why Closure Table Wins for Comment Systems</h4>
+    <p>Adjacency List wins on pure insert speed and storage, but <strong>Closure Table</strong> wins on the operations that dominate a comment system&rsquo;s workload: subtree retrieval, ancestor lookup, and depth-aware queries. Since depth is capped (&le;10&ndash;15), the O(d) insert overhead is negligible. The O(n&times;d) storage is a modest trade-off: a 10M-comment system with avg depth 5 produces ~50M closure rows &mdash; well within a single shard&rsquo;s capacity. The closure table also pairs naturally with <strong>cursor-based pagination</strong> (Section 6) and <strong>DataLoader batching</strong> (Section 4).</p>
+  </div>
+
+  <h3>Threading Models Diagram</h3>
+  <div class="diagram">
+    <img src="images/sd_comment_03_threading_models.png" alt="Threading Models Comparison — Adjacency, Materialized Path, Nested Sets, Closure Table">
+    <div class="caption">Figure 2 &mdash; Visual comparison of all four threading models on the same tree: A &rarr; B &rarr; D, A &rarr; C.</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough</h4>
+    <ol>
+      <li><strong>Adjacency List (top-left)</strong> &mdash; Each node stores only parent_id. Arrows show the FK relationships. To get A's subtree, you start at A and recursively follow parent_id references &mdash; 3 queries for 3 levels.</li>
+      <li><strong>Materialized Path (top-right)</strong> &mdash; Each node stores its full ancestry: A stores "/A/", B stores "/A/B/", D stores "/A/B/D/". Subtree of A = <code>WHERE path LIKE '/A/%'</code>. The path string grows with depth.</li>
+      <li><strong>Nested Sets (bottom-left)</strong> &mdash; A has lft=1, rgt=8. B has lft=2, rgt=5. D has lft=3, rgt=4. Subtree of A = <code>WHERE lft BETWEEN 1 AND 8</code>. Inserting a new node under C requires incrementing lft/rgt for all nodes to the right.</li>
+      <li><strong>Closure Table (bottom-right)</strong> &mdash; A separate table stores every ancestor&ndash;descendant pair. The 6 closure rows for the 3-node tree A&rarr;B&rarr;D are shown. Subtree of A = <code>JOIN closure WHERE ancestor = A</code>. One indexed join, no recursion.</li>
+    </ol>
   </div>
 </div>
 
-<!-- ===== SECTION 4: Sorting & Pagination ===== -->
-<div class="section" id="pagination">
+<!-- ===== SECTION 3: Data Model at Scale ===== -->
+<div class="section" id="data-model">
+  <div class="section-num">Section 03</div>
+  <h2>Data Model at Scale</h2>
+
+  <p>The data model consists of six core tables. The design prioritizes <strong>read performance</strong> through denormalization, <strong>write safety</strong> through transactional integrity, and <strong>operational flexibility</strong> through separation of concerns.</p>
+
+  <h3>Table: <code>users</code></h3>
+  <table>
+    <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>UUID v7 (PK)</td><td>Time-ordered unique identifier</td></tr>
+      <tr><td><code>username</code></td><td>VARCHAR(64)</td><td>Display name</td></tr>
+      <tr><td><code>trust_score</code></td><td>FLOAT</td><td>0.0&ndash;1.0, updated by moderation feedback loop</td></tr>
+      <tr><td><code>is_verified</code></td><td>BOOLEAN</td><td>Email/phone verified</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMPTZ</td><td>Account creation time</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Table: <code>threads</code></h3>
+  <table>
+    <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>UUID v7 (PK)</td><td>Thread identifier</td></tr>
+      <tr><td><code>entity_type</code></td><td>ENUM</td><td>POST, VIDEO, ARTICLE, PRODUCT</td></tr>
+      <tr><td><code>entity_id</code></td><td>BIGINT</td><td>External entity ID (maps comment thread to external resource)</td></tr>
+      <tr><td><code>comment_count</code></td><td>INT</td><td>Denormalized total comment count</td></tr>
+      <tr><td><code>is_locked</code></td><td>BOOLEAN</td><td>Prevent new comments when true</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMPTZ</td><td>Thread creation time</td></tr>
+    </tbody>
+  </table>
+
+  <div class="card highlight">
+    <strong>Why a separate <code>threads</code> table?</strong> It decouples the comment system from external entities. Any service can create a thread by providing <code>(entity_type, entity_id)</code>. The thread table also holds thread-level metadata (locked status, total count) without polluting the comment rows.
+  </div>
+
+  <h3>Table: <code>comments</code></h3>
+  <table>
+    <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>UUID v7 (PK)</td><td>Time-ordered, no enumeration, distributed generation, B-tree locality</td></tr>
+      <tr><td><code>thread_id</code></td><td>UUID (FK)</td><td>References threads(id) &mdash; partition key</td></tr>
+      <tr><td><code>parent_id</code></td><td>UUID (FK, nullable)</td><td>NULL for root comments, FK to parent comment</td></tr>
+      <tr><td><code>user_id</code></td><td>UUID (FK)</td><td>Comment author</td></tr>
+      <tr><td><code>body_raw</code></td><td>TEXT</td><td>Original Markdown input from user</td></tr>
+      <tr><td><code>body_html</code></td><td>TEXT</td><td>Pre-rendered sanitized HTML (avoids render-time XSS filtering)</td></tr>
+      <tr><td><code>vote_count</code></td><td>INT DEFAULT 0</td><td>Denormalized upvotes minus downvotes</td></tr>
+      <tr><td><code>reply_count</code></td><td>INT DEFAULT 0</td><td>Denormalized direct child count</td></tr>
+      <tr><td><code>depth</code></td><td>SMALLINT</td><td>Nesting level (0 = root, max 10)</td></tr>
+      <tr><td><code>mod_score</code></td><td>FLOAT</td><td>ML moderation confidence (0.0 = clean, 1.0 = spam/toxic)</td></tr>
+      <tr><td><code>status</code></td><td>ENUM</td><td>ACTIVE, DELETED, FLAGGED, SPAM</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMPTZ</td><td>Creation timestamp (sort key)</td></tr>
+      <tr><td><code>updated_at</code></td><td>TIMESTAMPTZ</td><td>Last edit timestamp</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Table: <code>comment_closure</code></h3>
+  <table>
+    <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>ancestor_id</code></td><td>UUID (FK)</td><td>Ancestor comment ID</td></tr>
+      <tr><td><code>descendant_id</code></td><td>UUID (FK)</td><td>Descendant comment ID</td></tr>
+      <tr><td><code>depth</code></td><td>INT</td><td>Distance from ancestor to descendant (0 = self)</td></tr>
+    </tbody>
+  </table>
+  <pre>
+PRIMARY KEY (ancestor_id, descendant_id)
+INDEX idx_closure_desc ON comment_closure(descendant_id, depth)
+INDEX idx_closure_anc  ON comment_closure(ancestor_id, depth)</pre>
+
+  <h3>Table: <code>votes</code></h3>
+  <table>
+    <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>user_id</code></td><td>UUID (FK)</td><td>Voter</td></tr>
+      <tr><td><code>comment_id</code></td><td>UUID (FK)</td><td>Target comment</td></tr>
+      <tr><td><code>value</code></td><td>SMALLINT</td><td>+1 (upvote) or -1 (downvote)</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMPTZ</td><td>Vote timestamp</td></tr>
+    </tbody>
+  </table>
+  <pre>UNIQUE CONSTRAINT (user_id, comment_id) -- one vote per user per comment</pre>
+
+  <h3>Table: <code>flags</code></h3>
+  <table>
+    <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>user_id</code></td><td>UUID (FK)</td><td>Reporter</td></tr>
+      <tr><td><code>comment_id</code></td><td>UUID (FK)</td><td>Flagged comment</td></tr>
+      <tr><td><code>reason_code</code></td><td>ENUM</td><td>SPAM, ABUSE, HARASSMENT, MISINFORMATION, OTHER</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMPTZ</td><td>Flag timestamp</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Schema Design Decisions</h3>
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Raw + Rendered Body</h4>
+      <p>Storing both <code>body_raw</code> (Markdown) and <code>body_html</code> (sanitized HTML) avoids re-rendering on every read. The HTML is generated once on write (or edit) through a sanitization pipeline that strips XSS vectors while preserving safe formatting. Edits update both columns atomically.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Denormalized Counters</h4>
+      <p><code>vote_count</code> and <code>reply_count</code> are denormalized on the comment row to avoid <code>COUNT(*)</code> aggregations on every read. Updated atomically via <code>SET vote_count = vote_count + 1</code> inside the vote/reply transaction. Eventually consistent (5s max lag) for display, but the source-of-truth is always the votes/comments tables.</p>
+    </div>
+    <div class="card highlight">
+      <h4>mod_score on Comment Row</h4>
+      <p>Storing the ML moderation score directly on the comment enables fast filtering (<code>WHERE mod_score < 0.7</code>) without joining to a moderation table. Updated asynchronously as ML analysis completes. Supports threshold-based auto-actions without additional queries.</p>
+    </div>
+    <div class="card highlight">
+      <h4>UUID v7 as Primary Key</h4>
+      <p><strong>Time-ordered</strong>: monotonically increasing within a millisecond, preserving B-tree insert locality. <strong>No enumeration</strong>: unlike auto-increment, attackers can&rsquo;t guess comment IDs. <strong>Distributed generation</strong>: no central ID server needed. <strong>B-tree friendly</strong>: sequential inserts avoid random page splits.</p>
+    </div>
+  </div>
+
+  <h3>Index Strategy</h3>
+  <div class="card warn">
+    <h4>Critical Indexes</h4>
+    <pre>
+-- Primary read path: thread listing with sort
+CREATE INDEX idx_comments_thread_created
+ON comments (thread_id, created_at DESC, id);
+
+-- Top-sort variant
+CREATE INDEX idx_comments_thread_votes
+ON comments (thread_id, vote_count DESC, created_at DESC, id);
+
+-- Reply fetch
+CREATE INDEX idx_comments_parent_created
+ON comments (parent_id, created_at ASC, id)
+WHERE parent_id IS NOT NULL;
+
+-- Closure table indexes (already shown above)
+-- idx_closure_desc ON comment_closure(descendant_id, depth)
+-- idx_closure_anc  ON comment_closure(ancestor_id, depth)
+
+-- User's comment history
+CREATE INDEX idx_comments_user
+ON comments (user_id, created_at DESC);</pre>
+    <p>The partial index on <code>parent_id WHERE NOT NULL</code> excludes root comments, shrinking the index and speeding reply lookups. The composite <code>(thread_id, created_at DESC, id)</code> supports cursor-based pagination with no sort spill.</p>
+  </div>
+</div>
+
+<!-- ===== SECTION 4: Write Path & Read Path ===== -->
+<div class="section" id="write-read-path">
   <div class="section-num">Section 04</div>
-  <h2>Sorting &amp; Pagination</h2>
+  <h2>Write Path &amp; Read Path</h2>
+
+  <div class="diagram">
+    <img src="images/sd_comment_04_write_read_path.png" alt="Write Path (6 stages) and Read Path (3-tier cache)">
+    <div class="caption">Figure 3 &mdash; Detailed write path (left) and read path (right) with cache tiers and consistency model.</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough</h4>
+    <ol>
+      <li><strong>Left side: Write Path</strong> shows the 6-stage pipeline from client request to HTTP 201 response, with synchronous moderation pre-filter and async Kafka publish.</li>
+      <li><strong>Right side: Read Path</strong> shows the 3-tier cache hierarchy (L1 in-process &rarr; L2 Redis &rarr; L3 DB) with TTLs and latencies at each tier.</li>
+      <li><strong>Center: Kafka bus</strong> connects the write path to async consumers (moderation, real-time delivery, search indexing, counter updates).</li>
+      <li><strong>Bottom: Consistency annotations</strong> show which parts are strongly consistent (DB transaction) vs. eventually consistent (cached counters, real-time delivery).</li>
+    </ol>
+  </div>
+
+  <h3>Write Path &mdash; 6 Stages</h3>
+  <div class="card highlight">
+    <h4>Stage 1: Input Validation + HTML Sanitization</h4>
+    <p>Validate body length (1&ndash;10,000 chars), depth check (parent depth &lt; max), thread existence and lock status. Parse Markdown to HTML using a whitelist-based sanitizer (e.g., DOMPurify server-side) that strips <code>&lt;script&gt;</code>, <code>onclick</code>, <code>javascript:</code> URIs, and other XSS vectors while preserving <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;a&gt;</code>, <code>&lt;code&gt;</code>, <code>&lt;blockquote&gt;</code>.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Stage 2: Rate Limit Check</h4>
+    <p>Redis sliding-window rate limiter: max 5 comments per minute per user, max 20 per hour. Implemented as a sorted set with timestamps as scores. <code>ZRANGEBYSCORE</code> counts recent entries; <code>ZADD</code> records the new request. Returns 429 Too Many Requests if exceeded.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Stage 3: Synchronous Moderation Pre-Filter</h4>
+    <p>Fast pre-filter (&lt;10ms): regex banned-word list, URL reputation check (DNS blocklist), content bounds check. If confidence &gt; 0.95, reject immediately with 400. If &lt; 0.3, proceed. Between 0.3&ndash;0.95, publish and flag for async deep analysis. This prevents obvious spam from ever reaching the database.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Stage 4: Database Transaction (Serializable)</h4>
+    <pre>
+BEGIN;
+  -- Insert comment row
+  INSERT INTO comments (id, thread_id, parent_id, user_id,
+    body_raw, body_html, depth, mod_score, status, created_at, updated_at)
+  VALUES (:id, :thread, :parent, :user, :raw, :html,
+    :depth, :mod_score, 'ACTIVE', NOW(), NOW());
+
+  -- Insert closure entries (copy parent's ancestors + self)
+  INSERT INTO comment_closure (ancestor_id, descendant_id, depth)
+  SELECT ancestor_id, :id, depth + 1
+  FROM comment_closure WHERE descendant_id = :parent;
+
+  INSERT INTO comment_closure (ancestor_id, descendant_id, depth)
+  VALUES (:id, :id, 0);
+
+  -- Increment parent's reply_count
+  UPDATE comments SET reply_count = reply_count + 1
+  WHERE id = :parent;
+
+  -- Increment thread's comment_count
+  UPDATE threads SET comment_count = comment_count + 1
+  WHERE id = :thread;
+COMMIT;</pre>
+  </div>
+
+  <div class="card highlight">
+    <h4>Stage 5: Kafka Event Publish</h4>
+    <p>After transaction commits, publish <code>comment.created</code> event to Kafka with full comment payload, user metadata, and moderation scores. Kafka key = <code>thread_id</code> ensures ordering within a thread. If Kafka is unavailable, event is written to a local WAL buffer and replayed on recovery.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Stage 6: HTTP 201 Response</h4>
+    <p>Return the created comment with all server-generated fields: <code>id</code>, <code>created_at</code>, <code>body_html</code>, <code>vote_count: 0</code>, <code>reply_count: 0</code>, <code>depth</code>. Client can optimistically render without waiting for WebSocket confirmation.</p>
+  </div>
+
+  <h3>Read Path &mdash; 3-Tier Cache</h3>
+  <table>
+    <thead>
+      <tr><th>Tier</th><th>Storage</th><th>TTL</th><th>Capacity</th><th>Latency</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>L1: In-Process LRU</strong></td>
+        <td>Application heap (Caffeine/Guava)</td>
+        <td>30 seconds</td>
+        <td>100MB per instance</td>
+        <td>~0ms</td>
+      </tr>
+      <tr>
+        <td><strong>L2: Redis Cluster</strong></td>
+        <td>Serialized comment trees (MessagePack)</td>
+        <td>5 minutes</td>
+        <td>Shared cluster</td>
+        <td>~5ms</td>
+      </tr>
+      <tr>
+        <td><strong>L3: Database</strong></td>
+        <td>Closure table JOIN + cursor pagination</td>
+        <td>N/A (source of truth)</td>
+        <td>Sharded primary + 2 replicas</td>
+        <td>~50ms</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card warn">
+    <h4>Stampede Protection</h4>
+    <p>When a cache entry expires on a viral thread, thousands of concurrent requests would all miss cache and hit the DB simultaneously. <strong>Distributed lock</strong> (Redis <code>SET ... NX EX</code>): only the first cache miss acquires the lock and populates. All other requests wait on the lock (with a short timeout) and then read the freshly populated cache. Fallback: serve stale cache if lock wait exceeds 100ms.</p>
+  </div>
+
+  <h3>Consistency Model</h3>
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Strong Consistency</h4>
+      <ul>
+        <li>Comment content and threading (DB transaction)</li>
+        <li>Vote uniqueness (unique constraint)</li>
+        <li>Comment status changes (ACTIVE &rarr; DELETED)</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h4>Eventual Consistency</h4>
+      <ul>
+        <li>Denormalized counters (vote_count, reply_count) &mdash; 5s max lag</li>
+        <li>Cache content &mdash; 30s L1, 5min L2 staleness</li>
+        <li>Real-time delivery &mdash; at-most-once with gap-sync on reconnect</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECTION 5: Real-Time Comment Delivery ===== -->
+<div class="section" id="realtime">
+  <div class="section-num">Section 05</div>
+  <h2>Real-Time Comment Delivery</h2>
+
+  <div class="diagram">
+    <img src="images/sd_comment_05_realtime.png" alt="Real-Time Delivery Architecture — WebSocket + Kafka + Redis Pub/Sub">
+    <div class="caption">Figure 4 &mdash; Real-time comment delivery: Comment Service &rarr; Kafka &rarr; Samza &rarr; Redis Pub/Sub &rarr; WebSocket Gateway &rarr; Clients.</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Delivery Flow Walkthrough</h4>
+    <ol>
+      <li><strong>Comment Service publishes</strong> a <code>comment.created</code> event to Kafka after the DB transaction commits.</li>
+      <li><strong>Samza consumer</strong> (Real-Time Service) reads the event, enriches it with user display info (avatar, name), and determines which entity/thread the comment belongs to.</li>
+      <li><strong>Redis Pub/Sub publish</strong> &mdash; the Samza consumer publishes the enriched comment to a Redis channel keyed by <code>entity:{entity_id}</code>.</li>
+      <li><strong>WebSocket Gateway subscription</strong> &mdash; each gateway node subscribes to Redis channels for the entities its connected clients are viewing. When a message arrives on a channel, the gateway fans it out to all local WebSocket connections watching that entity.</li>
+      <li><strong>Client receives</strong> the new comment via WebSocket frame and renders it in the UI with an animation. The client merges server events with its local optimistic update (from its own POST), deduplicating by comment ID.</li>
+      <li><strong>Disconnect handling</strong> &mdash; when a client disconnects, the gateway unsubscribes from channels that have no remaining viewers. Channel cleanup prevents Redis memory leaks.</li>
+    </ol>
+  </div>
+
+  <h3>Connection Lifecycle</h3>
+  <div class="card highlight">
+    <ol>
+      <li><strong>Connect</strong> &mdash; Client opens WSS connection to the WebSocket Gateway with auth token. Gateway validates JWT, assigns connection to a connection pool.</li>
+      <li><strong>Subscribe</strong> &mdash; Client sends <code>{"action": "subscribe", "entity_id": "X"}</code>. Gateway subscribes to <code>entity:X</code> Redis channel if not already subscribed (refcount tracks viewers per channel).</li>
+      <li><strong>Receive Events</strong> &mdash; Gateway pushes <code>comment.created</code>, <code>comment.voted</code>, <code>comment.deleted</code> events as they arrive on the channel.</li>
+      <li><strong>Disconnect</strong> &mdash; Client closes connection or network drops. Gateway decrements refcount; if zero, unsubscribes from Redis channel.</li>
+    </ol>
+  </div>
+
+  <h3>Gap-Sync Protocol</h3>
+  <div class="card warn">
+    <p>WebSocket delivery is <strong>at-most-once</strong>: if a client is disconnected when a comment arrives, it misses that event. To handle this:</p>
+    <ul>
+      <li>Each event carries a monotonically increasing <code>sequence_number</code> per entity (backed by a Redis counter).</li>
+      <li>On reconnect, the client sends its <code>last_seen_sequence_number</code>.</li>
+      <li>The gateway queries a short-lived event log (Redis list, 1-hour TTL) for all events with <code>sequence &gt; last_seen</code> and replays them.</li>
+      <li>If the gap is too large (&gt;1000 events), the client falls back to a full REST API fetch of the latest page.</li>
+    </ul>
+  </div>
+
+  <h3>Scale: 50K Connections Per Node</h3>
+  <div class="card success">
+    <p>Each WebSocket Gateway node handles <strong>50,000 concurrent connections</strong> using non-blocking I/O (epoll/kqueue). Memory footprint: ~20KB per connection (buffers + metadata) = ~1GB per node. A cluster of 20 gateway nodes supports 1M concurrent viewers. Horizontal scaling: add nodes and let the load balancer distribute new connections via least-connections algorithm.</p>
+  </div>
+</div>
+
+<!-- ===== SECTION 6: Cursor-Based Pagination ===== -->
+<div class="section" id="pagination">
+  <div class="section-num">Section 06</div>
+  <h2>Cursor-Based Pagination</h2>
+
+  <h3>Two-Level Pagination</h3>
+  <div class="card highlight">
+    <p>Comment threads use a <strong>two-level pagination</strong> scheme:</p>
+    <ul>
+      <li><strong>Level 1 &mdash; Root comments:</strong> Paginated by cursor across all top-level comments (<code>parent_id IS NULL</code>) in a thread.</li>
+      <li><strong>Level 2 &mdash; Replies:</strong> Each root comment&rsquo;s replies are lazy-loaded on demand with a separate cursor scoped to that parent.</li>
+    </ul>
+    <p>This avoids loading the entire tree upfront. A thread with 10K comments might show 20 root comments initially, each with a &ldquo;Show 12 replies&rdquo; button that triggers a Level 2 fetch.</p>
+  </div>
+
+  <h3>Cursor Definitions</h3>
+  <table>
+    <thead>
+      <tr><th>Pagination Level</th><th>Cursor Fields</th><th>Use Case</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Root (Newest/Oldest)</strong></td>
+        <td><code>(created_at, id)</code></td>
+        <td>Chronological root comment listing</td>
+      </tr>
+      <tr>
+        <td><strong>Root (Top)</strong></td>
+        <td><code>(vote_count, created_at, id)</code></td>
+        <td>Popularity-sorted root comments</td>
+      </tr>
+      <tr>
+        <td><strong>Replies</strong></td>
+        <td><code>(parent_id, created_at, id)</code></td>
+        <td>Replies under a specific parent, always chronological</td>
+      </tr>
+    </tbody>
+  </table>
 
   <h3>Sort Modes</h3>
   <table>
     <thead>
-      <tr>
-        <th>Mode</th>
-        <th>ORDER BY</th>
-        <th>Use Case</th>
-      </tr>
+      <tr><th>Mode</th><th>ORDER BY Clause</th><th>Use Case</th></tr>
     </thead>
     <tbody>
       <tr>
         <td><strong>Top</strong></td>
-        <td><code>like_count DESC, created_at DESC</code></td>
-        <td>Default &mdash; surfaces the most-liked comments first</td>
+        <td><code>vote_count DESC, created_at DESC, id DESC</code></td>
+        <td>Default &mdash; surfaces the highest-scored comments</td>
       </tr>
       <tr>
         <td><strong>Newest</strong></td>
-        <td><code>created_at DESC</code></td>
-        <td>Real-time discussions, live events</td>
+        <td><code>created_at DESC, id DESC</code></td>
+        <td>Real-time discussions, live events, breaking news</td>
       </tr>
       <tr>
         <td><strong>Oldest</strong></td>
-        <td><code>created_at ASC</code></td>
-        <td>Reading threads chronologically</td>
+        <td><code>created_at ASC, id ASC</code></td>
+        <td>Reading threads chronologically from the beginning</td>
       </tr>
     </tbody>
   </table>
 
-  <h3>Cursor-Based Pagination (Not Offset)</h3>
-  <div class="card highlight">
-    <h4>Why Not Offset?</h4>
-    <p>Offset-based pagination (<code>LIMIT 20 OFFSET 100</code>) breaks in real-time comment feeds:</p>
+  <h3>Why Not Offset-Based Pagination?</h3>
+  <div class="card danger">
+    <h4>Three Fatal Flaws</h4>
     <ul>
-      <li><strong>Drift</strong> &mdash; if 5 new comments are inserted while a user paginates, <code>OFFSET 20</code> skips 5 comments the user hasn't seen and shows 5 duplicates.</li>
-      <li><strong>Performance</strong> &mdash; the database must scan and discard all <code>OFFSET</code> rows. At <code>OFFSET 10000</code> this is a full scan.</li>
-      <li><strong>Inconsistency</strong> &mdash; concurrent deletes can cause pages to have fewer items than expected.</li>
+      <li><strong>Drift:</strong> If 5 new comments are inserted while a user paginates, <code>OFFSET 20</code> skips 5 unseen comments and shows 5 duplicates. In a real-time system with 10K writes/sec, every page request is inconsistent.</li>
+      <li><strong>Performance:</strong> <code>OFFSET 10000</code> forces the database to scan and discard 10,000 rows before returning the next 20. At scale, this causes query timeouts and full-table scans.</li>
+      <li><strong>Inconsistency:</strong> Concurrent deletes can cause a page to have fewer items than <code>LIMIT</code> or skip items entirely, confusing client rendering logic.</li>
     </ul>
   </div>
 
+  <h3>Cursor Approach</h3>
   <div class="card success">
-    <h4>Cursor-Based Approach</h4>
-    <p>The cursor encodes the last seen sort key, making each page request a simple range query with no skipping:</p>
+    <h4>Range Query + Opaque Token + Limit+1 Trick</h4>
     <pre>
--- Newest sort: cursor = last_seen_created_at
+-- Newest sort: cursor = (last_created_at, last_id)
 SELECT * FROM comments
-WHERE entity_id = ?
+WHERE thread_id = :thread
   AND parent_id IS NULL
-  AND created_at < :cursor_created_at
-ORDER BY created_at DESC
-LIMIT 20;
+  AND (created_at, id) < (:cursor_ts, :cursor_id)
+ORDER BY created_at DESC, id DESC
+LIMIT 21;  -- fetch 21, return 20, use 21st to determine has_more
 
--- Top sort: cursor = (last_like_count, last_created_at)
+-- Top sort: cursor = (last_vote_count, last_created_at, last_id)
 SELECT * FROM comments
-WHERE entity_id = ?
+WHERE thread_id = :thread
   AND parent_id IS NULL
-  AND (like_count, created_at) < (:cursor_likes, :cursor_ts)
-ORDER BY like_count DESC, created_at DESC
-LIMIT 20;</pre>
-    <p>The API returns a <code>next_cursor</code> token (base64-encoded sort values) that the client passes on the next request.</p>
+  AND (vote_count, created_at, id) < (:cursor_votes, :cursor_ts, :cursor_id)
+ORDER BY vote_count DESC, created_at DESC, id DESC
+LIMIT 21;</pre>
+    <p>The cursor is encoded as an <strong>opaque base64 token</strong>: <code>base64(vote_count:created_at:id)</code>. The client treats it as a black box, allowing the server to change the underlying sort strategy without breaking API compatibility.</p>
   </div>
 
-  <div class="tradeoff-grid">
-    <div class="card highlight">
-      <h4>Offset Pagination</h4>
-      <ul>
-        <li>Simple to implement</li>
-        <li>Supports "jump to page N"</li>
-        <li style="color: var(--red);">Duplicates/skips on concurrent writes</li>
-        <li style="color: var(--red);">O(offset) DB scan cost</li>
-        <li style="color: var(--red);">Breaks in real-time feeds</li>
-      </ul>
-    </div>
-    <div class="card highlight">
-      <h4>Cursor Pagination</h4>
-      <ul>
-        <li style="color: var(--accent2);">Stable under concurrent writes</li>
-        <li style="color: var(--accent2);">O(1) seek via index</li>
-        <li style="color: var(--accent2);">Consistent real-time experience</li>
-        <li>Cannot jump to arbitrary page</li>
-        <li>Slightly more complex API contract</li>
-      </ul>
-    </div>
-  </div>
+  <h3>API Response Format</h3>
+  <pre>
+{
+  "data": [
+    {"id": "01912345-...", "body_html": "&lt;p&gt;Great post!&lt;/p&gt;", "vote_count": 42, ...},
+    {"id": "01912344-...", "body_html": "&lt;p&gt;I disagree...&lt;/p&gt;", "vote_count": 38, ...}
+  ],
+  "has_more": true,
+  "next_cursor": "eyJ2IjozOCwiYyI6IjIwMjYtMDQtMDdUMTQ6MzA6MDBaIiwiaSI6IjAxOTEyMzQ0In0="
+}</pre>
 
   <div class="card warn">
     <strong>Interview Tip:</strong> Always mention cursor-based pagination in any system with real-time writes. It shows you understand the consistency vs. convenience trade-off. Mention that the cursor should be <strong>opaque</strong> to the client (base64-encoded) so the server can change the underlying sort strategy without breaking clients.
   </div>
 </div>
 
-<!-- ===== SECTION 5: Moderation ===== -->
+<!-- ===== SECTION 7: Spam Detection & Content Moderation ===== -->
 <div class="section" id="moderation">
-  <div class="section-num">Section 05</div>
-  <h2>Moderation Pipeline</h2>
+  <div class="section-num">Section 07</div>
+  <h2>Spam Detection &amp; Content Moderation</h2>
 
-  <p>At 10M comments/day, manual moderation is impossible. The system uses a multi-stage pipeline combining ML scoring, community flagging, and human review for edge cases.</p>
+  <div class="diagram">
+    <img src="images/sd_comment_06_moderation.png" alt="Moderation Pipeline — Pre-Filters, ML, External APIs, Human Review">
+    <div class="caption">Figure 5 &mdash; Multi-layer moderation pipeline: Pre-Filters &rarr; ML Classifiers &rarr; External APIs &rarr; Score-Based Routing &rarr; Human Review Queue.</div>
+  </div>
 
-  <h3>Pipeline Architecture</h3>
   <div class="walkthrough">
-    <h4>Moderation Flow</h4>
+    <h4>Moderation Pipeline Walkthrough</h4>
     <ol>
-      <li><strong>Inline Pre-Screen (synchronous)</strong> &mdash; on comment submission, a lightweight regex + blocklist filter catches obvious spam (URLs, repeated characters, known slurs). Runs in &lt; 10ms; rejects immediately if confidence &gt; 0.95.</li>
-      <li><strong>Kafka Event</strong> &mdash; <code>comment.created</code> event published to the <code>moderation</code> topic.</li>
-      <li><strong>ML Spam Classifier (async)</strong> &mdash; a Samza/Flink consumer runs the comment through a trained model that scores for spam, toxicity, and manipulation. Features include user history, comment text embeddings, entity context, and temporal patterns.</li>
-      <li><strong>Auto-Action</strong> &mdash; if ML confidence &gt; 0.9, the comment status is updated to <code>SPAM</code> automatically. If between 0.5&ndash;0.9, status set to <code>FLAGGED</code> for human review.</li>
-      <li><strong>Community Flagging</strong> &mdash; users can report comments. After N flags (threshold varies by entity size), comment is moved to <code>FLAGGED</code> and added to the admin review queue.</li>
-      <li><strong>Admin Review Queue</strong> &mdash; human reviewers see flagged comments with ML scores, user history, and context. They approve, delete, or escalate. Decisions feed back into ML training data.</li>
+      <li><strong>Comment arrives</strong> at the Comment Service after passing input validation.</li>
+      <li><strong>Layer 1 Pre-Filters</strong> run synchronously (&lt;10ms): rate limiting check, content length bounds, regex banned-word list, URL reputation check against DNS blocklist. Fast reject for obvious violations.</li>
+      <li><strong>Layer 2 ML Classifiers</strong> run in parallel: toxicity model (Perspective API or self-hosted transformer), spam classifier (trained on historical moderation decisions), LLM semantic analysis for nuanced cases.</li>
+      <li><strong>Layer 3 External APIs</strong> (optional): Akismet for spam detection, CleanSpeak for profanity and contextual analysis. Results merged with ML scores via weighted average.</li>
+      <li><strong>Score-Based Routing</strong> determines the comment&rsquo;s fate based on the combined moderation score. Thresholds are tunable per-tenant.</li>
+      <li><strong>Human Review Queue</strong> receives borderline cases. Moderators see the comment, ML scores, user history, and surrounding context. Their decisions feed back into ML training data.</li>
     </ol>
   </div>
 
-  <h3>Kafka Event Schema</h3>
-  <pre>
-{
-  "event_type": "comment.created",
-  "comment_id": 8830012345,
-  "entity_type": "POST",
-  "entity_id": 771002,
-  "user_id": 44210,
-  "content": "Check out this amazing deal...",
-  "depth": 0,
-  "timestamp": "2026-04-07T14:30:00Z",
-  "metadata": {
-    "user_account_age_days": 2,
-    "user_prior_spam_count": 0,
-    "ip_country": "US"
-  }
-}</pre>
+  <h3>Layer 1: Pre-Filters (&lt;10ms)</h3>
+  <div class="card highlight">
+    <ul>
+      <li><strong>Rate limiting</strong> &mdash; Redis sliding window: 5 comments/min, 20/hour per user</li>
+      <li><strong>Content bounds</strong> &mdash; Min 1 char, max 10,000 chars, reject empty or excessively long</li>
+      <li><strong>Regex banned words</strong> &mdash; Compiled regex matching against a curated blocklist (updated daily). Case-insensitive, Unicode-aware, handles leetspeak substitutions</li>
+      <li><strong>URL reputation</strong> &mdash; Extract URLs, check against DNS blocklist (Spamhaus, SURBL). Known-malicious domains = instant reject</li>
+    </ul>
+  </div>
 
-  <h3>Moderation Events</h3>
+  <h3>Layer 2: ML Classifiers</h3>
+  <div class="card highlight">
+    <ul>
+      <li><strong>Toxicity Model</strong> &mdash; Perspective API or self-hosted DistilBERT fine-tuned on toxic comment datasets. Returns scores for: toxicity, severe_toxicity, identity_attack, insult, profanity, threat. Inference latency: ~50ms.</li>
+      <li><strong>Spam Classifier</strong> &mdash; Gradient-boosted tree (XGBoost) trained on historical moderation decisions. Features: user account age, comment frequency, text entropy, link density, duplicate detection, user trust score. Inference latency: ~10ms.</li>
+      <li><strong>LLM Semantic Analysis</strong> &mdash; For borderline cases (score 0.3&ndash;0.7), a lightweight LLM analyzes context: is the comment sarcasm? Is a flagged word used in a non-harmful context? Inference latency: ~200ms. Only triggered for ambiguous cases.</li>
+    </ul>
+  </div>
+
+  <h3>Score-Based Routing</h3>
   <table>
     <thead>
-      <tr>
-        <th>Event</th>
-        <th>Producer</th>
-        <th>Consumers</th>
-      </tr>
+      <tr><th>Score Range</th><th>Action</th><th>Visibility</th></tr>
     </thead>
     <tbody>
       <tr>
-        <td><code>comment.created</code></td>
-        <td>Comment Service</td>
-        <td>ML Classifier, Notification Service, Counter Service</td>
+        <td style="color: var(--accent2);"><strong>&lt; 0.3</strong></td>
+        <td>Auto-approve</td>
+        <td>Immediately visible to all users</td>
       </tr>
       <tr>
-        <td><code>comment.flagged</code></td>
-        <td>ML Classifier / Flag API</td>
-        <td>Admin Queue, Analytics</td>
+        <td style="color: var(--accent4);"><strong>0.3 &ndash; 0.7</strong></td>
+        <td>Publish + Flag for review</td>
+        <td>Visible but queued for human review</td>
       </tr>
       <tr>
-        <td><code>comment.moderated</code></td>
-        <td>Admin Review</td>
-        <td>Comment Service (status update), ML Training Pipeline</td>
+        <td style="color: var(--red);"><strong>&gt; 0.7</strong></td>
+        <td>Hold for review</td>
+        <td>Hidden until moderator approves</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Thresholds are tunable per-tenant: a children&rsquo;s platform might set auto-approve at &lt;0.1, while a news discussion forum might use &lt;0.4.</p>
+
+  <h3>Human Review Queue</h3>
+  <div class="card warn">
+    <h4>Priority Formula</h4>
+    <pre>priority = report_count &times; ML_boundary_proximity &times; (1 / user_trust_score)</pre>
+    <p>Comments with many reports, borderline ML scores, and low-trust authors are reviewed first.</p>
+    <h4>Moderator Actions</h4>
+    <ul>
+      <li><strong>Approve</strong> &mdash; Mark as clean, increment user trust score</li>
+      <li><strong>Reject with reason</strong> &mdash; Remove comment, decrement user trust, log reason code for ML training</li>
+      <li><strong>Edit</strong> &mdash; Remove offending content while preserving the rest (with "[edited by moderator]" notice)</li>
+      <li><strong>Shadow-ban</strong> &mdash; User&rsquo;s future comments are visible only to themselves; prevents ban evasion and angry retaliation</li>
+      <li><strong>Escalate</strong> &mdash; Send to senior moderator or legal team for complex cases</li>
+    </ul>
+    <p><strong>Feedback loop:</strong> Every approve/reject decision is logged as a labeled training example. The ML models are retrained weekly on the latest moderation decisions, continuously improving accuracy.</p>
+  </div>
+
+  <h3>Shadow Banning</h3>
+  <div class="card danger">
+    <p>Shadow-banned users can still post comments, but their comments are only visible to themselves (the API returns them normally for the banned user&rsquo;s session but excludes them for everyone else). This is more effective than hard bans because:</p>
+    <ul>
+      <li>The banned user doesn&rsquo;t know they&rsquo;re banned, so they don&rsquo;t create new accounts</li>
+      <li>No angry responses or ban-evasion behavior</li>
+      <li>Implemented by adding a <code>WHERE user_id NOT IN (shadow_banned_set)</code> filter on reads, using a Redis set for O(1) membership check</li>
+    </ul>
+  </div>
+
+  <h3>User Trust Score</h3>
+  <div class="card highlight">
+    <table>
+      <thead><tr><th>Factor</th><th>Effect on Trust</th></tr></thead>
+      <tbody>
+        <tr><td>Comment approved by moderator</td><td>+0.02</td></tr>
+        <tr><td>Comment rejected by moderator</td><td>-0.10</td></tr>
+        <tr><td>Account age &gt; 30 days</td><td>+0.1 baseline</td></tr>
+        <tr><td>Email/phone verified</td><td>+0.1 baseline</td></tr>
+        <tr><td>Multiple spam rejections in 24h</td><td>-0.30</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>Trusted users (&gt;0.8)</strong> skip Layer 2 ML analysis &mdash; their comments are auto-approved (Layer 1 pre-filters still apply)</li>
+      <li><strong>Low-trust users (&lt;0.3)</strong> always go through human review regardless of ML score</li>
+      <li>Trust score is bounded [0.0, 1.0] and decays toward 0.5 over time without activity</li>
+    </ul>
+  </div>
+
+  <h3>Community Flagging</h3>
+  <div class="card warn">
+    <h4>Flag Reason Codes</h4>
+    <p><code>SPAM</code>, <code>ABUSE</code>, <code>HARASSMENT</code>, <code>MISINFORMATION</code>, <code>OTHER</code></p>
+    <h4>Escalation Thresholds</h4>
+    <ul>
+      <li><strong>3 flags</strong> &rarr; auto-hide (comment hidden pending review)</li>
+      <li><strong>10 flags</strong> &rarr; escalate to priority review queue</li>
+      <li><strong>Trusted user flags</strong> (trust &gt; 0.8) &rarr; weighted 2x (a single trusted flag counts as two)</li>
+      <li><strong>Flag abuse detection</strong> &mdash; if a user flags &gt;20 comments in an hour, their flags are temporarily de-weighted and their account is reviewed for coordinated flagging</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ===== SECTION 8: Scaling Strategy ===== -->
+<div class="section" id="scaling">
+  <div class="section-num">Section 08</div>
+  <h2>Scaling Strategy</h2>
+
+  <div class="diagram">
+    <img src="images/sd_comment_07_scaling.png" alt="Scaling Architecture — Sharding, Caching, CDN">
+    <div class="caption">Figure 6 &mdash; Scaling architecture: database sharding, multi-tier caching, CDN edge, and connection pooling.</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Scaling Walkthrough</h4>
+    <ol>
+      <li><strong>Database sharding</strong> by <code>hash(entity_id) % N</code> distributes threads across shards. All comments for a single thread land on the same shard, ensuring single-shard tree reconstruction.</li>
+      <li><strong>Read replicas</strong> (2 per shard) handle read traffic. Writes go to primary only. Replication lag &lt;1s for strong consistency.</li>
+      <li><strong>L1/L2/L3 cache tiers</strong> absorb read traffic before it reaches the DB. Write-through invalidation: on new comment, invalidate L2 (L1 expires naturally via TTL).</li>
+      <li><strong>CDN edge caching</strong> for public threads (10s TTL, stale-while-revalidate). Surrogate-Key headers enable targeted purge when comments change.</li>
+      <li><strong>PgBouncer</strong> connection pooling (200 connections per shard) prevents connection exhaustion under load spikes.</li>
+    </ol>
+  </div>
+
+  <h3>Database Sharding</h3>
+  <div class="card highlight">
+    <ul>
+      <li><strong>Shard key:</strong> <code>hash(entity_id) % N</code> where N = number of shards</li>
+      <li><strong>Co-location:</strong> All comments, closure entries, votes, and flags for a thread live on the same shard</li>
+      <li><strong>Primary + 2 read replicas</strong> per shard</li>
+      <li><strong>Cross-entity queries</strong> (e.g., "all comments by user X") require scatter-gather across all shards, served by a secondary index or a dedicated user-comments lookup table</li>
+    </ul>
+  </div>
+
+  <h3>Multi-Tier Cache Details</h3>
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Write-Through Invalidation</h4>
+      <p>On comment creation: immediately invalidate the L2 Redis cache for the affected thread. L1 cache expires naturally (30s TTL). This ensures new comments appear within 30s even without WebSocket delivery.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Stampede Protection</h4>
+      <p>Distributed lock (<code>SETNX comment_lock:{thread_id} {instance_id} EX 5</code>): only one cache miss populates L2. Others wait up to 100ms on the lock, then fall through to stale cache or direct DB query.</p>
+    </div>
+  </div>
+
+  <h3>CDN Edge Caching</h3>
+  <div class="card success">
+    <ul>
+      <li><strong>Public threads only</strong> (private/restricted threads bypass CDN)</li>
+      <li><strong>10s TTL</strong> with <code>stale-while-revalidate: 30</code> &mdash; serve stale while refreshing in background</li>
+      <li><strong>Surrogate-Key headers</strong> (<code>Surrogate-Key: thread:{id}</code>) enable targeted purge on comment creation without flushing the entire CDN cache</li>
+      <li>CDN absorbs 60&ndash;80% of read traffic for popular threads</li>
+    </ul>
+  </div>
+
+  <h3>Performance Optimizations</h3>
+  <div class="card warn">
+    <ul>
+      <li><strong>DataLoader batching</strong> &mdash; Prevents N+1 queries when loading user avatars and vote states for a page of comments. Batches all user_ids into a single <code>WHERE user_id IN (...)</code> query.</li>
+      <li><strong>Denormalized counters</strong> &mdash; <code>vote_count</code> and <code>reply_count</code> on the comment row avoid <code>COUNT(*)</code> per-comment on reads.</li>
+      <li><strong>Pagination limits</strong> &mdash; Max depth: 10 levels. Max page size: 50 comments. Prevents unbounded tree traversal and memory allocation.</li>
+      <li><strong>PgBouncer connection pooling</strong> &mdash; 200 connections per shard, transaction-level pooling. Prevents connection exhaustion during traffic spikes.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ===== SECTION 9: Observability & Monitoring ===== -->
+<div class="section" id="observability">
+  <div class="section-num">Section 09</div>
+  <h2>Observability &amp; Monitoring</h2>
+
+  <h3>Key Performance Metrics</h3>
+  <table>
+    <thead>
+      <tr><th>Metric</th><th>Target</th><th>Measurement</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Comment write latency p99</td><td><strong>&lt; 200ms</strong></td><td>Time from API request to HTTP 201 response</td></tr>
+      <tr><td>Thread read latency p99</td><td><strong>&lt; 100ms</strong></td><td>Time to return a page of comments (including tree assembly)</td></tr>
+      <tr><td>WebSocket delivery p99</td><td><strong>&lt; 500ms</strong></td><td>Time from DB commit to client WebSocket frame</td></tr>
+      <tr><td>Moderation pipeline p99</td><td><strong>&lt; 1s</strong></td><td>Time from comment creation to final mod_score assignment</td></tr>
+      <tr><td>Cache hit ratio (L1+L2)</td><td><strong>&gt; 95%</strong></td><td>Percentage of reads served from L1 or L2 cache</td></tr>
+      <tr><td>Error rate by endpoint</td><td><strong>&lt; 0.1%</strong></td><td>5xx responses / total requests per endpoint</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Alerting Thresholds</h3>
+  <table>
+    <thead>
+      <tr><th>Condition</th><th>Severity</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Write latency p99 &gt; 500ms for 5 min</td>
+        <td style="color: var(--red);"><strong>Critical</strong></td>
+        <td>Page oncall; check DB shard health and Kafka lag</td>
       </tr>
       <tr>
-        <td><code>comment.liked</code></td>
-        <td>Like Service</td>
-        <td>Counter Service, Notification Service</td>
+        <td>Cache hit ratio &lt; 85% for 10 min</td>
+        <td style="color: var(--accent4);"><strong>Warning</strong></td>
+        <td>Check Redis cluster health and eviction rates</td>
+      </tr>
+      <tr>
+        <td>WebSocket connections drop &gt;20% in 5 min</td>
+        <td style="color: var(--red);"><strong>Critical</strong></td>
+        <td>Check gateway node health and network partitions</td>
+      </tr>
+      <tr>
+        <td>Moderation queue &gt; 10K items</td>
+        <td style="color: var(--accent4);"><strong>Warning</strong></td>
+        <td>Check ML pipeline throughput; consider scaling consumers</td>
+      </tr>
+      <tr>
+        <td>Replication lag &gt; 10s on any shard</td>
+        <td style="color: var(--red);"><strong>Critical</strong></td>
+        <td>Check replica I/O; potential data loss on failover</td>
       </tr>
     </tbody>
   </table>
 
-  <div class="card danger">
-    <strong>Edge Case &mdash; Spam Bursts:</strong> A botnet can submit thousands of comments in seconds. Mitigations: per-user rate limiting (e.g., 5 comments/minute), CAPTCHA after threshold, IP-based throttling via a token bucket at the API gateway, and a Kafka consumer that detects burst patterns and bulk-flags.
+  <h3>Distributed Tracing</h3>
+  <div class="card highlight">
+    <p>Every request carries a <strong>trace ID</strong> propagated through all layers:</p>
+    <pre>
+Trace: abc-123-def
+├─ [Gateway]      auth + rate limit         12ms
+├─ [Comment Svc]  validation + sanitization  8ms
+├─ [Mod Service]  pre-filter scoring         6ms
+├─ [Database]     transaction (insert+closure) 35ms
+├─ [Redis]        cache invalidation          2ms
+├─ [Kafka]        event publish               4ms
+└─ [Total]        write path end-to-end      67ms
+
+Async (same trace ID):
+├─ [Samza]        moderation ML scoring     180ms
+├─ [Redis PubSub] real-time publish           3ms
+└─ [WS Gateway]   client delivery             8ms</pre>
+    <p>Traces are collected via OpenTelemetry, stored in Jaeger/Tempo, and correlated with Grafana dashboards for end-to-end latency analysis.</p>
   </div>
 </div>
 
-<!-- ===== SECTION 6: LinkedIn Mapping & Interview Questions ===== -->
+<!-- ===== SECTION 10: Failure Modes & Resilience ===== -->
+<div class="section" id="failure-modes">
+  <div class="section-num">Section 10</div>
+  <h2>Failure Modes &amp; Resilience</h2>
+
+  <h3>DB Shard Failure</h3>
+  <div class="card danger">
+    <ul>
+      <li><strong>Auto-failover in 30 seconds</strong> &mdash; Orchestrator promotes a read replica to primary</li>
+      <li><strong>Writes return 503 + Retry-After header</strong> during failover window</li>
+      <li><strong>Reads served from remaining replica</strong> with eventual consistency (replication lag &lt;1s pre-failure)</li>
+      <li><strong>Client exponential backoff</strong> with jitter: base 100ms, max 30s, jitter &plusmn;50%</li>
+    </ul>
+  </div>
+
+  <h3>Redis Failure</h3>
+  <div class="card danger">
+    <ul>
+      <li><strong>Cache miss fallback</strong> &mdash; All reads go directly to DB. Latency increases from ~5ms to ~50ms but system remains available</li>
+      <li><strong>Rate limiting fallback</strong> &mdash; Switches to in-process token bucket (less accurate but functional). Per-instance limits approximated from global config.</li>
+      <li><strong>Pub/Sub fallback</strong> &mdash; Real-time delivery degrades: gateway nodes fall back to gossip protocol (peer-to-peer event sharing). Higher latency (~2s) but eventual delivery.</li>
+    </ul>
+  </div>
+
+  <h3>Kafka Unavailability</h3>
+  <div class="card danger">
+    <ul>
+      <li><strong>Synchronous fanout</strong> &mdash; Comment Service directly calls Moderation Service and Real-Time Service (circuit breaker protected)</li>
+      <li><strong>Local WAL buffer</strong> &mdash; Events written to a local Write-Ahead Log (bounded to 1GB). When Kafka recovers, events are replayed in order.</li>
+      <li><strong>Idempotent consumers</strong> &mdash; All Kafka consumers are idempotent (dedup by comment_id), so replayed events don&rsquo;t cause duplicates</li>
+    </ul>
+  </div>
+
+  <h3>Thundering Herd on Viral Threads</h3>
+  <div class="card warn">
+    <p>When a thread goes viral (e.g., celebrity post, breaking news), a single entity can receive 100K+ reads/sec:</p>
+    <ul>
+      <li><strong>Stampede lock</strong> &mdash; Only one cache miss triggers a DB query; others wait on the lock</li>
+      <li><strong>CDN stale-while-revalidate</strong> &mdash; CDN serves stale content while refreshing in background</li>
+      <li><strong>Request coalescing</strong> &mdash; Multiple identical requests within a 50ms window are collapsed into a single DB query; all requestors receive the same response</li>
+      <li><strong>Pre-warming</strong> &mdash; For predictable events (scheduled live streams), pre-populate cache before the event starts</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ===== SECTION 11: LinkedIn Mapping & Interview Questions ===== -->
 <div class="section" id="linkedin">
-  <div class="section-num">Section 06</div>
+  <div class="section-num">Section 11</div>
   <h2>LinkedIn Mapping &amp; Interview Questions</h2>
 
   <h3>LinkedIn Technology Mapping</h3>
@@ -658,38 +1379,48 @@ LIMIT 20;</pre>
     <tbody>
       <tr>
         <td>Primary Database</td>
-        <td>MySQL / PostgreSQL (sharded)</td>
-        <td><span class="linkedin-tag">Espresso</span> &mdash; LinkedIn's horizontally partitioned document store, partitioned by entity_id</td>
+        <td>PostgreSQL (sharded)</td>
+        <td><span class="linkedin-tag">Espresso</span> &mdash; Horizontally partitioned document store, sharded by entity_id</td>
       </tr>
       <tr>
         <td>Cache Layer</td>
         <td>Redis / Memcached</td>
-        <td><span class="linkedin-tag">Couchbase</span> &mdash; distributed cache for hot comment trees with TTL-based eviction</td>
+        <td><span class="linkedin-tag">Couchbase</span> &mdash; Distributed cache for hot comment trees with TTL-based eviction</td>
       </tr>
       <tr>
         <td>Event Bus</td>
         <td>Kafka</td>
-        <td><span class="linkedin-tag">Kafka</span> &mdash; LinkedIn-created, used for all async event delivery (comment.created, moderation events)</td>
+        <td><span class="linkedin-tag">Kafka</span> &mdash; LinkedIn-created; all async event delivery (comment.created, moderation events)</td>
       </tr>
       <tr>
-        <td>ML Moderation</td>
+        <td>ML Platform</td>
         <td>Custom ML pipeline</td>
-        <td><span class="linkedin-tag">Pro-ML</span> &mdash; LinkedIn's ML platform for training and serving spam/toxicity models</td>
+        <td><span class="linkedin-tag">Pro-ML</span> &mdash; Training and serving for spam/toxicity models</td>
       </tr>
       <tr>
         <td>Stream Processing</td>
         <td>Flink / Spark Streaming</td>
-        <td><span class="linkedin-tag">Samza</span> &mdash; near-real-time stream processing for moderation scoring, counter updates, and notification fanout</td>
+        <td><span class="linkedin-tag">Samza</span> &mdash; Near-real-time stream processing for moderation, counters, notifications</td>
       </tr>
       <tr>
-        <td>API Gateway</td>
-        <td>Kong / Envoy</td>
-        <td><span class="linkedin-tag">Rest.li</span> &mdash; LinkedIn's REST framework with built-in rate limiting and auth</td>
+        <td>API Framework</td>
+        <td>REST / gRPC</td>
+        <td><span class="linkedin-tag">Rest.li</span> &mdash; LinkedIn&rsquo;s REST framework with built-in rate limiting and auth</td>
       </tr>
       <tr>
-        <td>Notification Service</td>
-        <td>Push / WebSocket</td>
-        <td><span class="linkedin-tag">Real-time Infra</span> &mdash; LinkedIn's notification delivery platform for real-time comment updates</td>
+        <td>Real-Time Delivery</td>
+        <td>WebSocket / SSE</td>
+        <td><span class="linkedin-tag">RTDP</span> &mdash; Real-Time Data Platform for push-based event delivery</td>
+      </tr>
+      <tr>
+        <td>Full-Text Search</td>
+        <td>Elasticsearch</td>
+        <td><span class="linkedin-tag">Galene</span> &mdash; LinkedIn&rsquo;s search engine for comment content indexing</td>
+      </tr>
+      <tr>
+        <td>Media Storage</td>
+        <td>S3 / GCS</td>
+        <td><span class="linkedin-tag">Ambry</span> &mdash; Blob storage for comment attachments (images, files)</td>
       </tr>
     </tbody>
   </table>
@@ -701,36 +1432,133 @@ LIMIT 20;</pre>
       <li>Automatic horizontal scaling with partition rebalancing</li>
       <li>Secondary indexes for <code>parent_id</code> and <code>user_id</code> queries</li>
       <li>Change-capture streams that integrate natively with Kafka</li>
-      <li>Strong consistency within a partition &mdash; important for counter increments</li>
+      <li>Strong consistency within a partition &mdash; critical for closure table transactions and counter increments</li>
     </ul>
   </div>
 
-  <h3>Common Interview Questions</h3>
+  <h3>Interview Questions &mdash; Design &amp; Architecture</h3>
   <div class="card warn">
-    <h4>Design &amp; Architecture</h4>
     <ol>
-      <li><strong>"How would you handle a viral post with 1M comments?"</strong> &mdash; Discuss hot partition mitigation: separate cache layer (Couchbase/Redis), pre-computed top-N comment snapshots, read replicas, and rate-limited writes with a queue.</li>
-      <li><strong>"How do you ensure real-time comment updates?"</strong> &mdash; WebSocket/SSE connections for active viewers. Kafka consumer pushes new comments to a presence-aware notification service. Fallback: polling every 5s.</li>
-      <li><strong>"Why not store the entire comment tree as a single document?"</strong> &mdash; Document size limits, write contention on the root document, inability to paginate within the tree, and no partial updates.</li>
+      <li><strong>"How would you handle a viral post with 1M comments?"</strong>
+        <ul>
+          <li>Hot partition mitigation: CDN edge caching, stampede locks, request coalescing</li>
+          <li>Pre-computed top-N snapshots refreshed every 30s</li>
+          <li>Read replicas absorb read traffic; writes rate-limited to prevent shard overload</li>
+        </ul>
+      </li>
+      <li><strong>"How do you ensure real-time comment updates?"</strong>
+        <ul>
+          <li>WebSocket connections via gateway cluster, Kafka &rarr; Samza &rarr; Redis Pub/Sub fanout</li>
+          <li>Gap-sync protocol handles reconnection without missing events</li>
+          <li>Fallback: long-polling every 5s for clients that don't support WebSocket</li>
+        </ul>
+      </li>
+      <li><strong>"Why not store the entire comment tree as a single document?"</strong>
+        <ul>
+          <li>Document size limits (16MB in MongoDB, similar in Espresso)</li>
+          <li>Write contention: every new comment requires updating the root document</li>
+          <li>No partial updates: must read-modify-write the entire tree</li>
+          <li>Cannot paginate within a document</li>
+        </ul>
+      </li>
+      <li><strong>"Compare Closure Table vs. Adjacency List for your comment system."</strong>
+        <ul>
+          <li>Closure Table: O(1) subtree reads, O(d) inserts, O(n&times;d) storage</li>
+          <li>Adjacency List: O(1) inserts, O(n) subtree reads via recursive CTE</li>
+          <li>Closure Table wins when read-to-write ratio is high (50:1 in our case)</li>
+        </ul>
+      </li>
+      <li><strong>"How do you handle @mentions in comments?"</strong>
+        <ul>
+          <li>Parse Markdown for @username patterns during write, resolve to user_ids</li>
+          <li>Store mentions in a separate <code>comment_mentions</code> table</li>
+          <li>Kafka event triggers notification service to send in-app/push/email alerts</li>
+        </ul>
+      </li>
     </ol>
   </div>
 
+  <h3>Interview Questions &mdash; Data Model &amp; Scaling</h3>
   <div class="card warn">
-    <h4>Data Model &amp; Scaling</h4>
-    <ol start="4">
-      <li><strong>"How would you handle like counts without race conditions?"</strong> &mdash; Atomic increment in database (<code>UPDATE comments SET like_count = like_count + 1 WHERE id = ?</code>), idempotent like tracking in a separate <code>comment_likes</code> table with (user_id, comment_id) unique key.</li>
-      <li><strong>"What happens when a user deletes a comment with replies?"</strong> &mdash; Soft delete: set status to <code>DELETED</code>, show as "[deleted]" in UI while preserving reply tree structure. Hard delete only when all descendants are also deleted.</li>
-      <li><strong>"How do you partition comments across databases?"</strong> &mdash; By entity_id ensures all comments for one entity are co-located. Cross-entity queries (e.g., "all comments by user X") use a secondary index or a separate user-comments table.</li>
+    <ol start="6">
+      <li><strong>"How would you handle like counts without race conditions?"</strong>
+        <ul>
+          <li>Atomic increment: <code>UPDATE comments SET vote_count = vote_count + 1 WHERE id = ?</code></li>
+          <li>Idempotent: unique constraint on <code>(user_id, comment_id)</code> in votes table</li>
+          <li>Toggle: vote endpoint upserts &mdash; if exists, delete (undo vote) and decrement</li>
+        </ul>
+      </li>
+      <li><strong>"What happens when a user deletes a comment with replies?"</strong>
+        <ul>
+          <li>Soft delete: set status = DELETED, render as "[deleted]" in UI</li>
+          <li>Preserve tree structure for reply context</li>
+          <li>Hard delete only when all descendants are also deleted (garbage collection job)</li>
+        </ul>
+      </li>
+      <li><strong>"How do you partition comments across databases?"</strong>
+        <ul>
+          <li>Hash(entity_id) ensures all comments for one entity co-locate</li>
+          <li>Cross-entity queries (user comment history) = scatter-gather or secondary index</li>
+          <li>Resharding: consistent hashing with virtual nodes to minimize data movement</li>
+        </ul>
+      </li>
+      <li><strong>"How does cursor pagination work when vote_count changes?"</strong>
+        <ul>
+          <li>Cursor encodes values at read time; a comment&rsquo;s rank can shift between pages</li>
+          <li>No duplicates within a session (each page starts after the cursor point)</li>
+          <li>Trade-off: some comments may be missed or re-ranked; acceptable for non-critical UX</li>
+        </ul>
+      </li>
+      <li><strong>"How would you add a &lsquo;pin comment&rsquo; feature?"</strong>
+        <ul>
+          <li>Add <code>pinned BOOLEAN</code> and <code>pinned_at TIMESTAMPTZ</code> to comments table</li>
+          <li>Fetch pinned comments separately, prepend to results before pagination</li>
+          <li>Max 1&ndash;3 pinned comments per thread (enforced by the Comment Service)</li>
+        </ul>
+      </li>
     </ol>
   </div>
 
+  <h3>Interview Questions &mdash; Moderation &amp; Edge Cases</h3>
   <div class="card warn">
-    <h4>Moderation &amp; Edge Cases</h4>
-    <ol start="7">
-      <li><strong>"How do you handle edit history?"</strong> &mdash; Store edits in an append-only <code>comment_edits</code> table. Show "edited" badge in UI. Moderation re-scores on edit.</li>
-      <li><strong>"What about internationalization and emoji?"</strong> &mdash; UTF-8 storage, content-length limits in characters not bytes, and language-specific ML models for moderation.</li>
-      <li><strong>"How does cursor pagination work when like_count changes?"</strong> &mdash; The cursor encodes the values at read time. A comment's position can shift between pages, but no duplicates or gaps occur within a single pagination session.</li>
-      <li><strong>"How would you add a 'pin comment' feature?"</strong> &mdash; Add a <code>pinned</code> boolean and <code>pinned_at</code> timestamp. Pinned comments are fetched separately and prepended to results before pagination begins.</li>
+    <ol start="11">
+      <li><strong>"How do you prevent coordinated spam attacks?"</strong>
+        <ul>
+          <li>IP-based throttling at API gateway (token bucket)</li>
+          <li>Samza consumer detects burst patterns: same content from multiple accounts = botnet</li>
+          <li>CAPTCHA triggered after rate limit threshold</li>
+          <li>Device fingerprinting to correlate accounts</li>
+        </ul>
+      </li>
+      <li><strong>"What is shadow banning and when would you use it?"</strong>
+        <ul>
+          <li>User&rsquo;s comments visible only to themselves; they don&rsquo;t know they&rsquo;re banned</li>
+          <li>Prevents ban evasion (creating new accounts out of anger)</li>
+          <li>Used for repeat low-severity offenders who don&rsquo;t warrant a full ban</li>
+        </ul>
+      </li>
+      <li><strong>"How do you handle edit history?"</strong>
+        <ul>
+          <li>Append-only <code>comment_edits</code> table with (comment_id, body_raw, body_html, edited_at)</li>
+          <li>Show "edited" badge in UI; click to view diff</li>
+          <li>Moderation re-scores on edit (edited comment goes through ML pipeline again)</li>
+        </ul>
+      </li>
+      <li><strong>"How would you implement a trust-based moderation system?"</strong>
+        <ul>
+          <li>Per-user trust score: approved comments increase trust, rejections decrease it</li>
+          <li>High-trust users (&gt;0.8) skip ML analysis; low-trust (&lt;0.3) always require human review</li>
+          <li>Feedback loop: moderation decisions continuously train the ML models</li>
+        </ul>
+      </li>
+      <li><strong>"What about internationalization and emoji?"</strong>
+        <ul>
+          <li>UTF-8mb4 storage (4-byte UTF-8 for full emoji support)</li>
+          <li>Content-length limits in characters, not bytes</li>
+          <li>Language-specific ML models for moderation (toxicity varies by language/culture)</li>
+          <li>RTL text rendering support in the comment UI</li>
+        </ul>
+      </li>
     </ol>
   </div>
 </div>
@@ -739,7 +1567,18 @@ LIMIT 20;</pre>
 
 <footer>
   <div class="container">
-    Design Comment System &mdash; System Design Interview Guide &bull; Built for learning &amp; interview prep
+    Design Comment System &mdash; Complete Architecture Reference &bull; System Design Interview Guide
+    <br>
+    <div style="margin-top: 12px;">
+      <a href="index.html" style="color: var(--accent); text-decoration: none; margin: 0 8px;">Home</a>
+      <a href="system-design.html" style="color: var(--accent); text-decoration: none; margin: 0 8px;">Design Uber</a>
+      <a href="youtube-system-design.html" style="color: var(--accent3); text-decoration: none; margin: 0 8px;">Design YouTube</a>
+      <a href="sd-url-shortener.html" style="color: var(--accent); text-decoration: none; margin: 0 8px;">URL Shortener</a>
+      <a href="sd-pastebin.html" style="color: var(--accent); text-decoration: none; margin: 0 8px;">Pastebin</a>
+      <a href="sd-whatsapp.html" style="color: var(--accent); text-decoration: none; margin: 0 8px;">WhatsApp</a>
+      <a href="sd-twitter.html" style="color: var(--accent); text-decoration: none; margin: 0 8px;">Twitter</a>
+      <a href="sd-netflix.html" style="color: var(--accent); text-decoration: none; margin: 0 8px;">Netflix</a>
+    </div>
   </div>
 </footer>
 
