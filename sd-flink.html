@@ -218,6 +218,11 @@
       <li><a href="#s1">What Is Apache Flink?</a></li>
       <li><a href="#s2">Flink Core Architecture</a></li>
       <li><a href="#s3">How Flink Gets Data</a></li>
+      <li><a href="#s3b">Inside a Flink Box: Operators, State &amp; RocksDB</a></li>
+      <li><a href="#s3c">How a Job Gets Split into Parallel Tasks</a></li>
+      <li><a href="#s3d">Brooklin vs Flink: Ingestion vs Processing</a></li>
+      <li><a href="#s3e">YARN: The Legacy Resource Manager</a></li>
+      <li><a href="#s3f">Writing Flink Jobs: Code Examples &amp; Use Cases</a></li>
       <li><a href="#s4">Flink at LinkedIn: LI-Flink Platform</a></li>
       <li><a href="#s5">Flink on Kubernetes (Nimbus)</a></li>
       <li><a href="#s6">Flink vs Samza: Side-by-Side Comparison</a></li>
@@ -442,6 +447,455 @@ SELECT
 FROM click_events
 WHERE event_type = 'CLICK'
 GROUP BY member_id, TUMBLE(event_time, INTERVAL '1' HOUR);</code></pre>
+  </div>
+
+  <!-- SECTION 3b: Inside a Flink Box -->
+  <div class="section" id="s3b">
+    <div class="section-num">Deep Dive</div>
+    <h2>Inside a Flink Box: Operators, State &amp; RocksDB</h2>
+
+    <p>When people say "Flink box," they mean what's running inside each <strong>TaskManager slot</strong>. This is where the actual data processing happens. Let's open it up and see exactly what's inside.</p>
+
+    <div class="diagram-box">
+      <img src="images/sd_flink_06_internals.png" alt="Inside a Flink TaskManager Slot">
+      <div class="caption">Fig 6: Inside a TaskManager slot &mdash; how data flows through operators and interacts with RocksDB state</div>
+    </div>
+
+    <h3>What's Inside a Task Slot</h3>
+    <p>Each task slot is essentially <strong>one thread</strong> running an operator chain. Here's what happens to every record:</p>
+
+    <div class="walkthrough">
+      <h4>Record Lifecycle: From Kafka to Sink</h4>
+      <ol>
+        <li><strong>Source Operator</strong> reads raw bytes from a Kafka partition. It deserializes them (Avro/JSON/Protobuf) into Java objects and stamps each record with an event timestamp.</li>
+        <li><strong>Map/Filter operators</strong> (if chained) run in the <em>same thread</em> with zero serialization cost. A map transforms each record; a filter drops records that don't match a predicate.</li>
+        <li><strong>KeyBy</strong> is a <em>network shuffle</em>. It hashes a field (e.g., <code>member_id</code>) and sends the record over TCP to the TaskManager that owns that key range. This is the expensive step &mdash; it involves serialization, network I/O, and deserialization.</li>
+        <li><strong>Window/Aggregate operator</strong> receives keyed records and is <em>stateful</em>. It stores incoming records in RocksDB under the key, accumulates them over a time window, and when the watermark says "window is complete," it reads all accumulated records, computes the aggregate (sum, count, max), and emits the result.</li>
+        <li><strong>Sink operator</strong> takes the output record, serializes it, and writes it to the destination (Kafka topic, Espresso table, etc.). On checkpoint completion, it commits Kafka offsets and flushes pending writes.</li>
+      </ol>
+    </div>
+
+    <h3>How RocksDB Gets Data (and What It Emits)</h3>
+    <p><strong>RocksDB</strong> is an embedded key-value store that runs <em>inside</em> each stateful operator. It's not a separate service &mdash; it's a C++ library linked via JNI into the Flink JVM process.</p>
+
+    <div class="callout info">
+      <strong class="blue">RocksDB is the "memory" of your Flink job</strong>
+      Every time your Flink job needs to remember something between records (window contents, join state, counters), that data lives in RocksDB. Without RocksDB, Flink would forget everything between records.
+    </div>
+
+    <h4>How data gets INTO RocksDB</h4>
+    <pre><code>// When a record arrives at a keyed window operator:
+// 1. Flink extracts the key (e.g., member_id = 12345)
+// 2. Flink calls RocksDB put():
+rocksDB.put(
+  key:   [member_id=12345, window=2026-04-05T10:00],
+  value: [serialized record: {clicks: 1, impressions: 3}]
+);
+
+// RocksDB internally:
+// → Writes to MemTable (in-memory write buffer, ~64MB)
+// → When MemTable is full, flushes to SST file on local SSD (Level 0)
+// → Background compaction merges L0 → L1 → L2 (sorted, deduplicated)</code></pre>
+
+    <h4>How data comes OUT of RocksDB</h4>
+    <pre><code>// When a watermark triggers a window to fire:
+// 1. Flink scans all records for this window:
+Iterator iter = rocksDB.newIterator();
+iter.seek([member_id=12345, window=2026-04-05T10:00]);
+
+// 2. Reads all matching records from RocksDB:
+//    → First checks Block Cache (in-memory LRU cache)
+//    → If miss, reads from SST files on SSD
+//    → Returns deserialized Java objects
+
+// 3. Applies aggregate function:
+int totalClicks = 0;
+while (iter.hasNext() && iter.key().inWindow()) {
+  totalClicks += iter.value().clicks;
+}
+
+// 4. EMITS result downstream to the Sink operator:
+emit(new Result(memberId=12345, window="10:00-11:00", clicks=totalClicks));</code></pre>
+
+    <h4>RocksDB Storage Architecture (LSM-Tree)</h4>
+    <table>
+      <tr><th>Layer</th><th>Location</th><th>Size</th><th>Purpose</th></tr>
+      <tr><td><strong>MemTable</strong></td><td>JVM off-heap memory</td><td>~64MB per CF</td><td>Write buffer &mdash; all writes go here first (fast)</td></tr>
+      <tr><td><strong>Block Cache</strong></td><td>JVM off-heap memory</td><td>Configurable</td><td>LRU read cache for recently accessed SST blocks</td></tr>
+      <tr><td><strong>L0 SST Files</strong></td><td>Local SSD</td><td>Varies</td><td>Flushed MemTables &mdash; unsorted, may overlap</td></tr>
+      <tr><td><strong>L1-L6 SST Files</strong></td><td>Local SSD</td><td>Grows 10x per level</td><td>Sorted, non-overlapping &mdash; created by compaction</td></tr>
+      <tr><td><strong>Checkpoint</strong></td><td>HDFS (remote)</td><td>Full state copy</td><td>Incremental: only new SST files uploaded since last checkpoint</td></tr>
+    </table>
+
+    <h3>Where Is State Stored?</h3>
+    <div class="grid2">
+      <div class="card flink-border">
+        <h4 class="highlight">During Normal Operation</h4>
+        <p style="color:var(--text-muted);">State lives in <strong>RocksDB on the local SSD</strong> of the TaskManager node. RocksDB is embedded in the Flink process (not a separate database). Each keyed operator has its own RocksDB instance. State is local, fast, and ephemeral (lost if the node dies).</p>
+      </div>
+      <div class="card blue-border">
+        <h4 class="blue">During Checkpoints</h4>
+        <p style="color:var(--text-muted);">Periodically (e.g., every 1-5 minutes), Flink snapshots all RocksDB state to <strong>HDFS</strong> (remote distributed storage). This is the durable copy. On failure, Flink restores from the latest checkpoint on HDFS. Incremental checkpoints only upload new SST files, making them fast.</p>
+      </div>
+    </div>
+
+    <h3>Stateless vs Stateful Operators</h3>
+    <table>
+      <tr><th>Operator Type</th><th>Uses RocksDB?</th><th>Examples</th><th>What It Does</th></tr>
+      <tr><td><strong>Stateless</strong></td><td>No</td><td><code>map</code>, <code>filter</code>, <code>flatMap</code></td><td>Transforms each record independently. No memory between records.</td></tr>
+      <tr><td><strong>Keyed Stateful</strong></td><td>Yes</td><td><code>keyBy().window()</code>, <code>keyBy().process()</code></td><td>Accumulates state per key. RocksDB stores: window contents, counters, join buffers.</td></tr>
+      <tr><td><strong>Operator State</strong></td><td>Optional</td><td>Kafka source (offset tracking)</td><td>State per parallel subtask (not per key). Can use heap or RocksDB.</td></tr>
+    </table>
+  </div>
+
+  <!-- SECTION 3c: How a Job Gets Split -->
+  <div class="section" id="s3c">
+    <div class="section-num">Deep Dive</div>
+    <h2>How a Job Gets Split into Parallel Tasks</h2>
+
+    <p>When you submit a Flink job, your code goes through <strong>three compilation stages</strong> before it runs on the cluster. Understanding this explains how one job becomes hundreds of parallel tasks.</p>
+
+    <div class="diagram-box">
+      <img src="images/sd_flink_07_job_split.png" alt="How a Flink Job Gets Split">
+      <div class="caption">Fig 7: StreamGraph &rarr; JobGraph &rarr; ExecutionGraph: how your code becomes parallel tasks</div>
+    </div>
+
+    <h3>Stage 1: StreamGraph (Logical Plan)</h3>
+    <p>Your code defines a chain of operators: <code>Source → Map → Filter → KeyBy → Window → Sink</code>. This is the <strong>StreamGraph</strong> &mdash; a logical representation with no parallelism information. Each node is one operator with your user function attached.</p>
+
+    <h3>Stage 2: JobGraph (Optimized Plan)</h3>
+    <p>Flink's optimizer <strong>chains operators</strong> that can run in the same thread. Chaining happens when:</p>
+    <ul>
+      <li>Operators have the <strong>same parallelism</strong></li>
+      <li>They're in the <strong>same slot sharing group</strong></li>
+      <li>They have a <strong>forward connection</strong> (no shuffle/keyBy between them)</li>
+    </ul>
+    <p>Example: <code>Source + Map + Filter</code> become <strong>one chained vertex</strong>. This eliminates serialization/deserialization between them &mdash; records stay as Java objects in the same thread. The <code>KeyBy</code> breaks the chain because it requires a network shuffle.</p>
+
+    <h3>Stage 3: ExecutionGraph (Physical Plan)</h3>
+    <p>Each vertex in the JobGraph is expanded by its <strong>parallelism</strong>. If parallelism=3:</p>
+
+    <div class="card" style="margin:20px 0;">
+      <pre><code>// With parallelism = 3:
+
+[Source+Map+Filter] → 3 subtasks (each reads 1 Kafka partition)
+   Subtask 0: reads partition 0
+   Subtask 1: reads partition 1
+   Subtask 2: reads partition 2
+
+   ↓ KeyBy (hash partition by member_id) ↓
+
+[Window+Aggregate] → 3 subtasks (each owns a key range)
+   Subtask 0: keys where hash(key) % 3 == 0
+   Subtask 1: keys where hash(key) % 3 == 1
+   Subtask 2: keys where hash(key) % 3 == 2
+
+   ↓ Forward ↓
+
+[Sink] → 3 subtasks
+   Subtask 0, 1, 2
+
+Total: 9 subtasks = 9 threads across the cluster</code></pre>
+    </div>
+
+    <h3>Slot Sharing: How Subtasks Map to Slots</h3>
+    <p>By default, Flink uses <strong>slot sharing</strong> &mdash; subtasks from <em>different</em> operators can share the same slot. This means one slot runs a complete pipeline slice:</p>
+
+    <table>
+      <tr><th>TaskManager</th><th>Slot</th><th>What's Running</th></tr>
+      <tr><td>TM 1</td><td>Slot 1</td><td><code>Source0</code> + <code>Window0</code> + <code>Sink0</code> (all in one JVM thread pool)</td></tr>
+      <tr><td>TM 2</td><td>Slot 2</td><td><code>Source1</code> + <code>Window1</code> + <code>Sink1</code></td></tr>
+      <tr><td>TM 3</td><td>Slot 3</td><td><code>Source2</code> + <code>Window2</code> + <code>Sink2</code></td></tr>
+    </table>
+
+    <p>This is why a job with parallelism=3 needs only <strong>3 slots</strong> (not 9), even though it has 9 subtasks. Each slot runs one "pipeline slice" from source to sink.</p>
+
+    <div class="callout info">
+      <strong class="blue">Key Insight: Parallelism = Number of Slots Needed</strong>
+      The number of slots your job needs equals its <strong>maximum operator parallelism</strong>, not the total number of subtasks. This is because slot sharing packs a full pipeline into each slot.
+    </div>
+
+    <h3>The JobManager and TaskManager Roles in This</h3>
+    <div class="grid2">
+      <div class="card flink-border">
+        <h4 class="highlight">JobManager = The Brain</h4>
+        <ul style="color:var(--text-muted);">
+          <li><strong>Compiles</strong> your code through all 3 stages (StreamGraph → JobGraph → ExecutionGraph)</li>
+          <li><strong>Schedules</strong> subtasks to TaskManager slots</li>
+          <li><strong>Coordinates checkpoints</strong> &mdash; tells all operators when to snapshot</li>
+          <li><strong>Handles failures</strong> &mdash; detects failed TaskManagers, reschedules subtasks, restores from checkpoints</li>
+          <li><strong>Serves the Web UI</strong> at port 8081</li>
+          <li>Runs as <strong>1 pod</strong> on Kubernetes (with HA standby)</li>
+        </ul>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">TaskManager = The Muscle</h4>
+        <ul style="color:var(--text-muted);">
+          <li><strong>Executes subtasks</strong> &mdash; runs your user functions (map, filter, aggregate)</li>
+          <li><strong>Manages state</strong> &mdash; owns the RocksDB instances for keyed operators</li>
+          <li><strong>Exchanges data</strong> &mdash; sends records to other TMs during shuffles (keyBy)</li>
+          <li><strong>Reports health</strong> to JobManager via heartbeats</li>
+          <li><strong>Performs checkpoints</strong> &mdash; snapshots RocksDB to HDFS on command</li>
+          <li>Runs as <strong>N pods</strong> on Kubernetes (N = parallelism / slots-per-TM)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3d: Brooklin vs Flink -->
+  <div class="section" id="s3d">
+    <div class="section-num">Deep Dive</div>
+    <h2>Brooklin vs Flink: Ingestion vs Processing</h2>
+
+    <p>Brooklin and Flink are <strong>completely different tools</strong> that work <strong>together</strong> in the same data pipeline. Think of it as: <strong>Brooklin is the truck that delivers raw materials; Flink is the factory that transforms them into products.</strong></p>
+
+    <div class="diagram-box">
+      <img src="images/sd_flink_08_brooklin.png" alt="Brooklin vs Flink">
+      <div class="caption">Fig 8: Brooklin handles data ingestion (CDC); Flink handles stream processing. They work together.</div>
+    </div>
+
+    <h3>What Is Brooklin?</h3>
+    <p><strong>Brooklin</strong> is LinkedIn's streaming ingestion and <strong>Change Data Capture (CDC)</strong> platform. Its sole job is to <em>reliably move data from sources to destinations</em> with minimal transformation.</p>
+
+    <div class="card" style="margin:20px 0;">
+      <h4 class="orange">Brooklin Does Two Things:</h4>
+      <ol style="color:var(--text-muted);">
+        <li><strong>CDC (Change Data Capture):</strong> Watches databases (Espresso, Oracle, MySQL) for INSERT/UPDATE/DELETE operations and publishes each change as an event to a Kafka topic called an "RC topic" (Record Change topic).</li>
+        <li><strong>Bootstrap:</strong> Takes periodic full database snapshots, stores them as Avro files on HDFS, and makes them available so consumers can initialize their state from a complete snapshot before switching to the live CDC stream.</li>
+      </ol>
+    </div>
+
+    <h3>Side-by-Side Comparison</h3>
+    <table>
+      <tr><th>Aspect</th><th>Brooklin</th><th>Flink</th></tr>
+      <tr><td><strong>Purpose</strong></td><td>Move data from A to B (ingestion)</td><td>Transform and compute on data streams</td></tr>
+      <tr><td><strong>Built By</strong></td><td>LinkedIn</td><td>TU Berlin / Ververica</td></tr>
+      <tr><td><strong>Processing</strong></td><td>Minimal &mdash; no transformation, just delivery</td><td>Rich &mdash; filter, join, window, aggregate, ML</td></tr>
+      <tr><td><strong>State</strong></td><td>Stateless (just moves records)</td><td>Stateful (RocksDB for windows, joins, counters)</td></tr>
+      <tr><td><strong>Input Sources</strong></td><td>Espresso, Oracle, MySQL, Kafka, HDFS</td><td>Kafka topics (often from Brooklin!)</td></tr>
+      <tr><td><strong>Output</strong></td><td>Kafka topics</td><td>Kafka, Espresso, Venice, Pinot, HDFS</td></tr>
+      <tr><td><strong>SLA</strong></td><td>&lt; 3 min latency PP99.9</td><td>Millisecond latency, exactly-once</td></tr>
+      <tr><td><strong>Analogy</strong></td><td>Postal service (delivers mail)</td><td>Factory (processes raw materials)</td></tr>
+    </table>
+
+    <h3>How They Work Together</h3>
+    <pre><code>// Typical pipeline at LinkedIn:
+
+Espresso DB (member profiles)
+    ↓ Brooklin CDC captures INSERT/UPDATE/DELETE
+    ↓ Publishes to Kafka topic "member-changes"
+    
+Kafka topic "member-changes"
+    ↓ Flink reads from this topic
+    ↓ Joins with click-stream data from another Kafka topic
+    ↓ Computes features: "member X clicked Y items in last hour"
+    ↓ Writes to Venice (serving store for ML models)
+    
+Venice serves features to ML models for feed ranking</code></pre>
+
+    <div class="callout info">
+      <strong class="blue">Key Difference</strong>
+      Brooklin answers: "What changed in my database?" (CDC events).<br>
+      Flink answers: "What does this stream of changes <em>mean</em>?" (aggregations, joins, patterns).
+    </div>
+  </div>
+
+  <!-- SECTION 3e: YARN -->
+  <div class="section" id="s3e">
+    <div class="section-num">Deep Dive</div>
+    <h2>YARN: The Legacy Resource Manager</h2>
+
+    <p><strong>YARN</strong> (Yet Another Resource Negotiator) is part of Hadoop. It's the system that decides which machines run which jobs in a cluster. Think of YARN as the <strong>office manager</strong> who assigns desks (resources) to employees (applications).</p>
+
+    <div class="diagram-box">
+      <img src="images/sd_flink_09_yarn.png" alt="YARN Architecture">
+      <div class="caption">Fig 9: YARN architecture &mdash; ResourceManager, ApplicationMaster, NodeManagers, and Containers</div>
+    </div>
+
+    <h3>How YARN Works</h3>
+    <div class="walkthrough">
+      <h4>YARN Job Lifecycle</h4>
+      <ol>
+        <li><strong>Client submits job</strong> to the <strong>ResourceManager (RM)</strong> &mdash; the cluster master. "I need to run a Flink/Samza job."</li>
+        <li><strong>RM allocates a container</strong> on one of the worker nodes for the <strong>ApplicationMaster (AM)</strong>. The AM is the per-job coordinator.</li>
+        <li><strong>ApplicationMaster starts</strong> and says: "I need 10 containers with 4 CPU cores and 8GB RAM each for my TaskManagers."</li>
+        <li><strong>RM checks available resources</strong> across all NodeManagers and allocates containers on machines that have capacity.</li>
+        <li><strong>AM launches tasks</strong> inside the containers. For Flink, this means starting TaskManager JVM processes. For Samza, this means starting stream processing tasks.</li>
+        <li><strong>Tasks process data</strong>. AM monitors health, replaces failed containers, and reports progress.</li>
+        <li><strong>On completion or failure</strong>, containers are released back to the cluster.</li>
+      </ol>
+    </div>
+
+    <h3>YARN Components Explained</h3>
+    <table>
+      <tr><th>Component</th><th>Count</th><th>Role</th><th>Analogy</th></tr>
+      <tr><td><strong>ResourceManager</strong></td><td>1 per cluster</td><td>Global scheduler &mdash; allocates CPU/memory to applications</td><td>Office manager</td></tr>
+      <tr><td><strong>NodeManager</strong></td><td>1 per machine</td><td>Local agent &mdash; monitors resource usage, launches containers</td><td>Floor supervisor</td></tr>
+      <tr><td><strong>ApplicationMaster</strong></td><td>1 per job</td><td>Per-job coordinator &mdash; requests containers, monitors tasks</td><td>Project manager</td></tr>
+      <tr><td><strong>Container</strong></td><td>Many per machine</td><td>A slice of a machine's resources (CPU + RAM) running one process</td><td>A desk with a computer</td></tr>
+    </table>
+
+    <h3>Does LinkedIn Use YARN for Flink?</h3>
+    <div class="grid2">
+      <div class="card red-border">
+        <h4 class="red">Samza on YARN (Legacy)</h4>
+        <p style="color:var(--text-muted);">Historically, Samza ran on YARN. The Samza ApplicationMaster managed stream processing containers. YARN handled resource allocation and container lifecycle. Some Samza workloads still run on YARN today.</p>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">Flink on Kubernetes (Current)</h4>
+        <p style="color:var(--text-muted);">At LinkedIn, <strong>Flink runs on Kubernetes (Nimbus), NOT on YARN</strong>. The Flink Operator replaces YARN's ApplicationMaster. K8s Deployments replace YARN Containers. This gives better isolation, scaling, and integration with LinkedIn's cloud-native infrastructure.</p>
+      </div>
+    </div>
+
+    <h3>YARN vs Kubernetes for Stream Processing</h3>
+    <table>
+      <tr><th>Feature</th><th>YARN</th><th>Kubernetes</th></tr>
+      <tr><td>Resource unit</td><td>Container (CPU + RAM)</td><td>Pod (CPU + RAM + GPU + storage)</td></tr>
+      <tr><td>Isolation</td><td>JVM-level (same OS, shared libs)</td><td>Container-level (separate filesystem, network)</td></tr>
+      <tr><td>Scaling</td><td>Request more containers from RM</td><td>HPA / update Deployment replicas</td></tr>
+      <tr><td>Failure recovery</td><td>AM detects, requests new container</td><td>K8s controller restarts pod automatically</td></tr>
+      <tr><td>Ecosystem</td><td>Hadoop-centric</td><td>Cloud-native, everything runs on K8s</td></tr>
+      <tr><td>Networking</td><td>Host networking (ports conflicts)</td><td>Pod networking (each pod gets its own IP)</td></tr>
+      <tr><td>LinkedIn status</td><td class="orange">Legacy</td><td class="green">Current standard</td></tr>
+    </table>
+  </div>
+
+  <!-- SECTION 3f: Writing Flink Jobs -->
+  <div class="section" id="s3f">
+    <div class="section-num">Deep Dive</div>
+    <h2>Writing Flink Jobs: Code Examples &amp; Use Cases</h2>
+
+    <p>If you want to use Flink, you have two choices: write <strong>SQL</strong> (easier, recommended for most cases) or write <strong>Java/Scala code</strong> using the DataStream API (more powerful, more complex).</p>
+
+    <h3>Option 1: Flink SQL (Recommended for Most Use Cases)</h3>
+    <p>You write standard SQL statements. Flink handles all the complexity of distributed execution, state management, and fault tolerance. At LinkedIn, this runs on the Managed Flink SQL Platform (<code>go/flinksql</code>).</p>
+
+    <pre><code>-- USE CASE: Real-time click aggregation per member per hour
+-- This is all you write. Flink handles everything else.
+
+-- Step 1: Define the source table (reads from Kafka)
+CREATE TABLE clicks (
+  member_id  BIGINT,
+  page_url   STRING,
+  click_time TIMESTAMP(3),
+  WATERMARK FOR click_time AS click_time - INTERVAL '5' SECOND
+) WITH (
+  'connector' = 'kafka',
+  'topic'     = 'user-clicks',
+  'properties.bootstrap.servers' = 'kafka:9092',
+  'format'    = 'avro'
+);
+
+-- Step 2: Define the sink table (writes to Kafka)
+CREATE TABLE hourly_clicks (
+  member_id   BIGINT,
+  hour_start  TIMESTAMP(3),
+  total_clicks BIGINT,
+  PRIMARY KEY (member_id, hour_start) NOT ENFORCED
+) WITH (
+  'connector' = 'upsert-kafka',
+  'topic'     = 'hourly-click-counts',
+  'key.format' = 'json',
+  'value.format' = 'avro'
+);
+
+-- Step 3: Write the processing logic
+INSERT INTO hourly_clicks
+SELECT
+  member_id,
+  TUMBLE_START(click_time, INTERVAL '1' HOUR) AS hour_start,
+  COUNT(*) AS total_clicks
+FROM clicks
+GROUP BY member_id, TUMBLE(click_time, INTERVAL '1' HOUR);</code></pre>
+
+    <h3>Option 2: DataStream API (Java)</h3>
+    <p>More powerful, more flexible, but more code. Use this when SQL can't express your logic (complex event processing, custom windowing, ML feature engineering).</p>
+
+    <pre><code>// USE CASE: Detect fraud - alert if a member clicks > 100 times in 5 minutes
+
+public class FraudDetector {
+  public static void main(String[] args) throws Exception {
+    
+    // 1. Create the execution environment
+    StreamExecutionEnvironment env = 
+        StreamExecutionEnvironment.getExecutionEnvironment();
+    env.enableCheckpointing(60000); // checkpoint every 60s
+    
+    // 2. Read from Kafka
+    KafkaSource&lt;ClickEvent&gt; source = KafkaSource
+        .&lt;ClickEvent&gt;builder()
+        .setBootstrapServers("kafka:9092")
+        .setTopics("user-clicks")
+        .setValueOnlyDeserializer(new ClickEventDeserializer())
+        .build();
+    
+    DataStream&lt;ClickEvent&gt; clicks = env.fromSource(
+        source, WatermarkStrategy
+            .&lt;ClickEvent&gt;forBoundedOutOfOrderness(Duration.ofSeconds(5))
+            .withTimestampAssigner((event, ts) -&gt; event.getTimestamp()),
+        "Kafka Source"
+    );
+    
+    // 3. Key by member, window 5 minutes, count clicks
+    DataStream&lt;Alert&gt; alerts = clicks
+        .keyBy(click -&gt; click.getMemberId())         // partition by member
+        .window(TumblingEventTimeWindows.of(Time.minutes(5)))  // 5-min window
+        .aggregate(new ClickCounter())                 // count clicks
+        .filter(result -&gt; result.getCount() &gt; 100)    // threshold
+        .map(result -&gt; new Alert(result.getMemberId(), 
+             "Suspicious: " + result.getCount() + " clicks in 5 min"));
+    
+    // 4. Write alerts to Kafka
+    alerts.sinkTo(KafkaSink.&lt;Alert&gt;builder()
+        .setBootstrapServers("kafka:9092")
+        .setRecordSerializer(new AlertSerializer("fraud-alerts"))
+        .build());
+    
+    // 5. Execute!
+    env.execute("Fraud Detection Pipeline");
+  }
+}</code></pre>
+
+    <h3>When to Use What</h3>
+    <table>
+      <tr><th>Use Case</th><th>Approach</th><th>Why</th></tr>
+      <tr><td>Aggregate metrics per window</td><td><strong>Flink SQL</strong></td><td>Simple GROUP BY + TUMBLE/HOP window</td></tr>
+      <tr><td>Stream-to-table joins</td><td><strong>Flink SQL</strong></td><td>SQL temporal joins are concise</td></tr>
+      <tr><td>Kafka → Pinot ingestion</td><td><strong>Flink SQL</strong></td><td>Just SELECT + INSERT, minimal logic</td></tr>
+      <tr><td>Fraud / anomaly detection</td><td><strong>DataStream API</strong></td><td>Complex pattern matching, custom state</td></tr>
+      <tr><td>ML feature engineering</td><td><strong>DataStream API</strong></td><td>Custom aggregations, async lookups, sliding windows</td></tr>
+      <tr><td>Multi-stream joins with custom logic</td><td><strong>DataStream API</strong></td><td>CoProcessFunction for fine-grained control</td></tr>
+      <tr><td>CDC processing</td><td><strong>Flink SQL</strong></td><td>Built-in CDC format support (debezium, canal)</td></tr>
+      <tr><td>ETL pipelines</td><td><strong>Flink SQL</strong></td><td>SELECT/INSERT with transformations</td></tr>
+    </table>
+
+    <h3>Top Use Cases at LinkedIn</h3>
+    <div class="grid3">
+      <div class="card flink-border">
+        <h4 class="highlight">Feed Features</h4>
+        <p style="color:var(--text-muted);">Compute real-time engagement features (clicks, likes, shares per post) for feed ranking ML models.</p>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">Pinot Ingestion</h4>
+        <p style="color:var(--text-muted);">Transform and route Kafka events into Apache Pinot OLAP tables for real-time analytics dashboards.</p>
+      </div>
+      <div class="card blue-border">
+        <h4 class="blue">Ads Calibration</h4>
+        <p style="color:var(--text-muted);">Nearline processing of ad impression/click streams to calibrate ML models for ad targeting accuracy.</p>
+      </div>
+      <div class="card purple-border">
+        <h4 class="purple">Search Indexing</h4>
+        <p style="color:var(--text-muted);">Process entity changes from Brooklin CDC and update search indices in near-real-time.</p>
+      </div>
+      <div class="card orange-border">
+        <h4 class="orange">Data Sync</h4>
+        <p style="color:var(--text-muted);">Synchronize data between Espresso, Venice, and other stores using CDC events processed through Flink.</p>
+      </div>
+      <div class="card red-border">
+        <h4 class="red">Metrics Aggregation</h4>
+        <p style="color:var(--text-muted);">Aggregate raw metric events into time-windowed summaries for monitoring and alerting pipelines.</p>
+      </div>
+    </div>
   </div>
 
   <!-- SECTION 4: LI-Flink Platform -->
