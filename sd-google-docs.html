@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Google Docs</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #4285F4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a30 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.blue { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.blue:hover { background: rgba(66,133,244,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Google Docs</span></h1>
+    <p>A deep dive into real-time collaborative editing &mdash; operational transformation, CRDTs, presence, conflict resolution, and building an editor that scales to millions of simultaneous users.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-google-docs.html" class="blue">Design Google Docs (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#overview">Overview &amp; Scale Requirements</a></li>
+    <li><a href="#architecture">High-Level Architecture</a>
+      <ul class="sub">
+        <li>Collaboration Service, Document Storage, Presence Service</li>
+        <li>WebSocket connection layer</li>
+      </ul>
+    </li>
+    <li><a href="#conflict">Conflict Resolution Deep Dive</a>
+      <ul class="sub">
+        <li>Operational Transformation (OT)</li>
+        <li>CRDTs (Conflict-free Replicated Data Types)</li>
+        <li>OT vs CRDT comparison</li>
+      </ul>
+    </li>
+    <li><a href="#storage">Document Storage &amp; Versioning</a></li>
+    <li><a href="#presence">Presence &amp; Cursors</a></li>
+    <li><a href="#linkedin">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: Overview -->
+<!-- ============================================================ -->
+<div class="section" id="overview">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale Requirements</h2>
+
+  <p>Google Docs enables multiple users to edit a shared document simultaneously from anywhere in the world, with changes appearing in real time for all participants. The core challenge is <strong>conflict resolution</strong>: when two users type at the same position at the same time, the system must produce a consistent, predictable result for everyone.</p>
+
+  <h3>Functional Requirements</h3>
+  <div class="card highlight">
+    <ul>
+      <li><strong>Real-time collaborative editing</strong> &mdash; multiple users edit the same document concurrently with sub-second convergence</li>
+      <li><strong>Rich text formatting</strong> &mdash; bold, italic, headings, lists, tables, images, comments</li>
+      <li><strong>Presence awareness</strong> &mdash; see who is in the document, their cursor positions and selections</li>
+      <li><strong>Version history</strong> &mdash; browse and restore any previous version of the document</li>
+      <li><strong>Offline editing</strong> &mdash; queue changes locally and sync when connectivity returns</li>
+      <li><strong>Access control</strong> &mdash; owner, editor, commenter, viewer permission levels</li>
+    </ul>
+  </div>
+
+  <h3>Scale Numbers</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">100M+</div>
+      <div class="label">Active Documents</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">50</div>
+      <div class="label">Concurrent Editors / Doc</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt;50ms</div>
+      <div class="label">Operation Delivery Latency</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~10M</div>
+      <div class="label">Concurrent WebSocket Connections</div>
+    </div>
+  </div>
+
+  <h3>Non-Functional Requirements</h3>
+  <div class="card warn">
+    <ul>
+      <li><strong>Consistency</strong> &mdash; all clients must converge to the same document state (eventual consistency with strong convergence guarantee)</li>
+      <li><strong>Low latency</strong> &mdash; operations must be applied locally immediately and propagated to peers within 50ms</li>
+      <li><strong>Availability</strong> &mdash; users must be able to keep editing even if some backend nodes fail</li>
+      <li><strong>Durability</strong> &mdash; no edit is ever lost; every keystroke is persisted in the operation log</li>
+      <li><strong>Partition tolerance</strong> &mdash; offline editing must merge cleanly when the user reconnects</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: Architecture -->
+<!-- ============================================================ -->
+<div class="section" id="architecture">
+  <div class="section-num">Section 2</div>
+  <h2>High-Level Architecture</h2>
+
+  <p>The system is composed of four major subsystems that work together to provide seamless real-time collaboration.</p>
+
+  <h3>Core Components</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Collaboration Service</h4>
+      <p>The brain of real-time editing. Receives operations from clients over WebSocket, applies the <strong>transformation algorithm</strong> (OT or CRDT), and broadcasts the transformed operations to all other participants. Maintains the authoritative document state in memory.</p>
+      <p style="margin-top:10px"><span class="linkedin-tag">Stateful</span> <span class="linkedin-tag">Per-Document Affinity</span></p>
+    </div>
+    <div class="card highlight">
+      <h4>Document Storage Service</h4>
+      <p>Handles persistent storage of document content, metadata, and the operation log. Periodically <strong>snapshots</strong> the in-memory state to durable storage. Serves document loads and version history queries.</p>
+      <p style="margin-top:10px"><span class="linkedin-tag">Espresso / Spanner</span> <span class="linkedin-tag">Blob Store</span></p>
+    </div>
+    <div class="card success">
+      <h4>Presence Service</h4>
+      <p>Tracks which users have a document open, their cursor positions, text selections, and typing indicators. Broadcasts presence updates at a lower priority than document operations to save bandwidth.</p>
+      <p style="margin-top:10px"><span class="linkedin-tag">Ephemeral State</span> <span class="linkedin-tag">Pub/Sub</span></p>
+    </div>
+    <div class="card success">
+      <h4>WebSocket Gateway</h4>
+      <p>Manages persistent WebSocket connections from clients. Handles authentication, heartbeats, reconnection, and message routing. Routes messages to the correct Collaboration Service instance based on document ID.</p>
+      <p style="margin-top:10px"><span class="linkedin-tag">Connection Pooling</span> <span class="linkedin-tag">Sticky Sessions</span></p>
+    </div>
+  </div>
+
+  <div class="diagram">
+    <img src="images/sd_googledocs_01_architecture.png" alt="Google Docs High-Level Architecture Diagram">
+    <div class="caption">Figure 1 &mdash; High-level architecture: clients connect via WebSocket Gateway to Collaboration Service, backed by Document Storage and Presence Service.</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Architecture Walkthrough</h4>
+    <ol>
+      <li><strong>Client opens document</strong> &mdash; Browser establishes a WebSocket connection through the Gateway. The Gateway authenticates the user and routes the connection to the Collaboration Service instance that owns this document.</li>
+      <li><strong>Document load</strong> &mdash; Collaboration Service checks if the document is already in memory. If not, it loads the latest snapshot from Document Storage and replays any operations since that snapshot from the operation log.</li>
+      <li><strong>User types</strong> &mdash; The client applies the operation locally (optimistic update), then sends it over WebSocket. The operation includes the client&rsquo;s current revision number.</li>
+      <li><strong>Server transforms</strong> &mdash; Collaboration Service receives the operation, transforms it against any concurrent operations that happened since the client&rsquo;s revision, applies it to the authoritative state, and assigns it a new server revision.</li>
+      <li><strong>Broadcast</strong> &mdash; The transformed operation is broadcast to all other connected clients. Each client transforms the incoming operation against its local pending operations and applies it.</li>
+      <li><strong>Persistence</strong> &mdash; The operation is appended to the operation log. Periodically (every N operations or T seconds), a new snapshot is written to Document Storage.</li>
+      <li><strong>Presence updates</strong> &mdash; Cursor positions, selections, and typing indicators are broadcast through the Presence Service at a throttled rate (e.g., every 100ms).</li>
+    </ol>
+  </div>
+
+  <h3>Connection Management</h3>
+  <div class="card">
+    <p>Each document has <strong>affinity</strong> to a single Collaboration Service instance. This avoids distributed consensus on every keystroke. If the instance fails, a new one is elected and it replays from the operation log.</p>
+    <table>
+      <tr><th>Concern</th><th>Strategy</th></tr>
+      <tr><td>Document &rarr; Server mapping</td><td>Consistent hashing on document ID; stored in a coordination service (ZooKeeper / etcd)</td></tr>
+      <tr><td>Reconnection</td><td>Client sends its last known revision; server replays missed operations</td></tr>
+      <tr><td>Heartbeat</td><td>Ping/pong every 30s; close connection after 3 missed heartbeats</td></tr>
+      <tr><td>Horizontal scaling</td><td>Each server handles ~10K documents; add servers and rebalance with consistent hashing</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: Conflict Resolution -->
+<!-- ============================================================ -->
+<div class="section" id="conflict">
+  <div class="section-num">Section 3</div>
+  <h2>Conflict Resolution Deep Dive</h2>
+
+  <p>This is the most technically challenging aspect of collaborative editing. When two users edit the same region at the same time, the system must ensure <strong>convergence</strong> &mdash; all clients end up with the same document. There are two main approaches: <strong>Operational Transformation (OT)</strong> and <strong>CRDTs</strong>.</p>
+
+  <!-- OT -->
+  <h3>Operational Transformation (OT)</h3>
+
+  <p>OT is the approach used by Google Docs. The core idea: when two concurrent operations conflict, <strong>transform</strong> one against the other so that applying them in either order produces the same result.</p>
+
+  <h4>Operations</h4>
+  <div class="card highlight">
+    <p>All document changes are expressed as a sequence of three primitive operations:</p>
+    <ul>
+      <li><code>insert(position, char)</code> &mdash; insert a character at a given position</li>
+      <li><code>delete(position)</code> &mdash; delete the character at a given position</li>
+      <li><code>retain(count)</code> &mdash; skip forward (no change) &mdash; used in compound operations</li>
+    </ul>
+  </div>
+
+  <h4>Transformation Example: Insert vs Insert</h4>
+  <div class="card">
+    <p>Starting document: <code>"ABCD"</code></p>
+    <p><strong>User A</strong> inserts <code>"X"</code> at position 1 &rarr; <code>insert(1, "X")</code></p>
+    <p><strong>User B</strong> inserts <code>"Y"</code> at position 3 &rarr; <code>insert(3, "Y")</code></p>
+    <p style="margin-top:12px">Without transformation, applying A then B: <code>"A<strong>X</strong>BC<strong>Y</strong>D"</code> &mdash; but B&rsquo;s position 3 is now wrong because A shifted characters right.</p>
+    <p style="margin-top:8px"><strong>Transformation:</strong> Since A&rsquo;s insert position (1) &lt; B&rsquo;s insert position (3), B&rsquo;s position shifts right by 1:</p>
+    <pre>transform(insert(1,"X"), insert(3,"Y"))
+  → insert(1,"X"), insert(<strong>4</strong>,"Y")
+
+Result: "A<strong>X</strong>BCD" → "AX BC<strong>Y</strong>D" = "AXBCYD" ✓</pre>
+  </div>
+
+  <h4>Transformation Example: Insert vs Delete</h4>
+  <div class="card">
+    <p>Starting document: <code>"ABCD"</code></p>
+    <p><strong>User A</strong> inserts <code>"X"</code> at position 1 &rarr; <code>insert(1, "X")</code></p>
+    <p><strong>User B</strong> deletes at position 2 &rarr; <code>delete(2)</code> (removes <code>"C"</code>)</p>
+    <pre>transform(insert(1,"X"), delete(2))
+  → insert(1,"X"), delete(<strong>3</strong>)
+  // B's delete shifts right because A inserted before it
+
+Result: "A<strong>X</strong>BCD" → "AXB<del>C</del>D" = "AXBD" ✓</pre>
+  </div>
+
+  <h4>Server-Side Transformation Algorithm</h4>
+  <div class="card warn">
+    <p>The server maintains a linear <strong>revision history</strong>. Each operation from a client includes the revision it was based on.</p>
+    <pre>function handleOperation(clientOp, clientRevision):
+    serverRevision = currentRevision()
+
+    // Transform against all operations that happened
+    // between clientRevision and serverRevision
+    for each serverOp in ops[clientRevision .. serverRevision]:
+        clientOp = transform(clientOp, serverOp)
+
+    // Apply the transformed operation
+    apply(clientOp)
+    broadcast(clientOp)
+    appendToLog(clientOp)
+    incrementRevision()</pre>
+    <p style="margin-top:12px">The server acts as the <strong>single source of truth</strong>. It serializes all operations into a total order, transforming late-arriving operations against anything it missed.</p>
+  </div>
+
+  <h4>Cursor Handling in OT</h4>
+  <div class="card">
+    <p>Cursor positions are treated as metadata attached to operations. When an operation is transformed, cursor positions are transformed too:</p>
+    <ul>
+      <li>If an <code>insert</code> happens <em>before</em> the cursor &rarr; shift cursor right by 1</li>
+      <li>If a <code>delete</code> happens <em>before</em> the cursor &rarr; shift cursor left by 1</li>
+      <li>If the cursor is inside a deleted range &rarr; move cursor to the start of the deletion</li>
+    </ul>
+  </div>
+
+  <!-- CRDT -->
+  <h3>CRDTs (Conflict-free Replicated Data Types)</h3>
+
+  <p>CRDTs take a fundamentally different approach: instead of transforming operations, they design the <strong>data structure itself</strong> so that concurrent operations <em>always commute</em> &mdash; order doesn&rsquo;t matter.</p>
+
+  <h4>How It Works: Unique Character IDs</h4>
+  <div class="card highlight">
+    <p>Every character in the document gets a <strong>globally unique, immutable ID</strong> that encodes its position relative to its neighbors:</p>
+    <pre>Document: "HELLO"
+
+Character → ID (simplified)
+  H → (site1, clock1)
+  E → (site1, clock2)
+  L → (site1, clock3)
+  L → (site1, clock4)
+  O → (site1, clock5)
+
+Insert "X" between E and L:
+  X → ID chosen between (site1,clock2) and (site1,clock3)
+  X.id = (site2, clock1) with position between E.id and L.id</pre>
+    <p style="margin-top:12px">Because IDs are unique and positions are defined relative to neighbors rather than by integer index, two users inserting at the &ldquo;same position&rdquo; will produce different IDs that sort deterministically.</p>
+  </div>
+
+  <h4>Key CRDT Properties</h4>
+  <div class="card success">
+    <ul>
+      <li><strong>Commutativity</strong> &mdash; operations can be applied in any order and the result is the same</li>
+      <li><strong>No central server required</strong> &mdash; peers can sync directly (peer-to-peer)</li>
+      <li><strong>Idempotency</strong> &mdash; applying the same operation twice has no effect</li>
+      <li><strong>Natural offline support</strong> &mdash; operations queue locally and merge automatically on reconnect</li>
+    </ul>
+    <p style="margin-top:12px">Popular CRDT algorithms for text: <strong>RGA</strong> (Replicated Growable Array), <strong>LSEQ</strong>, <strong>Logoot</strong>, <strong>Yjs</strong> (YATA algorithm).</p>
+  </div>
+
+  <!-- OT vs CRDT Comparison -->
+  <h3>OT vs CRDT Comparison</h3>
+
+  <table>
+    <tr>
+      <th>Aspect</th>
+      <th>Operational Transformation (OT)</th>
+      <th>CRDT</th>
+    </tr>
+    <tr>
+      <td><strong>Central server</strong></td>
+      <td>Required &mdash; server serializes operations into total order</td>
+      <td>Not required &mdash; can work peer-to-peer</td>
+    </tr>
+    <tr>
+      <td><strong>Consistency model</strong></td>
+      <td>Server determines canonical order; clients converge via transformation</td>
+      <td>Mathematically guaranteed convergence; operations commute</td>
+    </tr>
+    <tr>
+      <td><strong>Complexity</strong></td>
+      <td>Transform functions are error-prone; O(n&sup2;) pairs for n operation types</td>
+      <td>Data structure is complex; simpler operation handling</td>
+    </tr>
+    <tr>
+      <td><strong>Memory overhead</strong></td>
+      <td>Low &mdash; document is a plain string/tree</td>
+      <td>High &mdash; each character carries a unique ID and tombstones for deletes</td>
+    </tr>
+    <tr>
+      <td><strong>Offline support</strong></td>
+      <td>Difficult &mdash; long-diverged histories require many transformations</td>
+      <td>Natural &mdash; operations merge cleanly regardless of divergence time</td>
+    </tr>
+    <tr>
+      <td><strong>Latency</strong></td>
+      <td>Very low with a nearby server (&lt;50ms)</td>
+      <td>Low for P2P; can be higher for complex merges</td>
+    </tr>
+    <tr>
+      <td><strong>Proven at scale</strong></td>
+      <td>Google Docs, Google Wave (discontinued)</td>
+      <td>Figma, Apple Notes, Yjs ecosystem</td>
+    </tr>
+    <tr>
+      <td><strong>Undo/redo</strong></td>
+      <td>Complex &mdash; must transform undo against concurrent ops</td>
+      <td>Simpler &mdash; inverse operations commute naturally</td>
+    </tr>
+  </table>
+
+  <div class="card danger">
+    <h4>Interview Insight</h4>
+    <p>In an interview, pick <strong>OT with a central server</strong> for a Google Docs clone (proven, lower memory, Google&rsquo;s own choice). Pick <strong>CRDT</strong> if the interviewer emphasizes offline-first, peer-to-peer, or decentralized requirements. Know trade-offs of both.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: Document Storage -->
+<!-- ============================================================ -->
+<div class="section" id="storage">
+  <div class="section-num">Section 4</div>
+  <h2>Document Storage &amp; Versioning</h2>
+
+  <p>The storage layer must support both the real-time editing path (fast reads/writes) and the historical versioning path (browse any past version).</p>
+
+  <h3>Storage Architecture</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Real-Time In-Memory State</h4>
+      <p>The Collaboration Service holds the current document state in memory for active documents. This enables sub-millisecond operation application. Documents are evicted from memory after all editors disconnect (with a grace period).</p>
+    </div>
+    <div class="card highlight">
+      <h4>Operation Log (Append-Only)</h4>
+      <p>Every operation is appended to a durable, ordered log. This is the system of record. Operations are small (typically &lt;100 bytes) and written sequentially, making this very fast.</p>
+    </div>
+    <div class="card success">
+      <h4>Periodic Snapshots</h4>
+      <p>Full document snapshots are saved every <strong>N operations</strong> (e.g., every 100) or every <strong>T seconds</strong> (e.g., every 30s). Snapshots enable fast document loading &mdash; load snapshot + replay recent ops instead of replaying entire history.</p>
+    </div>
+    <div class="card success">
+      <h4>Version History</h4>
+      <p>Named versions (auto-saved checkpoints + user-created versions) reference specific operation log positions. Restoring a version creates a new operation that replaces the document content.</p>
+    </div>
+  </div>
+
+  <h3>Data Model</h3>
+  <div class="card">
+    <pre>// Document metadata
+{
+  doc_id:       "d_abc123",
+  title:        "Q4 Planning",
+  owner:        "user_42",
+  created_at:   "2024-01-15T09:00:00Z",
+  permissions:  { "user_42": "owner", "user_99": "editor", ... },
+  current_rev:  4827
+}
+
+// Operation log entry
+{
+  doc_id:    "d_abc123",
+  revision:  4827,
+  user_id:   "user_99",
+  timestamp: "2024-01-15T14:32:01.234Z",
+  ops:       [retain(42), insert("hello"), retain(1085)]
+}
+
+// Snapshot
+{
+  doc_id:    "d_abc123",
+  revision:  4800,
+  content:   "&lt;rich-text-tree-serialized&gt;",
+  size_bytes: 48210
+}</pre>
+  </div>
+
+  <h3>Compaction &amp; Garbage Collection</h3>
+  <div class="card warn">
+    <p>The operation log grows unboundedly without compaction. Strategies:</p>
+    <ul>
+      <li><strong>Snapshot-based truncation</strong> &mdash; after a snapshot at revision N, operations before N are eligible for archival to cold storage</li>
+      <li><strong>Tiered storage</strong> &mdash; recent ops in fast storage (SSD), older ops in blob/object store for version history</li>
+      <li><strong>Operation coalescing</strong> &mdash; consecutive single-character inserts by the same user can be merged into a single multi-character insert for storage efficiency</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: Presence & Cursors -->
+<!-- ============================================================ -->
+<div class="section" id="presence">
+  <div class="section-num">Section 5</div>
+  <h2>Presence &amp; Cursors</h2>
+
+  <p>Presence is what makes collaborative editing feel <em>alive</em>. Users need to see who else is in the document, where they&rsquo;re editing, and what they&rsquo;re selecting.</p>
+
+  <h3>Presence Data</h3>
+  <div class="card highlight">
+    <pre>// Presence update message
+{
+  user_id:    "user_99",
+  doc_id:     "d_abc123",
+  cursor_pos: 1247,
+  selection:  { start: 1240, end: 1260 },  // null if no selection
+  color:      "#E91E63",                     // unique per user
+  name:       "Alice Chen",
+  avatar_url: "https://...",
+  is_typing:  true,
+  last_seen:  "2024-01-15T14:32:05Z"
+}</pre>
+  </div>
+
+  <h3>Real-Time Cursor Positions</h3>
+  <div class="card">
+    <p>Each user&rsquo;s cursor is rendered as a colored line with a name label in every other client&rsquo;s editor. Implementation details:</p>
+    <ul>
+      <li><strong>Color assignment</strong> &mdash; each user gets a unique color from a predefined palette (12&ndash;16 colors); colors are assigned in join order and recycled when users leave</li>
+      <li><strong>Cursor transformation</strong> &mdash; when a remote operation arrives, all remote cursor positions must be transformed using the same OT/CRDT logic so cursors stay at the correct location</li>
+      <li><strong>Throttling</strong> &mdash; cursor position updates are batched and sent at most every 50&ndash;100ms to avoid flooding the WebSocket channel</li>
+    </ul>
+  </div>
+
+  <h3>Selection Highlights</h3>
+  <div class="card">
+    <p>When a user selects text, the selection range is broadcast to all peers and rendered as a translucent colored overlay matching the user&rsquo;s cursor color. Selections must also be transformed when remote operations shift character positions.</p>
+  </div>
+
+  <h3>Typing Indicators</h3>
+  <div class="card success">
+    <p>A small animated indicator (pulsing dot or subtle highlight) appears near a user&rsquo;s cursor when they are actively typing. Implementation:</p>
+    <ul>
+      <li>Set <code>is_typing = true</code> on first keystroke; reset a 2-second debounce timer on each keystroke</li>
+      <li>When the timer expires without a new keystroke, set <code>is_typing = false</code></li>
+      <li>This is purely cosmetic and does not affect the collaboration algorithm</li>
+    </ul>
+  </div>
+
+  <h3>Presence Architecture</h3>
+  <div class="card">
+    <table>
+      <tr><th>Property</th><th>Design Choice</th></tr>
+      <tr><td>State lifetime</td><td>Ephemeral &mdash; in-memory only, not persisted to disk</td></tr>
+      <tr><td>Delivery guarantee</td><td>Best-effort (latest-wins); missed updates are replaced by the next one</td></tr>
+      <tr><td>Channel</td><td>Same WebSocket as document ops, but lower priority; can be dropped under backpressure</td></tr>
+      <tr><td>User disconnect</td><td>Remove presence after 10s of no heartbeat; notify other users &ldquo;Alice left&rdquo;</td></tr>
+      <tr><td>Scale consideration</td><td>For a 50-editor document, presence is ~50 updates/sec; lightweight</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: LinkedIn Mapping & Interview -->
+<!-- ============================================================ -->
+<div class="section" id="linkedin">
+  <div class="section-num">Section 6</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>LinkedIn Technology Mapping</h3>
+  <p>How each Google Docs component maps to LinkedIn&rsquo;s infrastructure:</p>
+
+  <table>
+    <tr>
+      <th>Google Docs Component</th>
+      <th>LinkedIn Equivalent</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td>Document Storage (metadata, content)</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn&rsquo;s distributed document store; supports secondary indexes, change capture, and strong consistency per partition</td>
+    </tr>
+    <tr>
+      <td>WebSocket Gateway</td>
+      <td><span class="linkedin-tag">RTDP / Play Framework WebSocket</span></td>
+      <td>Real-Time Data Platform handles persistent connections; Play Framework powers LinkedIn&rsquo;s real-time messaging and notification push</td>
+    </tr>
+    <tr>
+      <td>Operation Log / Event Streaming</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>All operations appended to Kafka topics; provides durable, ordered, replayable event log with exactly-once semantics</td>
+    </tr>
+    <tr>
+      <td>Document Snapshots / Blob Storage</td>
+      <td><span class="linkedin-tag">Ambry</span></td>
+      <td>LinkedIn&rsquo;s distributed blob store for large immutable objects; ideal for document snapshots, images, and attachments</td>
+    </tr>
+    <tr>
+      <td>Presence Service</td>
+      <td><span class="linkedin-tag">RTDP Pub/Sub</span></td>
+      <td>Real-time presence can piggyback on RTDP&rsquo;s pub/sub channels; same infrastructure as &ldquo;active now&rdquo; indicators in LinkedIn Messaging</td>
+    </tr>
+    <tr>
+      <td>Access Control / Permissions</td>
+      <td><span class="linkedin-tag">ACL Service</span></td>
+      <td>Centralized authorization service; enforces who can view, edit, or share a document</td>
+    </tr>
+    <tr>
+      <td>Search / Indexing</td>
+      <td><span class="linkedin-tag">Galene</span></td>
+      <td>LinkedIn&rsquo;s search engine; can index document content for full-text search across all user documents</td>
+    </tr>
+  </table>
+
+  <h3>Interview Questions &amp; Answers</h3>
+
+  <div class="card highlight">
+    <h4>Q: How do you handle concurrent editing by 50 users?</h4>
+    <p><strong>A:</strong> Use <strong>Operational Transformation</strong> with a central collaboration server. Each document has affinity to a single server instance. The server serializes all operations into a total order. When a client sends an operation based on an old revision, the server transforms it against all intervening operations before applying and broadcasting it. Clients apply operations optimistically (local-first) and reconcile when the server acknowledges.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Q: OT or CRDT &mdash; which would you pick and why?</h4>
+    <p><strong>A:</strong> For a Google Docs-style system with a server, <strong>OT</strong>. It has lower memory overhead (no per-character IDs), is proven at Google&rsquo;s scale, and the central server simplifies consistency. CRDTs shine in peer-to-peer or offline-heavy scenarios (e.g., mobile note apps) where there&rsquo;s no reliable server, but the added metadata cost and complexity of garbage-collecting tombstones make them less ideal for a centralized system.</p>
+  </div>
+
+  <div class="card warn">
+    <h4>Q: How does offline editing work?</h4>
+    <p><strong>A:</strong> The client maintains a local operation log while offline. On reconnect, it sends its buffered operations to the server along with its last known revision. The server transforms these against all operations that happened during the offline period. With OT, long offline periods can require many transformations (O(n&times;m) where n = local ops, m = remote ops). A hybrid approach: if offline too long, fall back to a diff-merge on the full document text.</p>
+  </div>
+
+  <div class="card success">
+    <h4>Q: How do you handle cursor positions for remote users?</h4>
+    <p><strong>A:</strong> Cursor positions are indices into the document. When any operation (local or remote) is applied, all remote cursor positions are transformed using the same OT transform function. Insert before a cursor shifts it right; delete before a cursor shifts it left. Cursors are rendered as colored carets with a name tooltip, and their updates are throttled to 10&ndash;20 Hz to save bandwidth.</p>
+  </div>
+
+  <div class="card danger">
+    <h4>Q: What happens if the Collaboration Service crashes?</h4>
+    <p><strong>A:</strong> The document&rsquo;s operation log is durably stored (in Kafka or a database). A new Collaboration Service instance takes ownership of the document (via leader election or consistent hashing failover), loads the latest snapshot from blob storage, and replays operations from the log to reconstruct in-memory state. Clients reconnect via the WebSocket Gateway, send their last known revision, and the new server replays missed operations to them. Typical recovery time: &lt;5 seconds.</p>
+  </div>
+
+  <div class="card">
+    <h4>Q: How do you scale to 100M documents?</h4>
+    <p><strong>A:</strong> Most documents are <em>not</em> actively being edited at any time. Only active documents (with open editors) are loaded into Collaboration Service memory. Consistent hashing distributes active documents across a fleet of servers. Document metadata lives in a partitioned database (Espresso). Snapshots live in blob storage (Ambry). The operation log lives in Kafka, partitioned by document ID. Adding more Collaboration Service instances and rebalancing handles increased load.</p>
+  </div>
+
+  <div class="card">
+    <h4>Q: How do you ensure no data is lost?</h4>
+    <p><strong>A:</strong> Every operation is appended to a durable log <em>before</em> being acknowledged to the client. Periodic snapshots provide recovery checkpoints. The log + snapshot combination means the system can recover from any failure. For additional safety, the log is replicated across data centers. Client-side, operations are retried until acknowledged, and a local IndexedDB cache provides a last-resort recovery layer.</p>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="container">
+    System Design &mdash; Google Docs &bull; Interview Preparation Guide &bull; LinkedIn Technology Mapping
+  </div>
+</footer>
+
+</body>
+</html>

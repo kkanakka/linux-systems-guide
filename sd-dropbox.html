@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Dropbox</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #0061FF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a3a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.blue { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.blue:hover { background: rgba(0,97,255,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Dropbox</span></h1>
+    <p>A deep dive into the architecture of a cloud file storage &amp; synchronization system &mdash; chunking, delta sync, conflict resolution, and metadata at massive scale.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-dropbox.html" class="blue">Design Dropbox (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale</a></li>
+    <li><a href="#sec-2">High-Level Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Core Components</a></li>
+        <li><a href="#sec-2-2">Sync Flow Walkthrough</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">File Chunking &amp; Delta Sync</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Chunking Strategy</a></li>
+        <li><a href="#sec-3-2">Delta Sync</a></li>
+        <li><a href="#sec-3-3">Content Deduplication</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Sync Protocol &amp; Conflict Resolution</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Client-Side Watcher</a></li>
+        <li><a href="#sec-4-2">Push Notifications</a></li>
+        <li><a href="#sec-4-3">Conflict Resolution</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Data Model</a></li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- Section 1: Overview -->
+<!-- ============================================================ -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 01</div>
+  <h2>Overview &amp; Scale</h2>
+
+  <div class="card highlight">
+    <p><strong>Problem Statement:</strong> Design a cloud file storage and synchronization service that allows users to store files in the cloud, sync them across multiple devices, and share them with others. The system must handle massive scale while ensuring data integrity, low-latency sync, and efficient bandwidth usage.</p>
+  </div>
+
+  <h3>Scale Numbers</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">500M</div>
+      <div class="label">Registered Users</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">100B</div>
+      <div class="label">Files Stored</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">1M/sec</div>
+      <div class="label">Peak Uploads</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">10 PB</div>
+      <div class="label">Total Storage</div>
+    </div>
+  </div>
+
+  <h3>Core Requirements</h3>
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Functional Requirements</h4>
+      <ul style="padding-left:18px;">
+        <li>Upload, download, and delete files</li>
+        <li>Automatic sync across all linked devices</li>
+        <li>File versioning &mdash; revert to previous versions</li>
+        <li>Share files/folders with other users</li>
+        <li>Offline editing with sync on reconnect</li>
+        <li>Support files up to 10 GB</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h4>Non-Functional Requirements</h4>
+      <ul style="padding-left:18px;">
+        <li><strong>Consistency:</strong> All devices see the same file state</li>
+        <li><strong>Durability:</strong> Zero data loss (99.999999999% durability)</li>
+        <li><strong>Availability:</strong> 99.9% uptime SLA</li>
+        <li><strong>Low Latency:</strong> Sync within seconds of a change</li>
+        <li><strong>Bandwidth Efficiency:</strong> Minimize data transfer</li>
+        <li><strong>Security:</strong> End-to-end encryption at rest and in transit</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Back-of-Envelope Estimation</h4>
+    <table>
+      <tr><th>Metric</th><th>Estimate</th><th>Derivation</th></tr>
+      <tr><td>Average file size</td><td>~100 KB</td><td>10 PB / 100B files</td></tr>
+      <tr><td>Chunks per file (avg)</td><td>1</td><td>Most files &lt; 4 MB chunk size</td></tr>
+      <tr><td>Total chunks stored</td><td>~150B</td><td>100B files + versioning overhead</td></tr>
+      <tr><td>Metadata DB size</td><td>~30 TB</td><td>150B rows &times; 200 bytes/row</td></tr>
+      <tr><td>Upload bandwidth</td><td>~100 GB/s</td><td>1M uploads/sec &times; 100 KB avg</td></tr>
+      <tr><td>Daily new storage</td><td>~8.6 PB</td><td>100 GB/s &times; 86400s (before dedup)</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Section 2: Architecture -->
+<!-- ============================================================ -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 02</div>
+  <h2>High-Level Architecture</h2>
+
+  <h3 id="sec-2-1">Core Components</h3>
+
+  <div class="card highlight">
+    <p>The system is decomposed into four major backend services, each with a single responsibility:</p>
+  </div>
+
+  <table>
+    <tr><th>Component</th><th>Responsibility</th><th>Key Tech</th></tr>
+    <tr>
+      <td><strong>Block Server</strong></td>
+      <td>Splits files into chunks, computes hashes, uploads/downloads blocks to cloud storage</td>
+      <td>SHA-256, CDC, S3/GCS</td>
+    </tr>
+    <tr>
+      <td><strong>Metadata Service</strong></td>
+      <td>Stores file tree, chunk manifests, user info, sharing permissions, version history</td>
+      <td>MySQL/PostgreSQL, Redis cache</td>
+    </tr>
+    <tr>
+      <td><strong>Notification Service</strong></td>
+      <td>Pushes real-time sync events to connected clients when files change</td>
+      <td>WebSocket, Long Polling</td>
+    </tr>
+    <tr>
+      <td><strong>Cloud Storage</strong></td>
+      <td>Stores raw file chunks with high durability and availability</td>
+      <td>S3, Azure Blob, GCS</td>
+    </tr>
+  </table>
+
+  <div class="diagram">
+    <img src="images/sd_dropbox_01_architecture.png" alt="Dropbox High-Level Architecture">
+    <div class="caption">Figure 1 &mdash; High-level architecture showing the client, Block Server, Metadata Service, Notification Service, and Cloud Storage.</div>
+  </div>
+
+  <h3 id="sec-2-2">Sync Flow Walkthrough</h3>
+
+  <div class="walkthrough">
+    <h4>8-Step File Sync Flow</h4>
+    <ol>
+      <li><strong>File Change Detected:</strong> The desktop client&rsquo;s filesystem watcher detects a file modification (create, update, or delete) in the synced folder.</li>
+      <li><strong>Chunking &amp; Hashing:</strong> The client&rsquo;s Block Server module splits the file into 4 MB chunks and computes a SHA-256 hash for each chunk.</li>
+      <li><strong>Diff Calculation:</strong> The client compares local chunk hashes against the last-known manifest from the Metadata Service. Only <em>new or modified</em> chunks are marked for upload.</li>
+      <li><strong>Chunk Upload:</strong> Changed chunks are uploaded to Cloud Storage via the Block Server API. Each chunk is stored by its content hash as the key, enabling deduplication.</li>
+      <li><strong>Metadata Update:</strong> Once all chunks are persisted, the client sends the updated file manifest (ordered list of chunk hashes, file path, size, modified timestamp) to the Metadata Service.</li>
+      <li><strong>Version Created:</strong> The Metadata Service creates a new version record, atomically updating the file&rsquo;s current state while preserving the previous version for rollback.</li>
+      <li><strong>Notification Broadcast:</strong> The Metadata Service publishes a change event to the Notification Service, which fans it out to all other devices linked to the same account (or shared folder collaborators).</li>
+      <li><strong>Remote Sync:</strong> Other clients receive the notification, fetch the new manifest from Metadata Service, identify which chunks they&rsquo;re missing, and download only those chunks from Cloud Storage.</li>
+    </ol>
+  </div>
+
+  <div class="card success">
+    <h4>Why This Design Works at Scale</h4>
+    <ul style="padding-left:18px;">
+      <li><strong>Decoupled data &amp; metadata paths:</strong> Large file chunks go directly to Cloud Storage; only small metadata goes through the Metadata Service, keeping it lightweight.</li>
+      <li><strong>Content-addressable storage:</strong> Chunks keyed by SHA-256 hash enable global deduplication &mdash; identical chunks uploaded by different users are stored only once.</li>
+      <li><strong>Stateless Block Servers:</strong> Any Block Server instance can handle any request; horizontal scaling is trivial.</li>
+      <li><strong>Push-based sync:</strong> Notification Service ensures near-instant propagation without clients polling.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Section 3: File Chunking -->
+<!-- ============================================================ -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 03</div>
+  <h2>File Chunking &amp; Delta Sync</h2>
+
+  <h3 id="sec-3-1">Chunking Strategy</h3>
+
+  <div class="card highlight">
+    <p>Files are split into fixed-size <strong>4 MB chunks</strong>. Each chunk is independently hashed, stored, and transferred. This is the foundation of Dropbox&rsquo;s bandwidth efficiency and deduplication.</p>
+  </div>
+
+  <table>
+    <tr><th>Property</th><th>Value</th><th>Rationale</th></tr>
+    <tr><td>Chunk size</td><td>4 MB</td><td>Balance between metadata overhead (too small) and re-upload waste (too large)</td></tr>
+    <tr><td>Hash algorithm</td><td>SHA-256</td><td>Collision-resistant; 256-bit hash = negligible collision probability at 100B+ files</td></tr>
+    <tr><td>Last chunk</td><td>&le; 4 MB</td><td>Final chunk can be smaller; stored as-is</td></tr>
+    <tr><td>Chunk naming</td><td>Content hash</td><td>Content-addressable: <code>sha256(chunk_bytes)</code> is the storage key</td></tr>
+  </table>
+
+  <pre>
+File: presentation.pptx (12 MB)
+
+┌──────────┬──────────┬──────────┐
+│ Chunk 0  │ Chunk 1  │ Chunk 2  │
+│  4 MB    │  4 MB    │  4 MB    │
+│ hash: a3 │ hash: 7f │ hash: e1 │
+└──────────┴──────────┴──────────┘
+
+Manifest: [a3f8c2..., 7fb41e..., e19d03...]
+  </pre>
+
+  <div class="card">
+    <h4>Fixed vs Content-Defined Chunking (CDC)</h4>
+    <table>
+      <tr><th>Approach</th><th>Pros</th><th>Cons</th></tr>
+      <tr>
+        <td><strong>Fixed-Size (4 MB)</strong></td>
+        <td>Simple, predictable, fast</td>
+        <td>Byte insertion shifts all subsequent chunk boundaries &rarr; many chunks change</td>
+      </tr>
+      <tr>
+        <td><strong>Content-Defined (CDC)</strong></td>
+        <td>Insertion-resilient; chunk boundaries determined by content via rolling hash (Rabin fingerprint)</td>
+        <td>More complex, variable-size chunks, slower</td>
+      </tr>
+    </table>
+    <p style="margin-top:12px;color:var(--text-muted);">Dropbox uses <strong>CDC in production</strong> for better delta efficiency, but fixed-size is acceptable for interview scope.</p>
+  </div>
+
+  <h3 id="sec-3-2">Delta Sync</h3>
+
+  <div class="card success">
+    <h4>Key Insight: Only Upload Changed Chunks</h4>
+    <p>When a user edits a 1 GB file and changes only a few bytes, the entire file does <em>not</em> get re-uploaded. The client:</p>
+    <ol style="padding-left:18px;margin-top:8px;">
+      <li>Re-chunks the modified file</li>
+      <li>Computes SHA-256 for each new chunk</li>
+      <li>Compares against the previous manifest</li>
+      <li>Uploads <em>only</em> chunks whose hashes differ</li>
+    </ol>
+  </div>
+
+  <pre>
+Before edit:  [chunk_A] [chunk_B] [chunk_C] [chunk_D]
+After edit:   [chunk_A] [chunk_B'] [chunk_C] [chunk_D]
+                           ↑
+                     only this chunk changed
+
+Upload: 1 chunk (4 MB) instead of full file (16 MB)
+Bandwidth saved: 75%
+  </pre>
+
+  <div class="walkthrough">
+    <h4>Delta Sync Algorithm</h4>
+    <ol>
+      <li><strong>Local manifest lookup:</strong> Client retrieves the stored manifest <code>[hash_A, hash_B, hash_C, hash_D]</code></li>
+      <li><strong>New manifest computation:</strong> Client chunks the updated file &rarr; <code>[hash_A, hash_B', hash_C, hash_D]</code></li>
+      <li><strong>Diff:</strong> Compare element-wise. Position 1 differs: <code>hash_B &ne; hash_B'</code></li>
+      <li><strong>Upload:</strong> Upload only <code>chunk_B'</code> to Cloud Storage</li>
+      <li><strong>Commit:</strong> Send updated manifest to Metadata Service</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-3-3">Content Deduplication</h3>
+
+  <div class="card warn">
+    <h4>Cross-User Deduplication</h4>
+    <p>Because chunks are stored by content hash, if two users upload the same file (or the same chunk appears in different files), it is stored <strong>only once</strong> in Cloud Storage.</p>
+    <table>
+      <tr><th>Scenario</th><th>Without Dedup</th><th>With Dedup</th></tr>
+      <tr><td>100 users upload same 100 MB file</td><td>10 GB stored</td><td>100 MB stored</td></tr>
+      <tr><td>Email attachment sent to 1000 recipients</td><td>5 GB (5 MB &times; 1000)</td><td>5 MB stored</td></tr>
+      <tr><td>OS installer across enterprise</td><td>500 GB</td><td>5 GB stored</td></tr>
+    </table>
+    <p style="margin-top:12px;">The Metadata Service maintains a <strong>reference count</strong> per chunk hash. A chunk is garbage-collected only when its reference count drops to zero.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Section 4: Sync Protocol -->
+<!-- ============================================================ -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 04</div>
+  <h2>Sync Protocol &amp; Conflict Resolution</h2>
+
+  <h3 id="sec-4-1">Client-Side Watcher</h3>
+
+  <div class="card highlight">
+    <p>Each Dropbox desktop client runs a <strong>filesystem watcher</strong> that monitors the synced folder for changes in real time. This is the entry point for all local-to-cloud sync operations.</p>
+  </div>
+
+  <table>
+    <tr><th>OS</th><th>Watcher API</th><th>Notes</th></tr>
+    <tr><td>macOS</td><td><code>FSEvents</code></td><td>Coalesced events, efficient for large trees</td></tr>
+    <tr><td>Linux</td><td><code>inotify</code></td><td>Per-directory watches; limited by <code>max_user_watches</code></td></tr>
+    <tr><td>Windows</td><td><code>ReadDirectoryChangesW</code></td><td>Recursive watch support natively</td></tr>
+  </table>
+
+  <div class="card">
+    <h4>Watcher Responsibilities</h4>
+    <ul style="padding-left:18px;">
+      <li>Detect file create, modify, delete, rename events</li>
+      <li>Debounce rapid changes (e.g., auto-save every 2 seconds)</li>
+      <li>Queue events for the sync engine to process sequentially</li>
+      <li>Handle moved/renamed files by detecting matching content hashes</li>
+      <li>Maintain a local SQLite database of file states for crash recovery</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-4-2">Push Notifications</h3>
+
+  <div class="card success">
+    <h4>Long Polling vs WebSocket</h4>
+    <table>
+      <tr><th>Method</th><th>Mechanism</th><th>Tradeoffs</th></tr>
+      <tr>
+        <td><strong>Long Polling</strong></td>
+        <td>Client sends HTTP request; server holds it open until there&rsquo;s a change or timeout (60s). Client reconnects immediately after response.</td>
+        <td>Simpler infrastructure, works through all proxies/firewalls, slightly higher latency</td>
+      </tr>
+      <tr>
+        <td><strong>WebSocket</strong></td>
+        <td>Persistent bidirectional TCP connection between client and Notification Service</td>
+        <td>Lower latency, less overhead per message, requires sticky sessions or connection state management</td>
+      </tr>
+    </table>
+    <p style="margin-top:12px;">Dropbox historically used <strong>long polling</strong> for its Notification Server due to simplicity and firewall compatibility. Modern implementations may use WebSocket for lower latency.</p>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Notification Flow</h4>
+    <ol>
+      <li>Client A modifies a file and commits new metadata to the Metadata Service</li>
+      <li>Metadata Service writes a change event to the message queue (e.g., Kafka)</li>
+      <li>Notification Service consumes the event and looks up all active sessions for the affected user/shared folder</li>
+      <li>For long polling: the held HTTP response is released with a &ldquo;changes available&rdquo; signal</li>
+      <li>Client B receives the notification, queries Metadata Service for the updated manifest, and downloads only missing chunks</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-4-3">Conflict Resolution</h3>
+
+  <div class="card danger">
+    <h4>The Conflict Problem</h4>
+    <p>Two users (or two devices of the same user) edit the same file while offline or before sync completes. When both come online, the server has two divergent versions.</p>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card">
+      <h4>Strategy 1: Last-Writer-Wins (LWW)</h4>
+      <ul style="padding-left:18px;">
+        <li>The version with the latest timestamp overwrites the other</li>
+        <li>Simple to implement</li>
+        <li>Risk: silent data loss for the &ldquo;losing&rdquo; edit</li>
+        <li>Acceptable for low-collaboration single-user scenarios</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Strategy 2: Conflict Copy</h4>
+      <ul style="padding-left:18px;">
+        <li>Both versions are preserved; the second is saved as <code>file (conflicted copy).ext</code></li>
+        <li>User manually resolves the conflict</li>
+        <li>No data loss, but creates user friction</li>
+        <li><strong>This is what Dropbox actually does</strong></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <h4>Conflict Detection Mechanism</h4>
+    <p>Each file has a <strong>version vector</strong> (or simpler: a monotonically increasing version number maintained by the Metadata Service). When a client pushes an update, it includes the <code>base_version</code> it was editing from. If <code>base_version &lt; current_version</code>, a conflict is detected.</p>
+    <pre>
+Client A: edit file v3 → upload → server accepts → file becomes v4
+Client B: edit file v3 → upload → base_version=3 < current_version=4 → CONFLICT
+  → Server creates "file (Client B's conflicted copy)" as v5
+    </pre>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Section 5: Data Model -->
+<!-- ============================================================ -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 05</div>
+  <h2>Data Model</h2>
+
+  <div class="card highlight">
+    <p>The Metadata Service uses a relational database for strong consistency guarantees. Below are the core tables that power file storage, versioning, chunking, and sharing.</p>
+  </div>
+
+  <h3>Users Table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>user_id</code></td><td>BIGINT PK</td><td>Unique user identifier</td></tr>
+    <tr><td><code>email</code></td><td>VARCHAR(255)</td><td>Login email, unique index</td></tr>
+    <tr><td><code>display_name</code></td><td>VARCHAR(128)</td><td>Display name</td></tr>
+    <tr><td><code>quota_bytes</code></td><td>BIGINT</td><td>Storage quota (e.g., 2 TB)</td></tr>
+    <tr><td><code>used_bytes</code></td><td>BIGINT</td><td>Current storage usage</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Account creation time</td></tr>
+  </table>
+
+  <h3>Files Table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>file_id</code></td><td>BIGINT PK</td><td>Unique file identifier</td></tr>
+    <tr><td><code>user_id</code></td><td>BIGINT FK</td><td>Owner of the file</td></tr>
+    <tr><td><code>file_path</code></td><td>VARCHAR(4096)</td><td>Full path within user&rsquo;s namespace</td></tr>
+    <tr><td><code>current_version</code></td><td>INT</td><td>Latest version number</td></tr>
+    <tr><td><code>file_size</code></td><td>BIGINT</td><td>Size in bytes</td></tr>
+    <tr><td><code>is_directory</code></td><td>BOOLEAN</td><td>True if this entry is a folder</td></tr>
+    <tr><td><code>is_deleted</code></td><td>BOOLEAN</td><td>Soft-delete flag (for recycle bin)</td></tr>
+    <tr><td><code>modified_at</code></td><td>TIMESTAMP</td><td>Last modification time</td></tr>
+  </table>
+
+  <h3>File Versions Table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>version_id</code></td><td>BIGINT PK</td><td>Auto-increment version ID</td></tr>
+    <tr><td><code>file_id</code></td><td>BIGINT FK</td><td>References files table</td></tr>
+    <tr><td><code>version_num</code></td><td>INT</td><td>Sequential version number per file</td></tr>
+    <tr><td><code>chunk_hashes</code></td><td>JSON</td><td>Ordered array of chunk SHA-256 hashes</td></tr>
+    <tr><td><code>file_size</code></td><td>BIGINT</td><td>File size at this version</td></tr>
+    <tr><td><code>device_id</code></td><td>VARCHAR(64)</td><td>Device that created this version</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>When this version was committed</td></tr>
+  </table>
+
+  <h3>Chunks Table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>chunk_hash</code></td><td>CHAR(64) PK</td><td>SHA-256 hex digest (content-addressable key)</td></tr>
+    <tr><td><code>chunk_size</code></td><td>INT</td><td>Size of chunk in bytes</td></tr>
+    <tr><td><code>ref_count</code></td><td>INT</td><td>Number of file versions referencing this chunk</td></tr>
+    <tr><td><code>storage_url</code></td><td>VARCHAR(512)</td><td>Cloud Storage object key / URL</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>First upload time</td></tr>
+  </table>
+
+  <h3>Sharing Table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>share_id</code></td><td>BIGINT PK</td><td>Unique share record ID</td></tr>
+    <tr><td><code>file_id</code></td><td>BIGINT FK</td><td>Shared file or folder</td></tr>
+    <tr><td><code>owner_id</code></td><td>BIGINT FK</td><td>User who shared</td></tr>
+    <tr><td><code>shared_with_id</code></td><td>BIGINT FK</td><td>Target user (NULL for link sharing)</td></tr>
+    <tr><td><code>permission</code></td><td>ENUM</td><td><code>VIEW</code>, <code>EDIT</code>, <code>ADMIN</code></td></tr>
+    <tr><td><code>share_link</code></td><td>VARCHAR(128)</td><td>Public share link token (if link sharing)</td></tr>
+    <tr><td><code>expires_at</code></td><td>TIMESTAMP</td><td>Optional expiration for shared links</td></tr>
+  </table>
+
+  <div class="card">
+    <h4>Entity Relationship Summary</h4>
+    <pre>
+users 1──N files 1──N file_versions
+                                  │
+                          chunk_hashes (JSON array)
+                                  │
+                                  ▼
+                         chunks (content-addressed)
+
+files 1──N sharing (one file shared with many users)
+    </pre>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Section 6: LinkedIn Mapping & Interview -->
+<!-- ============================================================ -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 06</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>LinkedIn Technology Mapping</h3>
+  <div class="card highlight">
+    <p>How Dropbox&rsquo;s architecture maps to LinkedIn&rsquo;s internal infrastructure:</p>
+  </div>
+
+  <table>
+    <tr><th>Dropbox Component</th><th>LinkedIn Equivalent</th><th>Why</th></tr>
+    <tr>
+      <td>Cloud Storage (S3)</td>
+      <td><span class="linkedin-tag">Ambry</span></td>
+      <td>LinkedIn&rsquo;s distributed blob store for large immutable objects (media, documents). Content-addressable, replicated across data centers.</td>
+    </tr>
+    <tr>
+      <td>Metadata Service (MySQL)</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn&rsquo;s document-oriented NoSQL store with strong consistency, secondary indexes, and change capture &mdash; ideal for file metadata and version records.</td>
+    </tr>
+    <tr>
+      <td>Notification Service (Kafka)</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>LinkedIn invented Kafka. Used for reliable, ordered event streaming &mdash; file change events, sync notifications, audit logging.</td>
+    </tr>
+    <tr>
+      <td>Block Server API (REST)</td>
+      <td><span class="linkedin-tag">Rest.li</span></td>
+      <td>LinkedIn&rsquo;s REST framework with automatic schema validation, backward-compatible API evolution, and built-in routing.</td>
+    </tr>
+    <tr>
+      <td>Chunk dedup index (Redis)</td>
+      <td><span class="linkedin-tag">Couchbase</span></td>
+      <td>Distributed cache layer for fast hash lookups to check if a chunk already exists before uploading.</td>
+    </tr>
+    <tr>
+      <td>User auth &amp; ACL</td>
+      <td><span class="linkedin-tag">Nuage</span></td>
+      <td>LinkedIn&rsquo;s centralized authorization service for fine-grained permission checks on shared files/folders.</td>
+    </tr>
+  </table>
+
+  <div class="walkthrough">
+    <h4>LinkedIn Sync Flow (Mapped)</h4>
+    <ol>
+      <li>Client detects file change, chunks it, computes SHA-256 hashes</li>
+      <li>Client calls <span class="linkedin-tag">Rest.li</span> Block Server API with chunk hashes to check existence</li>
+      <li>Block Server queries <span class="linkedin-tag">Couchbase</span> dedup cache &mdash; returns list of missing chunks</li>
+      <li>Client uploads missing chunks to <span class="linkedin-tag">Ambry</span> blob store</li>
+      <li>Block Server commits updated file manifest to <span class="linkedin-tag">Espresso</span></li>
+      <li><span class="linkedin-tag">Espresso</span> change capture emits event to <span class="linkedin-tag">Kafka</span></li>
+      <li>Notification consumers read from <span class="linkedin-tag">Kafka</span> and push to connected clients via WebSocket</li>
+      <li>Other clients download missing chunks from <span class="linkedin-tag">Ambry</span></li>
+    </ol>
+  </div>
+
+  <h3>Common Interview Questions</h3>
+
+  <div class="card">
+    <h4>Design &amp; Architecture</h4>
+    <ol style="padding-left:18px;">
+      <li><strong>How would you handle a 10 GB file upload?</strong><br>
+        Chunk into 4 MB blocks, upload in parallel with resumable upload support. If connection drops, only retry failed chunks. Use pre-signed URLs for direct-to-storage uploads.</li>
+      <li><strong>Why separate metadata from file content?</strong><br>
+        Metadata is small, structured, and needs strong consistency (ACID). File content is large, unstructured, and needs high throughput. Different storage engines are optimal for each.</li>
+      <li><strong>How do you ensure data durability?</strong><br>
+        Store chunks with 3+ replicas across availability zones. Use erasure coding for cold storage. Verify integrity with SHA-256 on read. 11 nines durability target.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h4>Scaling &amp; Performance</h4>
+    <ol style="padding-left:18px;">
+      <li><strong>How does deduplication save storage?</strong><br>
+        Content-addressable chunks mean identical data is stored once. At enterprise scale, Dropbox reported 60%+ storage savings from dedup alone.</li>
+      <li><strong>How would you scale the Metadata Service?</strong><br>
+        Shard by <code>user_id</code> for user-owned files. For shared folders, use a separate shard key (e.g., <code>folder_id</code>). Cache hot metadata in Redis/Couchbase.</li>
+      <li><strong>What if the Notification Service goes down?</strong><br>
+        Clients fall back to periodic polling (e.g., every 60s). Kafka retains events, so when the service recovers, no events are lost. Clients also do a full sync on reconnect.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h4>Conflict &amp; Consistency</h4>
+    <ol style="padding-left:18px;">
+      <li><strong>How do you handle concurrent edits to the same file?</strong><br>
+        Optimistic concurrency: each update includes a <code>base_version</code>. If another update landed first, detect conflict and create a conflict copy. Never silently overwrite.</li>
+      <li><strong>How do you handle offline edits?</strong><br>
+        Client queues all changes locally in a journal. On reconnect, replays changes in order against the server. Conflicts are resolved per the conflict copy strategy.</li>
+      <li><strong>Should you use strong or eventual consistency?</strong><br>
+        Strong consistency for metadata (users must see accurate file state). Eventual consistency is acceptable for chunk storage (chunks are immutable once written, so there is no update conflict).</li>
+    </ol>
+  </div>
+
+  <div class="card warn">
+    <h4>Advanced Topics (Bonus Points)</h4>
+    <ul style="padding-left:18px;">
+      <li><strong>Compression:</strong> Compress chunks before upload (LZ4 for speed, zstd for ratio). Skip for already-compressed formats (JPEG, MP4, ZIP).</li>
+      <li><strong>Encryption:</strong> Client-side encryption with per-user keys. Server stores encrypted chunks and never sees plaintext.</li>
+      <li><strong>Smart Sync:</strong> Keep file stubs locally (metadata only); download content on-demand to save local disk space.</li>
+      <li><strong>Bandwidth throttling:</strong> Client-side rate limiting to avoid saturating user&rsquo;s network connection.</li>
+      <li><strong>Selective sync:</strong> Allow users to choose which folders sync to which devices.</li>
+      <li><strong>LAN sync:</strong> Discover peers on the same LAN and transfer chunks locally instead of going through the cloud.</li>
+    </ul>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<footer>
+  <p>Design Dropbox &mdash; System Design Interview Guide &bull; Built for study and review</p>
+</footer>
+
+</body>
+</html>

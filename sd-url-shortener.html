@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design URL Shortener</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #2196F3;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a2e 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.blue { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.blue:hover { background: rgba(33,150,243,0.1); }
+  .nav-links a.red { color: #ff0000; border-color: #ff0000; }
+  .nav-links a.red:hover { background: rgba(255,0,0,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>URL Shortener</span></h1>
+    <p>A deep dive into building a scalable URL shortening service &mdash; ID generation, caching, analytics, and handling billions of redirects per day.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="chapter2.html">Chapter 2: Fundamentals</a>
+      <a href="system-design.html" class="red">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html" class="blue">Design URL Shortener (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale Requirements</a>
+      <ul class="sub">
+        <li><a href="#sec-1-func">Functional Requirements</a></li>
+        <li><a href="#sec-1-nonfunc">Non-Functional Requirements</a></li>
+        <li><a href="#sec-1-linkedin">LinkedIn Technology Mapping</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-2">ID Generation Strategies</a>
+      <ul class="sub">
+        <li><a href="#sec-2-base62">Base62 Encoding</a></li>
+        <li><a href="#sec-2-hash">MD5/SHA256 Hash + Truncate</a></li>
+        <li><a href="#sec-2-snowflake">Snowflake ID</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Read Path (301 Redirect)</a>
+      <ul class="sub">
+        <li><a href="#sec-3-301vs302">301 vs 302 Tradeoff</a></li>
+        <li><a href="#sec-3-analytics">Async Analytics Logging</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Write Path &amp; Data Model</a>
+      <ul class="sub">
+        <li><a href="#sec-4-schema">Data Model Schema</a></li>
+        <li><a href="#sec-4-linkedin">LinkedIn Data Store Mapping</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Scaling &amp; Deep Dive</a>
+      <ul class="sub">
+        <li><a href="#sec-5-sharding">Database Sharding</a></li>
+        <li><a href="#sec-5-cache">Cache Strategy</a></li>
+        <li><a href="#sec-5-rate">Rate Limiting</a></li>
+        <li><a href="#sec-5-expiry">URL Expiration</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-6">Interview Questions &amp; Talking Points</a></li>
+  </ol>
+</div>
+
+<!-- ======================= SECTION 1 ======================= -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale Requirements</h2>
+
+  <p>A URL shortener converts long URLs into short, memorable links and redirects users to the original destination. Services like bit.ly and TinyURL handle billions of redirects daily. The system must balance <strong>write throughput</strong> (creating short links) with massively higher <strong>read throughput</strong> (redirecting clicks).</p>
+
+  <div class="scale-box">
+    <div class="scale-item"><div class="number">1B</div><div class="label">URLs Stored</div></div>
+    <div class="scale-item"><div class="number">100:1</div><div class="label">Read/Write Ratio</div></div>
+    <div class="scale-item"><div class="number">100M</div><div class="label">Redirects per Day</div></div>
+    <div class="scale-item"><div class="number">1,000</div><div class="label">Writes per Second</div></div>
+    <div class="scale-item"><div class="number">100K</div><div class="label">Reads per Second</div></div>
+    <div class="scale-item"><div class="number">&lt;100ms</div><div class="label">Redirect Latency Target</div></div>
+  </div>
+
+  <div class="diagram">
+    <img src="images/sd_urlshort_01_architecture.png" alt="URL Shortener High-Level Architecture">
+    <div class="caption">Figure 1: High-Level Architecture &mdash; End-to-end flow from clients to data stores and supporting services</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: High-Level Architecture</h4>
+    <ol>
+      <li><strong>Clients:</strong> Web browsers, mobile apps, and API consumers send requests to create short URLs or follow shortened links. Each request carries an API key for rate limiting and analytics attribution.</li>
+      <li><strong>Load Balancer:</strong> Distributes incoming traffic across multiple API server instances using consistent hashing or round-robin. Performs SSL termination and health checking. Separates read traffic (GET /:shortCode) from write traffic (POST /api/shorten).</li>
+      <li><strong>API Servers &mdash; Write Path:</strong> Handles URL creation requests. Validates the long URL, checks for custom alias conflicts, generates a unique short code via the ID generation service, persists the mapping to the database, and populates the cache. Returns the shortened URL to the client.</li>
+      <li><strong>API Servers &mdash; Read Path:</strong> Handles redirect requests. Looks up the short code in the cache first (Redis). On cache hit, returns an immediate 301 redirect. On cache miss, queries the database, populates the cache, then redirects. Fires an async click event to Kafka.</li>
+      <li><strong>API Servers &mdash; Analytics Path:</strong> Serves dashboards and API queries for click counts, geographic distribution, referrer breakdown, and time-series data. Reads from the analytics database populated by stream processors.</li>
+      <li><strong>Cache (Redis):</strong> Stores the hottest short-code-to-URL mappings in memory. With a 90%+ hit rate, the vast majority of redirects never touch the database. Uses LRU eviction and consistent hashing for cluster distribution.</li>
+      <li><strong>Data Stores:</strong> The primary database (MySQL/PostgreSQL) stores the URL mappings and user data. A separate analytics store holds click event aggregations. Blob storage holds any preview screenshots or QR code images.</li>
+      <li><strong>Supporting Services:</strong> Kafka ingests click events asynchronously. Stream processors aggregate analytics in real-time. A background cleanup job expires old URLs. A URL safety scanner checks for malicious destinations.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-1-func">Functional Requirements</h3>
+
+  <div class="card highlight">
+    <h4>Core Features</h4>
+    <ol>
+      <li><strong>Shorten URL:</strong> Given a long URL, generate a unique short URL (e.g., <code>https://short.ly/aB3x9Kz</code>)</li>
+      <li><strong>Redirect:</strong> When a user visits the short URL, redirect them to the original long URL with minimal latency</li>
+      <li><strong>Custom Aliases:</strong> Allow users to choose a custom short code (e.g., <code>short.ly/my-brand</code>) subject to availability</li>
+      <li><strong>Expiration:</strong> URLs can have an optional time-to-live (TTL) after which they become inactive</li>
+      <li><strong>Analytics:</strong> Track click counts, geographic origin, referrer, device type, and time-series patterns per short URL</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-1-nonfunc">Non-Functional Requirements</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>Low Latency</strong><br>
+      Redirects must complete in <strong>&lt;100ms p99</strong>. Users clicking short links expect near-instant page loads. Cache-hit redirects target &lt;10ms.
+    </div>
+    <div class="card success">
+      <strong>High Availability</strong><br>
+      The service must be <strong>99.99% available</strong>. A short link that doesn't work erodes trust immediately. Multi-region deployment with failover.
+    </div>
+    <div class="card warn">
+      <strong>Not Predictable</strong><br>
+      Short codes must <strong>not be guessable or sequential</strong>. An attacker should not be able to enumerate all stored URLs by incrementing an ID.
+    </div>
+    <div class="card highlight">
+      <strong>Scalable</strong><br>
+      Must handle <strong>100K reads/sec</strong> with room to grow 10x. Horizontal scaling of read path. Database sharding for write distribution.
+    </div>
+  </div>
+
+  <h3 id="sec-1-linkedin">LinkedIn Technology Mapping</h3>
+
+  <table>
+    <tr><th>Generic Component</th><th>LinkedIn Equivalent</th><th>Rationale</th></tr>
+    <tr><td>MySQL / PostgreSQL</td><td><span class="linkedin-tag">Espresso</span></td><td>LinkedIn's distributed NoSQL store with auto-sharding, used for high-throughput key-value lookups like URL mappings</td></tr>
+    <tr><td>Redis</td><td><span class="linkedin-tag">Couchbase</span></td><td>LinkedIn's distributed caching layer for sub-millisecond reads; replaces Redis for URL mapping cache</td></tr>
+    <tr><td>Kafka</td><td><span class="linkedin-tag">Kafka</span></td><td>LinkedIn invented Kafka &mdash; same technology for click event streaming and analytics pipelines</td></tr>
+    <tr><td>API Gateway</td><td><span class="linkedin-tag">Rest.li + D2</span></td><td>Rest.li provides the declarative REST framework; D2 handles dynamic service discovery and load balancing</td></tr>
+    <tr><td>Stream Processor</td><td><span class="linkedin-tag">Samza</span></td><td>LinkedIn's stream processing framework for real-time click analytics aggregation</td></tr>
+    <tr><td>Analytics DB</td><td><span class="linkedin-tag">Venice</span></td><td>LinkedIn's read-optimized derived data store for precomputed analytics views</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 2 ======================= -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>ID Generation Strategies</h2>
+
+  <p>The heart of a URL shortener is how it generates unique, compact short codes. Three main strategies exist, each with distinct tradeoffs around uniqueness guarantees, coordination requirements, and predictability.</p>
+
+  <h3 id="sec-2-base62">2.1 Auto-Increment + Base62 Encoding</h3>
+
+  <div class="card highlight">
+    <h4>How Base62 Works</h4>
+    <p>Base62 uses the character set <code>[0-9a-zA-Z]</code> &mdash; 62 characters total. A 7-character Base62 string encodes 62<sup>7</sup> = <strong>3.5 trillion</strong> unique values. Even with 1 billion URLs stored, we've used less than 0.03% of the space.</p>
+    <p style="margin-top:12px;"><strong>Encoding:</strong> Take an auto-incremented integer ID (e.g., <code>123456789</code>) and repeatedly divide by 62, mapping remainders to the character set. Result: <code>8M0kX</code>. Decoding reverses the process.</p>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>Pros</strong><br>
+      <ul>
+        <li>Guaranteed unique (database auto-increment)</li>
+        <li>Simple implementation</li>
+        <li>Short codes (7 chars handles trillions)</li>
+        <li>No collision handling needed</li>
+      </ul>
+    </div>
+    <div class="card danger">
+      <strong>Cons</strong><br>
+      <ul>
+        <li>Sequential IDs are <strong>predictable</strong> &mdash; attackers can enumerate URLs</li>
+        <li>Single point of failure if using one DB sequence</li>
+        <li>Distributed auto-increment requires coordination (Zookeeper range allocation)</li>
+        <li>Reveals creation order</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="sec-2-hash">2.2 MD5/SHA256 Hash + Truncate</h3>
+
+  <div class="card warn">
+    <h4>Hash-Based Generation</h4>
+    <p>Compute <code>MD5(longURL)</code> or <code>SHA256(longURL)</code>, then take the first 7 characters (after Base62 encoding the hash bytes). This produces a deterministic mapping &mdash; the same long URL always generates the same short code.</p>
+    <p style="margin-top:12px;"><strong>Collision handling:</strong> Truncating a 128-bit hash to ~43 bits makes collisions likely by the birthday paradox. When a collision is detected (short code already exists for a different long URL), append a counter or re-hash with a salt: <code>MD5(longURL + "1")</code>, <code>MD5(longURL + "2")</code>, etc.</p>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>Pros</strong><br>
+      <ul>
+        <li>No coordination between servers</li>
+        <li>Same URL always gets same short code (deduplication)</li>
+        <li>Not sequential or predictable</li>
+        <li>Stateless generation</li>
+      </ul>
+    </div>
+    <div class="card danger">
+      <strong>Cons</strong><br>
+      <ul>
+        <li>Collisions require retry logic and DB lookups</li>
+        <li>Collision rate grows as database fills</li>
+        <li>Fixed-length truncation limits uniqueness</li>
+        <li>Custom aliases don't fit this model</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="sec-2-snowflake">2.3 Snowflake ID</h3>
+
+  <div class="card highlight">
+    <h4>Snowflake Structure (64 bits)</h4>
+    <p>Originally designed by Twitter, a Snowflake ID packs uniqueness into a 64-bit integer with three components:</p>
+    <pre>| 1 bit unused | 41 bits: timestamp (ms) | 10 bits: machine ID | 12 bits: sequence |
+|      0       |     ~69 years range     |   1024 machines    | 4096 per ms/node  |</pre>
+    <p style="margin-top:12px;"><strong>Throughput:</strong> Each machine generates up to 4,096 IDs per millisecond &mdash; with 1,024 machines, that's <strong>4 million IDs/sec</strong> globally. The timestamp prefix means IDs are roughly time-ordered, which improves database write performance (sequential inserts into B-tree indexes).</p>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>Pros</strong><br>
+      <ul>
+        <li>No coordination &mdash; each machine generates independently</li>
+        <li>Globally unique by construction</li>
+        <li>Roughly time-ordered (good for DB indexing)</li>
+        <li>High throughput (4M IDs/sec cluster-wide)</li>
+      </ul>
+    </div>
+    <div class="card danger">
+      <strong>Cons</strong><br>
+      <ul>
+        <li>64 bits → 11 Base62 chars (longer than hash approach)</li>
+        <li>Requires machine ID assignment (via Zookeeper or config)</li>
+        <li>Clock skew can cause issues (requires NTP sync)</li>
+        <li>Timestamp leaks creation time</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4>Strategy Comparison</h4>
+
+  <table>
+    <tr><th>Strategy</th><th>Uniqueness</th><th>Coordination</th><th>Predictable?</th><th>Code Length</th><th>Collision Risk</th></tr>
+    <tr><td>Auto-Increment + Base62</td><td>Guaranteed</td><td>High (DB sequence)</td><td>Yes</td><td>5&ndash;7 chars</td><td>None</td></tr>
+    <tr><td>MD5 Hash + Truncate</td><td>Probabilistic</td><td>None</td><td>No</td><td>7 chars (fixed)</td><td>High (birthday paradox)</td></tr>
+    <tr><td>Snowflake ID + Base62</td><td>Guaranteed</td><td>Low (machine ID only)</td><td>Partially</td><td>11 chars</td><td>None</td></tr>
+  </table>
+
+  <div class="diagram">
+    <img src="images/sd_urlshort_02_id_generation.png" alt="ID Generation Strategies Comparison">
+    <div class="caption">Figure 2: ID Generation Strategies &mdash; Auto-Increment vs Hash vs Snowflake approaches</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: ID Generation Strategies</h4>
+    <ol>
+      <li><strong>Auto-Increment Path:</strong> The API server requests the next ID from a centralized counter (database sequence or Zookeeper-managed range). The integer ID is converted to Base62 to produce a compact short code. This path is the simplest but creates a single point of contention &mdash; all servers compete for the next number in the sequence.</li>
+      <li><strong>Hash Path:</strong> The API server computes a hash of the long URL locally &mdash; no network call needed. The hash is truncated and Base62-encoded. Before writing, the server must check the database for collisions. If the short code already maps to a different URL, it re-hashes with a salt and retries. Each retry costs an additional database read.</li>
+      <li><strong>Snowflake Path:</strong> Each API server has a pre-assigned machine ID (from configuration or Zookeeper). The server combines the current timestamp, its machine ID, and a local sequence counter into a 64-bit integer. No network call or database check needed &mdash; uniqueness is guaranteed by construction. The 64-bit ID is Base62-encoded into an 11-character short code.</li>
+      <li><strong>Recommended Hybrid:</strong> Use Snowflake for ID generation (no coordination, guaranteed unique) but truncate to 7 characters by taking the lower 43 bits. Accept the theoretical collision risk (~1 in 8 trillion) and handle it with a retry on unique constraint violation. This gives you compact codes without sequential predictability.</li>
+    </ol>
+  </div>
+
+  <div class="card success">
+    <strong>LinkedIn Approach:</strong> LinkedIn uses <span class="linkedin-tag">Snowflake-style distributed IDs</span> for many internal services. Each data center has ID generator instances with pre-assigned machine IDs, coordinated through <span class="linkedin-tag">Zookeeper</span>. The Snowflake approach aligns with LinkedIn's philosophy of stateless, horizontally scalable microservices.
+  </div>
+</div>
+
+<!-- ======================= SECTION 3 ======================= -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>Read Path (301 Redirect)</h2>
+
+  <p>The read path handles the core use case: a user clicks a short link and gets redirected to the original URL. Since reads outnumber writes 100:1, this path must be optimized for <strong>sub-100ms latency</strong> and <strong>100K+ requests per second</strong>.</p>
+
+  <h4>Full Redirect Sequence</h4>
+
+  <div class="card highlight">
+    <ol>
+      <li><strong>User clicks</strong> <code>https://short.ly/aB3x9Kz</code> in a browser, email, or social media post</li>
+      <li><strong>DNS resolution</strong> maps <code>short.ly</code> to the load balancer's IP address</li>
+      <li><strong>Load Balancer</strong> routes the GET request to an available API server</li>
+      <li><strong>API Server</strong> extracts the short code <code>aB3x9Kz</code> from the URL path</li>
+      <li><strong>Redis Cache Check:</strong> Look up <code>aB3x9Kz</code> in the cache
+        <ul>
+          <li><strong>Cache HIT (~1ms):</strong> Return <code>301 Redirect</code> with the cached long URL. Fire async click event to Kafka.</li>
+          <li><strong>Cache MISS:</strong> Query the primary database for the short code mapping</li>
+        </ul>
+      </li>
+      <li><strong>Database Query:</strong> <code>SELECT long_url FROM urls WHERE short_code = 'aB3x9Kz' AND (expires_at IS NULL OR expires_at > NOW())</code></li>
+      <li><strong>Populate Cache:</strong> Write the mapping to Redis with a TTL (e.g., 24 hours) for future requests</li>
+      <li><strong>Return 301:</strong> Send the <code>301 Moved Permanently</code> response with <code>Location: https://original-long-url.com/path</code></li>
+    </ol>
+  </div>
+
+  <div class="diagram">
+    <img src="images/sd_urlshort_03_read_path.png" alt="Read Path and 301 Redirect Flow">
+    <div class="caption">Figure 3: Read Path &mdash; From user click to 301 redirect with cache-first strategy</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Read Path</h4>
+    <ol>
+      <li><strong>Client Request (Step 1):</strong> The user's browser sends a GET request for the short URL. The DNS lookup and TCP handshake add ~20&ndash;50ms for a cold connection. With HTTP keep-alive and DNS caching, subsequent requests are faster.</li>
+      <li><strong>Load Balancer (Step 2):</strong> The request hits the load balancer, which adds ~1ms of latency. It selects an API server via round-robin or least-connections. Health checks ensure only healthy servers receive traffic.</li>
+      <li><strong>Cache Lookup (Step 3):</strong> The API server checks Redis first. A cache hit returns the long URL in under 1ms. With a 90%+ hit rate (popular links are clicked repeatedly), the vast majority of redirects complete in under 10ms total.</li>
+      <li><strong>Database Fallback (Step 4):</strong> On cache miss, the server queries the primary database. A B-tree index on <code>short_code</code> makes this lookup O(log n) &mdash; about 5&ndash;10ms even with 1 billion rows. The result is written to Redis before returning.</li>
+      <li><strong>Async Analytics (Step 5):</strong> Before returning the 301, the server publishes a click event to Kafka containing the short code, timestamp, IP address, user-agent, and referer header. This is non-blocking &mdash; the redirect doesn't wait for Kafka acknowledgment.</li>
+      <li><strong>301 Response (Step 6):</strong> The server returns HTTP 301 with the <code>Location</code> header set to the long URL. The browser follows the redirect and loads the destination page.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-3-301vs302">301 vs 302 Tradeoff</h3>
+
+  <p>The choice between <code>301 Moved Permanently</code> and <code>302 Found</code> has significant implications for caching, analytics, and SEO.</p>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>301 Moved Permanently</strong><br>
+      <ul>
+        <li>Browser <strong>caches the redirect</strong> &mdash; future clicks don't hit the server at all</li>
+        <li>Reduces server load dramatically for popular links</li>
+        <li>Better for SEO &mdash; search engines transfer page rank to the destination</li>
+        <li>Lower infrastructure costs at scale</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <strong>302 Found (Temporary)</strong><br>
+      <ul>
+        <li>Browser <strong>always hits the server</strong> &mdash; every click is counted</li>
+        <li>More accurate real-time analytics</li>
+        <li>Can change the destination URL later</li>
+        <li>Higher server load (every click = full round trip)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <strong>Recommended Solution: 301 + Async Analytics</strong><br>
+    Use <strong>301 for performance</strong> but log click events <strong>asynchronously to Kafka</strong> before returning the redirect. The first click for each user-link pair always hits the server and gets logged. Subsequent clicks from the same browser are cached at the browser level (no server hit), but these represent diminishing analytical value. For precise click-through rates, augment with client-side tracking pixels.
+  </div>
+
+  <h3 id="sec-3-analytics">Async Analytics Logging</h3>
+
+  <div class="card highlight">
+    <h4>Click Event Pipeline</h4>
+    <p>Every redirect fires an async event to Kafka before returning the 301. The event contains:</p>
+    <pre>{
+  "short_code": "aB3x9Kz",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "ip_address": "203.0.113.42",
+  "user_agent": "Mozilla/5.0 (iPhone; iOS 17.2)",
+  "referer": "https://twitter.com/status/123",
+  "country": "US",
+  "city": "San Francisco"
+}</pre>
+    <p style="margin-top:12px;">A <span class="linkedin-tag">Samza</span> stream processor consumes these events, aggregates them into per-minute/hour/day buckets, and writes the results to the analytics database. Dashboard queries read from pre-aggregated tables, not raw events.</p>
+  </div>
+</div>
+
+<!-- ======================= SECTION 4 ======================= -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Write Path &amp; Data Model</h2>
+
+  <p>The write path handles URL creation &mdash; validating input, generating a unique short code, persisting the mapping, and returning the shortened URL. While writes are 100x less frequent than reads, they must be durable and consistent.</p>
+
+  <h4>URL Creation Flow</h4>
+
+  <div class="card highlight">
+    <ol>
+      <li><strong>Validate:</strong> Check that the long URL is well-formed (valid scheme, reachable host). Reject malicious or blocked domains. Enforce maximum URL length (2,048 chars).</li>
+      <li><strong>Check Custom Alias:</strong> If the user requested a custom alias (e.g., <code>my-brand</code>), check uniqueness against the database. Return HTTP 409 Conflict if already taken.</li>
+      <li><strong>Generate Short Code:</strong> If no custom alias, generate a unique short code using the chosen ID generation strategy (Snowflake + Base62 recommended).</li>
+      <li><strong>Write to Database:</strong> Insert the mapping <code>(short_code, long_url, user_id, created_at, expires_at)</code> into the primary database. The <code>short_code</code> column has a unique index.</li>
+      <li><strong>Write to Cache:</strong> Populate Redis with the mapping so the first redirect is a cache hit. Set TTL matching the URL's expiration or a default (e.g., 24 hours).</li>
+      <li><strong>Return Response:</strong> Return HTTP 201 with the full short URL: <code>{ "short_url": "https://short.ly/aB3x9Kz", "expires_at": "2025-01-15T00:00:00Z" }</code></li>
+    </ol>
+  </div>
+
+  <div class="diagram">
+    <img src="images/sd_urlshort_04_write_path.png" alt="Write Path and Data Model">
+    <div class="caption">Figure 4: Write Path &mdash; URL creation flow and data model schema</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Write Path &amp; Data Model</h4>
+    <ol>
+      <li><strong>API Request (Step 1):</strong> The client sends a POST request with the long URL, optional custom alias, optional expiration time, and API key. The API key identifies the user for rate limiting and analytics attribution.</li>
+      <li><strong>Validation (Step 2):</strong> The server validates the URL format, checks against a blocklist of malicious domains, and verifies the user's rate limit hasn't been exceeded. Invalid requests are rejected with descriptive error codes.</li>
+      <li><strong>ID Generation (Step 3):</strong> For auto-generated codes, the Snowflake ID generator produces a 64-bit unique ID which is Base62-encoded to 7 characters. For custom aliases, the server checks uniqueness with a SELECT query before proceeding.</li>
+      <li><strong>Database Write (Step 4):</strong> The URL mapping is inserted into the <code>urls</code> table. The unique index on <code>short_code</code> acts as a final safeguard against duplicates. On unique constraint violation (rare with Snowflake), the server retries with a new ID.</li>
+      <li><strong>Cache Population (Step 5):</strong> The mapping is written to Redis immediately after the database write succeeds. This ensures the first redirect attempt gets a cache hit rather than falling through to the database.</li>
+      <li><strong>Response (Step 6):</strong> The server returns the complete short URL along with metadata (creation time, expiration, short code). The client can immediately share this link.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-4-schema">Data Model Schema</h3>
+
+  <h4><code>urls</code> Table</h4>
+
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>id</code></td><td>BIGINT (PK)</td><td>Auto-increment primary key for internal reference</td></tr>
+    <tr><td><code>short_code</code></td><td>VARCHAR(16) UNIQUE</td><td>The generated or custom short code, indexed for O(log n) lookups</td></tr>
+    <tr><td><code>long_url</code></td><td>VARCHAR(2048)</td><td>The original destination URL</td></tr>
+    <tr><td><code>user_id</code></td><td>BIGINT</td><td>Foreign key to the user who created the link</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Creation timestamp, used for analytics and cleanup</td></tr>
+    <tr><td><code>expires_at</code></td><td>TIMESTAMP NULL</td><td>Optional expiration; NULL means the link never expires</td></tr>
+    <tr><td><code>click_count</code></td><td>BIGINT DEFAULT 0</td><td>Denormalized click counter, updated periodically from analytics</td></tr>
+  </table>
+
+  <h4><code>click_events</code> Table</h4>
+
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>id</code></td><td>BIGINT (PK)</td><td>Auto-increment primary key</td></tr>
+    <tr><td><code>short_code</code></td><td>VARCHAR(16)</td><td>Foreign key to the URL that was clicked</td></tr>
+    <tr><td><code>clicked_at</code></td><td>TIMESTAMP</td><td>When the click occurred, partitioned by day for efficient queries</td></tr>
+    <tr><td><code>ip_address</code></td><td>VARCHAR(45)</td><td>Client IP for geo-location (supports IPv6)</td></tr>
+    <tr><td><code>user_agent</code></td><td>VARCHAR(512)</td><td>Browser/device identification string</td></tr>
+    <tr><td><code>referer</code></td><td>VARCHAR(2048)</td><td>The page the user clicked from (Twitter, email, etc.)</td></tr>
+    <tr><td><code>country</code></td><td>CHAR(2)</td><td>ISO country code derived from IP geo-lookup</td></tr>
+  </table>
+
+  <h3 id="sec-4-linkedin">LinkedIn Data Store Mapping</h3>
+
+  <div class="card success">
+    <strong>LinkedIn Implementation:</strong>
+    <ul>
+      <li><strong><code>urls</code> table →</strong> <span class="linkedin-tag">Espresso</span> &mdash; Auto-sharded by <code>short_code</code> hash. Espresso provides strongly consistent reads with sub-5ms latency at LinkedIn scale. Each shard handles ~16M URLs.</li>
+      <li><strong><code>click_events</code> table →</strong> <span class="linkedin-tag">Espresso</span> for raw events + <span class="linkedin-tag">Venice</span> for precomputed aggregations. Venice serves read-heavy analytics dashboards from materialized views updated by Samza stream processors.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ======================= SECTION 5 ======================= -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>Scaling &amp; Deep Dive</h2>
+
+  <p>With 1 billion URLs and 100K reads/sec, the system must scale both the data layer and the caching layer. This section covers database sharding, cache architecture, rate limiting, analytics pipelines, and URL expiration.</p>
+
+  <h3 id="sec-5-sharding">5.1 Database Sharding</h3>
+
+  <div class="card highlight">
+    <h4>Sharding by Short Code Prefix</h4>
+    <p>Partition URLs across <strong>62 shards</strong> based on the first character of the short code. Since Base62 uses <code>[0-9a-zA-Z]</code>, the first character naturally distributes across 62 buckets. Each shard holds ~16 million URLs (1B / 62).</p>
+    <p style="margin-top:12px;"><strong>Why prefix-based?</strong> The read path only needs the short code to locate the correct shard &mdash; no cross-shard queries. The short code itself encodes the shard key, eliminating the need for a separate routing table.</p>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>Advantages</strong><br>
+      <ul>
+        <li>Deterministic routing from short code alone</li>
+        <li>Even distribution (Base62 chars are uniformly generated)</li>
+        <li>No cross-shard queries for reads or writes</li>
+        <li>Easy to add more shards by splitting on two-character prefix (62² = 3,844 shards)</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <strong>Considerations</strong><br>
+      <ul>
+        <li>Custom aliases may cause uneven shard distribution</li>
+        <li>Resharding requires data migration</li>
+        <li>Analytics queries that span all URLs need scatter-gather</li>
+        <li>Backup/restore granularity is per-shard</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="sec-5-cache">5.2 Cache Strategy</h3>
+
+  <div class="card highlight">
+    <h4>Redis Cluster Architecture</h4>
+    <p>A <strong>Redis Cluster</strong> with consistent hashing distributes cached URL mappings across multiple nodes. Target metrics:</p>
+    <ul>
+      <li><strong>Hit rate:</strong> 90%+ (popular links are clicked repeatedly, Zipf distribution)</li>
+      <li><strong>Eviction policy:</strong> LRU (Least Recently Used) &mdash; unpopular links age out naturally</li>
+      <li><strong>TTL:</strong> 24-hour default, matching URL expiration when set</li>
+      <li><strong>Cluster size:</strong> ~50GB total for 100M cached mappings (avg 500 bytes each)</li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <h4>Bloom Filter for Non-Existent URLs</h4>
+    <p>A <strong>Bloom filter</strong> in front of the database catches lookups for short codes that don't exist. Without it, every 404 request (invalid short link) would query the database. The Bloom filter uses ~1GB of memory for 1B URLs with a 1% false positive rate. On a Bloom filter negative, return 404 immediately without touching the database.</p>
+  </div>
+
+  <h3 id="sec-5-rate">5.3 Rate Limiting</h3>
+
+  <div class="card highlight">
+    <h4>Token Bucket per API Key</h4>
+    <p>Each API key gets a token bucket with configurable fill rate and burst capacity:</p>
+    <table>
+      <tr><th>Plan</th><th>Create URLs/min</th><th>Redirects/min</th><th>Burst</th></tr>
+      <tr><td>Free</td><td>10</td><td>1,000</td><td>2x</td></tr>
+      <tr><td>Pro</td><td>100</td><td>10,000</td><td>5x</td></tr>
+      <tr><td>Enterprise</td><td>1,000</td><td>100,000</td><td>10x</td></tr>
+    </table>
+    <p style="margin-top:12px;">Rate limit state is stored in Redis with atomic <code>INCR</code> and <code>EXPIRE</code> commands. Distributed rate limiting across API servers uses a shared Redis counter per API key.</p>
+  </div>
+
+  <h3>5.4 Analytics Pipeline</h3>
+
+  <div class="card highlight">
+    <h4>Click Event Processing</h4>
+    <p>Click events flow through a three-stage pipeline:</p>
+    <ol>
+      <li><strong>Ingest:</strong> API servers publish click events to a <span class="linkedin-tag">Kafka</span> topic (<code>click-events</code>) with short code as the partition key. This ensures all clicks for the same URL land on the same partition for ordered processing.</li>
+      <li><strong>Process:</strong> <span class="linkedin-tag">Samza</span> stream processors consume events and compute real-time aggregations: per-minute click counts, unique visitors (HyperLogLog), country distribution, and referrer breakdown.</li>
+      <li><strong>Serve:</strong> Aggregated results are written to <span class="linkedin-tag">Venice</span> (read-optimized store). Analytics API queries read from Venice, serving dashboard data in &lt;10ms.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-5-expiry">5.5 URL Expiration</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>Background Cleanup Job</strong><br>
+      A cron-based job scans for expired URLs every hour: <code>DELETE FROM urls WHERE expires_at < NOW()</code>. Runs during off-peak hours. Deletes in batches of 1,000 to avoid long-running transactions. Removes corresponding cache entries.
+    </div>
+    <div class="card highlight">
+      <strong>Lazy Deletion on Access</strong><br>
+      When a redirect request hits an expired URL, the server returns <code>410 Gone</code> instead of redirecting. The expired mapping is deleted from both cache and database on this access. Combines with background job for comprehensive cleanup.
+    </div>
+  </div>
+
+  <div class="diagram">
+    <img src="images/sd_urlshort_05_scaling.png" alt="Scaling Architecture and Deep Dive">
+    <div class="caption">Figure 5: Scaling Architecture &mdash; Sharding, caching, rate limiting, and analytics pipeline</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Scaling Architecture</h4>
+    <ol>
+      <li><strong>Database Sharding Layer:</strong> The 62-shard setup distributes URLs by short code prefix. Each shard is a MySQL/Espresso partition with its own primary and read replicas. The routing layer uses the first character of the short code to deterministically select the shard &mdash; no lookup table needed.</li>
+      <li><strong>Redis Cache Cluster:</strong> Consistent hashing distributes cached mappings across Redis nodes. When a node fails, its key range is absorbed by neighbors on the hash ring. The Bloom filter sits in front of the database (not the cache) and prevents unnecessary DB queries for non-existent short codes.</li>
+      <li><strong>Rate Limiter:</strong> The token bucket implementation uses Redis atomic operations. Each API request decrements the bucket; the bucket refills at the plan's configured rate. When the bucket is empty, the API returns HTTP 429 Too Many Requests with a <code>Retry-After</code> header.</li>
+      <li><strong>Analytics Pipeline:</strong> Click events flow from API servers → Kafka → Samza → Venice. The Kafka topic is partitioned by short code, ensuring all clicks for one URL are processed in order by the same Samza task. Venice materializes per-URL, per-hour, and per-day aggregation tables.</li>
+      <li><strong>Expiration Cleanup:</strong> The background job runs hourly, scanning the <code>expires_at</code> index. It deletes in batches of 1,000 with a 100ms sleep between batches to avoid overwhelming the database. The lazy deletion on read access handles the gap between cleanup runs.</li>
+    </ol>
+  </div>
+
+  <h3>Full LinkedIn Technology Mapping</h3>
+
+  <table>
+    <tr><th>Component</th><th>Generic Tech</th><th>LinkedIn Equivalent</th><th>Role</th></tr>
+    <tr><td>Primary Database</td><td>MySQL</td><td><span class="linkedin-tag">Espresso</span></td><td>URL mapping storage, auto-sharded by short code</td></tr>
+    <tr><td>Cache</td><td>Redis</td><td><span class="linkedin-tag">Couchbase</span></td><td>Sub-ms URL lookups, 90%+ hit rate</td></tr>
+    <tr><td>Message Queue</td><td>Kafka</td><td><span class="linkedin-tag">Kafka</span></td><td>Click event ingestion, async processing</td></tr>
+    <tr><td>Stream Processing</td><td>Flink / Spark Streaming</td><td><span class="linkedin-tag">Samza</span></td><td>Real-time click aggregation</td></tr>
+    <tr><td>Analytics Store</td><td>ClickHouse / Druid</td><td><span class="linkedin-tag">Venice</span></td><td>Precomputed analytics views</td></tr>
+    <tr><td>API Framework</td><td>Spring Boot</td><td><span class="linkedin-tag">Rest.li</span></td><td>RESTful API endpoints</td></tr>
+    <tr><td>Service Discovery</td><td>Consul / Eureka</td><td><span class="linkedin-tag">D2</span></td><td>Dynamic routing and load balancing</td></tr>
+    <tr><td>ID Generation</td><td>Twitter Snowflake</td><td><span class="linkedin-tag">Distributed ID Service</span></td><td>Globally unique, time-ordered IDs</td></tr>
+    <tr><td>Rate Limiting</td><td>Redis + Lua</td><td><span class="linkedin-tag">Couchbase Counters</span></td><td>Per-API-key token bucket</td></tr>
+    <tr><td>Configuration</td><td>Zookeeper</td><td><span class="linkedin-tag">Zookeeper</span></td><td>Machine ID assignment, feature flags</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 6 ======================= -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>Interview Questions &amp; Talking Points</h2>
+
+  <p>Common follow-up questions interviewers ask about URL shortener design, with structured answers and tradeoff analysis.</p>
+
+  <h3>Q1: How do you handle custom aliases?</h3>
+
+  <div class="card highlight">
+    <p><strong>Answer:</strong> Custom aliases are checked for uniqueness at creation time with a <code>SELECT</code> query against the <code>short_code</code> unique index. If available, the alias is reserved immediately by inserting a row &mdash; there's no separate "reservation" step. The unique constraint prevents race conditions where two users request the same alias simultaneously (one INSERT succeeds, the other gets a constraint violation and returns 409 Conflict).</p>
+    <p style="margin-top:12px;"><strong>Additional considerations:</strong> Custom aliases should be validated for length (3&ndash;30 chars), allowed characters (alphanumeric + hyphens), and checked against a reserved words blocklist (e.g., <code>api</code>, <code>admin</code>, <code>login</code>).</p>
+  </div>
+
+  <h3>Q2: How do you prevent malicious URLs?</h3>
+
+  <div class="card warn">
+    <p><strong>Answer:</strong> Three layers of defense:</p>
+    <ol>
+      <li><strong>Blocklist:</strong> Maintain a database of known malicious domains (updated from threat intelligence feeds). Check every URL at creation time against the blocklist.</li>
+      <li><strong>URL Scanning:</strong> For new or unknown domains, submit the URL to a scanning service (Google Safe Browsing API) asynchronously. Flag suspicious URLs for manual review before activating them.</li>
+      <li><strong>User Reporting:</strong> Provide a "Report this link" endpoint. After a threshold of reports (e.g., 5), deactivate the short link and queue it for review. Users who create multiple flagged URLs get their API key suspended.</li>
+    </ol>
+  </div>
+
+  <h3>Q3: How do you handle URL expiration?</h3>
+
+  <div class="card highlight">
+    <p><strong>Answer:</strong> Two complementary strategies:</p>
+    <ol>
+      <li><strong>Background Job (Active):</strong> A scheduled job runs every hour, scanning the <code>expires_at</code> index for URLs past their expiry. Deletes in batches to avoid DB strain. Also purges corresponding cache entries.</li>
+      <li><strong>Lazy Deletion (Passive):</strong> On every redirect request, check <code>expires_at</code> before redirecting. If expired, return <code>HTTP 410 Gone</code>, delete from cache and database. This catches URLs that expired between cleanup runs.</li>
+    </ol>
+    <p style="margin-top:12px;"><strong>Why both?</strong> The background job prevents unbounded database growth. Lazy deletion provides a better user experience (immediate 410 instead of redirect to a dead page). Together they ensure no expired URL persists longer than one cleanup cycle.</p>
+  </div>
+
+  <h3>Q4: 301 vs 302 &mdash; which redirect code and why?</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>Choose 301 when:</strong><br>
+      <ul>
+        <li>Performance and server cost matter most</li>
+        <li>URLs are permanent (no destination changes)</li>
+        <li>SEO link juice transfer is important</li>
+        <li>Analytics can tolerate under-counting repeat visitors</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <strong>Choose 302 when:</strong><br>
+      <ul>
+        <li>Every single click must be counted precisely</li>
+        <li>URL destinations may change after creation</li>
+        <li>A/B testing different destinations</li>
+        <li>Server load is not a concern</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <strong>Recommended answer:</strong> "I'd use <strong>301</strong> for performance &mdash; browser caching eliminates repeat server hits &mdash; combined with <strong>async Kafka logging</strong> to capture the first click. For users who need precise per-click analytics, offer 302 as an opt-in flag at URL creation time."
+  </div>
+
+  <h3>Q5: How to generate globally unique short codes without coordination?</h3>
+
+  <div class="card highlight">
+    <p><strong>Answer:</strong> Use <strong>Snowflake IDs</strong>. Each server gets a unique 10-bit machine ID (1,024 possible machines) assigned via Zookeeper at startup. The server combines:</p>
+    <ul>
+      <li><strong>41-bit timestamp</strong> (current time in milliseconds) &mdash; provides rough ordering</li>
+      <li><strong>10-bit machine ID</strong> &mdash; prevents cross-server collisions</li>
+      <li><strong>12-bit sequence</strong> &mdash; handles burst within the same millisecond (4,096 IDs/ms)</li>
+    </ul>
+    <p style="margin-top:12px;">The resulting 64-bit integer is Base62-encoded. No server needs to talk to another server or a central database to generate an ID. The only coordination is the one-time machine ID assignment. This gives <strong>4 million IDs/second</strong> cluster-wide with zero coordination overhead per request.</p>
+  </div>
+
+  <h3>Tradeoff Summary</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <strong>Consistency vs Availability</strong><br>
+      URL creation requires <strong>strong consistency</strong> (no duplicate short codes). Redirects can tolerate <strong>eventual consistency</strong> (serving a slightly stale cache entry is acceptable). This maps to CP for writes, AP for reads &mdash; a common pattern in read-heavy systems.
+    </div>
+    <div class="card highlight">
+      <strong>Storage vs Compute</strong><br>
+      Denormalize click counts into the <code>urls</code> table (storage cost) to avoid expensive COUNT queries on the <code>click_events</code> table (compute cost). Pre-aggregate analytics in the stream processor (compute at write time) to serve dashboards instantly (no compute at read time).
+    </div>
+    <div class="card highlight">
+      <strong>Latency vs Accuracy</strong><br>
+      The 301 redirect sacrifices per-click accuracy for sub-10ms latency. The Bloom filter sacrifices 1% false positives for eliminating database queries on non-existent URLs. These are deliberate tradeoffs where the 99th percentile user experience matters more than perfect precision.
+    </div>
+    <div class="card highlight">
+      <strong>Simplicity vs Scalability</strong><br>
+      A single MySQL instance handles 1M URLs easily. At 1B URLs, you need sharding, caching, Bloom filters, and async analytics. The interview answer should start simple and scale up when the interviewer pushes on numbers &mdash; don't over-engineer from the start.
+    </div>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<footer>
+  <p>System Design Interview Guide &bull; Design URL Shortener &bull; LinkedIn Technology Mapping</p>
+  <p style="margin-top:8px;">Part of the <a href="index.html" style="color:var(--accent);">Linux Systems &amp; System Design Guide</a></p>
+</footer>
+
+</body>
+</html>

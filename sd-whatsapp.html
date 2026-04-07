@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design WhatsApp</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #25D366;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a0f 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.green { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.green:hover { background: rgba(37,211,102,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>WhatsApp</span></h1>
+    <p>A deep dive into real-time messaging at massive scale &mdash; WebSocket connections, message delivery guarantees, end-to-end encryption, group chat fan-out, and media handling.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-whatsapp.html" class="green">Design WhatsApp (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale Requirements</a></li>
+    <li><a href="#sec-2">High-Level Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Core Components</a></li>
+        <li><a href="#sec-2-2">Online &amp; Offline Delivery Flows</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Message Delivery &amp; Guarantees</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Delivery States</a></li>
+        <li><a href="#sec-3-2">Online Path</a></li>
+        <li><a href="#sec-3-3">Offline Path</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Group Messaging</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Fan-Out Strategies</a></li>
+        <li><a href="#sec-4-2">Message Ordering</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">End-to-End Encryption</a>
+      <ul class="sub">
+        <li><a href="#sec-5-1">Signal Protocol</a></li>
+        <li><a href="#sec-5-2">Key Exchange &amp; Ratcheting</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ========== SECTION 1: Overview ========== -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale Requirements</h2>
+
+  <p>WhatsApp is a real-time messaging platform that connects over 2 billion users across the globe. The system must deliver text, media, voice, and video messages with sub-100ms latency while maintaining end-to-end encryption and exactly-once delivery semantics.</p>
+
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">2B+</div>
+      <div class="label">Monthly Active Users</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">100B</div>
+      <div class="label">Messages / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">1M+</div>
+      <div class="label">Connections / Server</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt;100ms</div>
+      <div class="label">Message Delivery Target</div>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <h4>Core Functional Requirements</h4>
+    <ul>
+      <li><strong>1:1 messaging</strong> &mdash; Text, images, video, voice notes, documents</li>
+      <li><strong>Group messaging</strong> &mdash; Up to 1024 members per group</li>
+      <li><strong>Delivery receipts</strong> &mdash; Sent, Delivered, Read indicators</li>
+      <li><strong>Online/offline presence</strong> &mdash; Last-seen timestamps</li>
+      <li><strong>End-to-end encryption</strong> &mdash; Server cannot read message content</li>
+      <li><strong>Media sharing</strong> &mdash; Photos, videos, voice messages with compression</li>
+      <li><strong>Push notifications</strong> &mdash; Notify offline users of new messages</li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <h4>Non-Functional Requirements</h4>
+    <table>
+      <tr><th>Dimension</th><th>Target</th></tr>
+      <tr><td>Latency</td><td>&lt; 100ms end-to-end for online users</td></tr>
+      <tr><td>Availability</td><td>99.99% (< 52 min downtime/year)</td></tr>
+      <tr><td>Durability</td><td>Zero message loss &mdash; at-least-once with dedup</td></tr>
+      <tr><td>Ordering</td><td>Per-sender FIFO within a conversation</td></tr>
+      <tr><td>Security</td><td>E2E encryption; server stores only ciphertext</td></tr>
+      <tr><td>Scalability</td><td>Horizontal scaling to billions of concurrent connections</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ========== SECTION 2: Architecture ========== -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>High-Level Architecture</h2>
+
+  <h3 id="sec-2-1">Core Components</h3>
+
+  <table>
+    <tr><th>Component</th><th>Responsibility</th><th>Key Characteristics</th></tr>
+    <tr>
+      <td><strong>WebSocket Gateway</strong></td>
+      <td>Maintains persistent connections with clients</td>
+      <td>1M+ connections/server, TLS termination, heartbeat management</td>
+    </tr>
+    <tr>
+      <td><strong>Connection Registry</strong></td>
+      <td>Maps user IDs to their active gateway server</td>
+      <td>Distributed hash map, sub-ms lookups, TTL-based expiry</td>
+    </tr>
+    <tr>
+      <td><strong>Chat Service</strong></td>
+      <td>Message routing, delivery orchestration, receipt tracking</td>
+      <td>Stateless, horizontally scalable, idempotent processing</td>
+    </tr>
+    <tr>
+      <td><strong>Message Store</strong></td>
+      <td>Persistent storage for offline messages and chat history</td>
+      <td>Write-optimized, per-user partitioning, TTL for delivered messages</td>
+    </tr>
+    <tr>
+      <td><strong>Group Service</strong></td>
+      <td>Group membership, fan-out coordination, metadata management</td>
+      <td>Membership cache, large-group queued fan-out</td>
+    </tr>
+    <tr>
+      <td><strong>Media Service</strong></td>
+      <td>Upload, compress, encrypt, and serve media files</td>
+      <td>Blob storage, CDN distribution, thumbnail generation</td>
+    </tr>
+  </table>
+
+  <div class="diagram">
+    <img src="images/sd_whatsapp_01_architecture.png" alt="WhatsApp High-Level Architecture">
+    <div class="caption">Figure 1 &mdash; WhatsApp high-level architecture showing WebSocket gateways, Chat Service, and delivery paths</div>
+  </div>
+
+  <h3 id="sec-2-2">Online &amp; Offline Delivery Flows</h3>
+
+  <div class="walkthrough">
+    <h4>Online Delivery (recipient is connected)</h4>
+    <ol>
+      <li>Sender's client encrypts the message with the recipient's session key and sends it over its WebSocket connection to <strong>Gateway A</strong>.</li>
+      <li>Gateway A forwards the message to the <strong>Chat Service</strong>, which persists it to the <strong>Message Store</strong> (write-ahead) and returns a <code>sent ✓</code> acknowledgment.</li>
+      <li>Chat Service queries the <strong>Connection Registry</strong> to find the recipient's active gateway.</li>
+      <li>Registry returns <strong>Gateway B</strong>. Chat Service pushes the message to Gateway B.</li>
+      <li>Gateway B delivers the message over the recipient's WebSocket. Recipient sends a <code>delivered ✓✓</code> ack back through the same path.</li>
+      <li>Chat Service updates the delivery state and notifies the sender's gateway, which pushes the <code>delivered ✓✓</code> tick to the sender.</li>
+    </ol>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Offline Delivery (recipient is disconnected)</h4>
+    <ol>
+      <li>Sender's client sends the encrypted message to <strong>Gateway A</strong>.</li>
+      <li>Gateway A forwards to the <strong>Chat Service</strong>. Message is persisted &rarr; sender gets <code>sent ✓</code>.</li>
+      <li>Chat Service queries the <strong>Connection Registry</strong> &mdash; no entry found for recipient.</li>
+      <li>Message stays in the <strong>Message Store</strong> in the recipient's offline queue.</li>
+      <li>Chat Service fires a <strong>push notification</strong> (APNs / FCM) with a lightweight payload (sender name, no content due to E2E encryption).</li>
+      <li>When the recipient reconnects, their gateway issues a <strong>sync request</strong>. Chat Service drains the offline queue and delivers all pending messages in order.</li>
+      <li>Recipient acks each message &rarr; <code>delivered ✓✓</code> flows back to sender.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ========== SECTION 3: Message Delivery ========== -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>Message Delivery &amp; Guarantees</h2>
+
+  <h3 id="sec-3-1">Delivery States</h3>
+
+  <div class="card success">
+    <table>
+      <tr><th>State</th><th>Visual</th><th>Meaning</th><th>Trigger</th></tr>
+      <tr>
+        <td><strong>Sent</strong></td>
+        <td style="font-size:1.3em; color:#8b949e;">&#10003;</td>
+        <td>Message reached the server and is persisted</td>
+        <td>Chat Service writes to Message Store and acks to sender</td>
+      </tr>
+      <tr>
+        <td><strong>Delivered</strong></td>
+        <td style="font-size:1.3em; color:#8b949e;">&#10003;&#10003;</td>
+        <td>Message delivered to recipient's device</td>
+        <td>Recipient's client sends delivery ack to Chat Service</td>
+      </tr>
+      <tr>
+        <td><strong>Read</strong></td>
+        <td style="font-size:1.3em; color:#58a6ff;">&#10003;&#10003;</td>
+        <td>Recipient opened the conversation</td>
+        <td>Recipient's client sends read receipt (if enabled)</td>
+      </tr>
+    </table>
+  </div>
+
+  <h3 id="sec-3-2">Online Path (Detailed)</h3>
+
+  <div class="card highlight">
+    <pre>
+Sender ──WebSocket──▶ Gateway A ──▶ Chat Service ──▶ Connection Registry
+                                         │                    │
+                                    (persist msg)        (lookup user)
+                                         │                    │
+                                         ▼                    ▼
+                                   Message Store        Gateway B found
+                                         │                    │
+                                    sent ✓ ack           push to Gateway B
+                                         │                    │
+                                         ◀────────────────────┘
+                                                              │
+                                                    Gateway B ──WebSocket──▶ Recipient
+                                                              │
+                                                    delivered ✓✓ ack flows back</pre>
+  </div>
+
+  <p>Every message carries a unique <code>message_id</code> (UUID v7 with embedded timestamp) for idempotent delivery. If a client receives a duplicate, it silently discards it. The Chat Service also deduplicates within a sliding window using a Bloom filter backed by a hash set.</p>
+
+  <h3 id="sec-3-3">Offline Path &amp; Sync</h3>
+
+  <div class="card warn">
+    <h4>Offline Queue Design</h4>
+    <ul>
+      <li><strong>Per-user queue</strong> in Message Store, ordered by <code>message_id</code> timestamp.</li>
+      <li><strong>TTL</strong> &mdash; Messages expire after 30 days if undelivered.</li>
+      <li><strong>Batch sync</strong> &mdash; On reconnect, client sends its last-seen <code>message_id</code>. Server streams all subsequent messages in order.</li>
+      <li><strong>Push notification</strong> &mdash; Lightweight notification via APNs/FCM. Cannot include message body (E2E encrypted). Contains sender ID and conversation ID only.</li>
+      <li><strong>Multi-device</strong> &mdash; Each device maintains its own sync cursor. Message is only deleted from server after all linked devices ack.</li>
+    </ul>
+  </div>
+
+  <h4>Delivery Guarantees</h4>
+  <table>
+    <tr><th>Guarantee</th><th>Mechanism</th></tr>
+    <tr><td>At-least-once delivery</td><td>Server retries until client acks; client deduplicates by <code>message_id</code></td></tr>
+    <tr><td>Ordering per sender</td><td>Monotonic <code>message_id</code> with embedded timestamp; client sorts on receipt</td></tr>
+    <tr><td>No message loss</td><td>Write-ahead to durable store before acking sender; replication factor 3</td></tr>
+    <tr><td>Exactly-once semantics</td><td>Idempotent writes + client-side dedup = effectively exactly-once</td></tr>
+  </table>
+</div>
+
+<!-- ========== SECTION 4: Group Messaging ========== -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Group Messaging</h2>
+
+  <h3 id="sec-4-1">Fan-Out Strategies</h3>
+
+  <p>When a user sends a message to a group of <strong>N</strong> members, the Chat Service must deliver the message to all N&minus;1 other members. The fan-out strategy varies by group size:</p>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Small Groups (&le; 256 members)</h4>
+      <ul>
+        <li><strong>In-memory fan-out</strong> &mdash; Group Service keeps membership list in cache</li>
+        <li>Chat Service iterates members, queries Connection Registry for each</li>
+        <li>Online members get immediate delivery; offline members get queued</li>
+        <li>Latency: <strong>&lt; 50ms</strong> for all online members</li>
+        <li>Used for ~95% of all groups</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h4>Large Groups (&gt; 256 members)</h4>
+      <ul>
+        <li><strong>Queued fan-out</strong> &mdash; Message placed in a fan-out queue</li>
+        <li>Worker pool processes queue, delivering in batches of 50</li>
+        <li>Prevents a single large group from starving other messages</li>
+        <li>Latency: <strong>&lt; 500ms</strong> p99 for all members</li>
+        <li>Back-pressure and rate limiting per group</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <h4>Group Fan-Out Flow</h4>
+    <pre>
+Sender ──▶ Chat Service ──▶ Group Service (get member list)
+                │                      │
+                │              ┌───────┴───────┐
+                │              ▼               ▼
+                │        Small Group       Large Group
+                │        (in-memory)       (enqueue to
+                │              │            fan-out queue)
+                │              ▼               ▼
+                │        For each member:  Worker pool:
+                │        ├─ Registry lookup  ├─ Batch of 50
+                │        ├─ Online → push    ├─ Registry lookup
+                │        └─ Offline → queue  └─ Deliver / queue
+                ▼
+          sender gets sent ✓</pre>
+  </div>
+
+  <h3 id="sec-4-2">Message Ordering</h3>
+
+  <div class="card">
+    <p>Maintaining consistent message order across distributed servers is challenging. WhatsApp uses a combination of techniques:</p>
+    <table>
+      <tr><th>Technique</th><th>Purpose</th><th>Details</th></tr>
+      <tr>
+        <td><strong>Lamport Timestamps</strong></td>
+        <td>Logical ordering across servers</td>
+        <td>Each Chat Service node maintains a logical clock. On send, <code>timestamp = max(local, received) + 1</code>. Provides causal ordering without synchronized physical clocks.</td>
+      </tr>
+      <tr>
+        <td><strong>Sender Sequence Number</strong></td>
+        <td>Per-sender FIFO</td>
+        <td>Each client attaches a monotonically increasing sequence number per conversation. Receiver buffers and reorders if messages arrive out of sequence.</td>
+      </tr>
+      <tr>
+        <td><strong>Server Timestamp</strong></td>
+        <td>Tie-breaking</td>
+        <td>Chat Service stamps each message with a server-side NTP-synchronized timestamp for display ordering when logical timestamps are equal.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Why Lamport Timestamps?</h4>
+    <ol>
+      <li>Physical clock synchronization across thousands of servers is impractical at sub-millisecond precision.</li>
+      <li>Lamport timestamps guarantee <strong>causal ordering</strong>: if message A causally precedes B, then <code>L(A) &lt; L(B)</code>.</li>
+      <li>They are lightweight &mdash; a single integer incremented on each event.</li>
+      <li>Combined with sender sequence numbers, they provide total ordering within a conversation with minimal coordination overhead.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ========== SECTION 5: End-to-End Encryption ========== -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>End-to-End Encryption</h2>
+
+  <h3 id="sec-5-1">Signal Protocol Overview</h3>
+
+  <p>WhatsApp uses the <strong>Signal Protocol</strong> (formerly TextSecure Protocol) to provide end-to-end encryption for all messages. The server never has access to plaintext content or encryption keys.</p>
+
+  <div class="card danger">
+    <h4>Key Principle: Server is Untrusted</h4>
+    <p>The server stores and forwards <strong>only ciphertext</strong>. Even if the server is compromised, message content remains confidential. Encryption and decryption happen exclusively on client devices. The server facilitates key exchange but never sees the shared secret.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Cryptographic Primitives</h4>
+    <table>
+      <tr><th>Primitive</th><th>Usage</th><th>Algorithm</th></tr>
+      <tr><td>Identity Key</td><td>Long-term device identity</td><td>Curve25519 key pair</td></tr>
+      <tr><td>Signed Pre-Key</td><td>Medium-term key, signed by identity key</td><td>Curve25519 + Ed25519 signature</td></tr>
+      <tr><td>One-Time Pre-Keys</td><td>Single-use keys for initial key exchange</td><td>Curve25519 (batch of 100 uploaded)</td></tr>
+      <tr><td>Session Key</td><td>Symmetric encryption of messages</td><td>AES-256-CBC + HMAC-SHA256</td></tr>
+      <tr><td>Message Key</td><td>Per-message unique key (derived from chain key)</td><td>HKDF (HMAC-based Key Derivation)</td></tr>
+    </table>
+  </div>
+
+  <h3 id="sec-5-2">Key Exchange &amp; Ratcheting</h3>
+
+  <div class="walkthrough">
+    <h4>Extended Triple Diffie-Hellman (X3DH) Key Exchange</h4>
+    <ol>
+      <li><strong>Registration</strong>: Each device generates an Identity Key pair, a Signed Pre-Key pair, and a batch of One-Time Pre-Key pairs. Public keys are uploaded to the server.</li>
+      <li><strong>Session initiation</strong>: Alice wants to message Bob. She fetches Bob's key bundle (Identity Key, Signed Pre-Key, one One-Time Pre-Key) from the server.</li>
+      <li><strong>X3DH computation</strong>: Alice performs three (or four) Diffie-Hellman computations using her keys and Bob's bundle to derive a shared secret <code>S</code>.</li>
+      <li><strong>Root key</strong>: The shared secret <code>S</code> is fed into HKDF to produce the initial Root Key and Chain Key.</li>
+      <li><strong>First message</strong>: Alice encrypts her first message using a Message Key derived from the Chain Key. She attaches her Identity Key and ephemeral key so Bob can perform the same X3DH computation.</li>
+    </ol>
+  </div>
+
+  <div class="card success">
+    <h4>Double Ratchet Algorithm</h4>
+    <p>After the initial key exchange, the Double Ratchet provides <strong>forward secrecy</strong> and <strong>break-in recovery</strong>:</p>
+    <ul>
+      <li><strong>Symmetric ratchet (Chain Key)</strong> &mdash; After each message, the Chain Key is ratcheted: <code>CK_new = HMAC(CK, 0x02)</code>. The Message Key is derived: <code>MK = HMAC(CK, 0x01)</code>. Old Chain Keys are deleted.</li>
+      <li><strong>DH ratchet</strong> &mdash; On each reply, the sender generates a new ephemeral DH key pair and includes the public key. Both parties perform a new DH exchange to derive a new Root Key and Chain Key. This provides <strong>break-in recovery</strong>: even if current keys are compromised, future messages are secure.</li>
+      <li><strong>Forward secrecy</strong> &mdash; Past Message Keys cannot be derived from current state because the ratchet is one-way (HMAC). Compromising the current state does not reveal past messages.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>Group Encryption</h4>
+    <p>Groups use the <strong>Sender Keys</strong> variant of the Signal Protocol:</p>
+    <ul>
+      <li>Each member generates a <strong>Sender Key</strong> and distributes it to all group members via pairwise E2E-encrypted channels.</li>
+      <li>Messages are encrypted once with the Sender Key (symmetric), rather than N times for each member.</li>
+      <li>When a member leaves, all remaining members generate new Sender Keys to ensure the departing member cannot decrypt future messages.</li>
+      <li>Trade-off: more efficient than pairwise encryption (O(1) vs O(N) encryptions per message) but requires key redistribution on membership changes.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ========== SECTION 6: LinkedIn Mapping & Interview ========== -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>LinkedIn Technology Mapping</h3>
+
+  <p>WhatsApp's architecture maps to several LinkedIn infrastructure components:</p>
+
+  <table>
+    <tr><th>WhatsApp Component</th><th>LinkedIn Equivalent</th><th>Notes</th></tr>
+    <tr>
+      <td>WebSocket Gateway + Chat Service</td>
+      <td><span class="linkedin-tag">Real-Time Delivery Platform</span></td>
+      <td>LinkedIn's real-time messaging infrastructure handles presence, typing indicators, and message delivery over persistent connections</td>
+    </tr>
+    <tr>
+      <td>Message Store (persistent, partitioned)</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn's NoSQL document store, horizontally partitioned by user ID, provides low-latency reads and writes for messaging data</td>
+    </tr>
+    <tr>
+      <td>Media Service (blob storage + CDN)</td>
+      <td><span class="linkedin-tag">Ambry</span></td>
+      <td>LinkedIn's distributed blob storage for media objects (images, documents, videos) with replication and tiered storage</td>
+    </tr>
+    <tr>
+      <td>Fan-out queue, event streaming</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>Invented at LinkedIn; used for message fan-out, event sourcing, async processing of delivery receipts and presence updates</td>
+    </tr>
+    <tr>
+      <td>Connection Registry (distributed cache)</td>
+      <td><span class="linkedin-tag">Couchbase</span></td>
+      <td>Low-latency distributed key-value store mapping user IDs to active gateway servers; sub-ms lookups with automatic failover</td>
+    </tr>
+  </table>
+
+  <h3>System Design Interview Questions</h3>
+
+  <div class="card highlight">
+    <h4>Group Scaling</h4>
+    <p><strong>Q: How would you scale group messaging to support groups with 100,000+ members?</strong></p>
+    <ul>
+      <li>Use <strong>topic-based fan-out</strong> via a message broker (Kafka). Each large group maps to a topic partition.</li>
+      <li>Consumers pull messages at their own rate, preventing thundering herd on the Chat Service.</li>
+      <li>Introduce a <strong>fan-out service</strong> that processes group messages asynchronously with configurable parallelism.</li>
+      <li>For read-heavy large groups (e.g., announcement channels), switch to <strong>fan-out on read</strong>: store a single copy and let each member's client pull from the group timeline.</li>
+      <li>Shard the Connection Registry by user ID range so lookups during fan-out can be parallelized.</li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <h4>End-to-End Encryption Challenges</h4>
+    <p><strong>Q: What are the trade-offs of E2E encryption at scale?</strong></p>
+    <ul>
+      <li><strong>Server-side search is impossible</strong> &mdash; The server cannot index or search message content. Search must be client-side only.</li>
+      <li><strong>Spam/abuse detection is harder</strong> &mdash; Content moderation cannot inspect ciphertext. Must rely on metadata analysis, user reports, and on-device classifiers.</li>
+      <li><strong>Multi-device sync complexity</strong> &mdash; Each device needs its own encryption session. Adding a new device requires re-establishing keys with all contacts.</li>
+      <li><strong>Key management at scale</strong> &mdash; With 2B users, the key server must handle billions of key bundle fetches and one-time pre-key replenishments.</li>
+      <li><strong>Group key rotation</strong> &mdash; When a member leaves, all sender keys must rotate. For large groups this creates O(N&sup2;) encrypted messages for key distribution.</li>
+    </ul>
+  </div>
+
+  <div class="card success">
+    <h4>Message Ordering</h4>
+    <p><strong>Q: How do you guarantee message ordering in a distributed system?</strong></p>
+    <ul>
+      <li><strong>Per-sender ordering</strong> is achievable with sender-side monotonic sequence numbers. The receiver buffers and reorders.</li>
+      <li><strong>Global ordering</strong> is expensive (requires consensus like Raft/Paxos). WhatsApp avoids it &mdash; only per-conversation ordering is guaranteed.</li>
+      <li><strong>Lamport timestamps</strong> provide causal ordering without clock synchronization. If A &rarr; B (A causally precedes B), then L(A) &lt; L(B).</li>
+      <li><strong>Vector clocks</strong> are more precise but have O(N) space overhead per message (N = number of participants). Impractical for large groups.</li>
+      <li>In practice, the client uses <code>(Lamport timestamp, server timestamp, sender sequence number)</code> as a composite sort key for display ordering.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>Additional Interview Topics</h4>
+    <table>
+      <tr><th>Topic</th><th>Key Points</th></tr>
+      <tr>
+        <td>Presence System</td>
+        <td>Heartbeats every 30s over WebSocket; last-seen stored in Connection Registry; subscribe to contacts' presence via pub-sub</td>
+      </tr>
+      <tr>
+        <td>Typing Indicators</td>
+        <td>Ephemeral signals sent over WebSocket; not persisted; throttled to 1 event/3s to reduce bandwidth</td>
+      </tr>
+      <tr>
+        <td>Media Upload</td>
+        <td>Client encrypts media → uploads to Media Service → gets a blob URL → sends URL + encryption key in the E2E-encrypted message</td>
+      </tr>
+      <tr>
+        <td>Rate Limiting</td>
+        <td>Per-user token bucket (30 msgs/min personal, 20 msgs/min groups); sliding window for spam detection on metadata patterns</td>
+      </tr>
+      <tr>
+        <td>Multi-Device</td>
+        <td>Each device is a separate Signal session; messages fanout to all linked devices; sync state via device-specific offline queues</td>
+      </tr>
+      <tr>
+        <td>Voice/Video Calls</td>
+        <td>SRTP for media transport; STUN/TURN for NAT traversal; SFU (Selective Forwarding Unit) for group calls; E2E encrypted</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<footer>
+  <p>System Design Study Guide &bull; Design WhatsApp &bull; Built for interview preparation</p>
+</footer>
+
+</body>
+</html>

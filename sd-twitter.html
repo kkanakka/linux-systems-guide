@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Twitter</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #1DA1F2;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a2a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.blue { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.blue:hover { background: rgba(29,161,242,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Twitter</span></h1>
+    <p>A deep dive into the architecture of a global microblogging platform &mdash; fan-out strategies, timeline generation, real-time search, trending topics, and the celebrity problem.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-twitter.html" class="blue">Design Twitter (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale Estimation</a></li>
+    <li><a href="#sec-2">Tweet Creation &amp; Fan-Out</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Fan-Out on Write</a></li>
+        <li><a href="#sec-2-2">Fan-Out on Read</a></li>
+        <li><a href="#sec-2-3">Hybrid Approach</a></li>
+        <li><a href="#sec-2-4">The Celebrity Problem</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Timeline Generation</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Redis Sorted Sets</a></li>
+        <li><a href="#sec-3-2">Hydration Pipeline</a></li>
+        <li><a href="#sec-3-3">Cursor-Based Pagination</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Search &amp; Trending</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Inverted Index for Hashtags</a></li>
+        <li><a href="#sec-4-2">Trending Detection</a></li>
+        <li><a href="#sec-4-3">Search Ranking</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Data Model</a></li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ==================== SECTION 1 ==================== -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale Estimation</h2>
+
+  <p>Twitter is a global <strong>microblogging</strong> platform where users post short messages (tweets), follow other users, and consume a personalized timeline. The core challenge is delivering a real-time, ranked feed to hundreds of millions of users while ingesting an enormous write load.</p>
+
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">500M</div>
+      <div class="label">Monthly Active Users</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">500M</div>
+      <div class="label">Tweets per Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">300K</div>
+      <div class="label">Tweets/sec Peak</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt;200ms</div>
+      <div class="label">Timeline Load Target</div>
+    </div>
+  </ol>
+  </div>
+
+  <div class="card highlight">
+    <h4>Core Functional Requirements</h4>
+    <ul>
+      <li><strong>Post tweet</strong> &mdash; text (280 chars), images, videos, links</li>
+      <li><strong>Follow/unfollow</strong> &mdash; asymmetric social graph</li>
+      <li><strong>Home timeline</strong> &mdash; chronological + ranked feed of followed users' tweets</li>
+      <li><strong>Search</strong> &mdash; full-text, hashtag, and user search</li>
+      <li><strong>Trending topics</strong> &mdash; real-time detection of popular hashtags and keywords</li>
+      <li><strong>Like, retweet, reply</strong> &mdash; engagement actions on tweets</li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <h4>Non-Functional Requirements</h4>
+    <ul>
+      <li><strong>Availability</strong> &gt; 99.99% &mdash; users expect Twitter to always be reachable</li>
+      <li><strong>Latency</strong> &mdash; timeline load &lt; 200ms p99, tweet post &lt; 500ms</li>
+      <li><strong>Consistency</strong> &mdash; eventual consistency is acceptable for timeline; strong consistency for tweet creation</li>
+      <li><strong>Partition tolerance</strong> &mdash; must tolerate datacenter failures</li>
+    </ul>
+  </div>
+
+  <h3>Back-of-Envelope Estimates</h3>
+  <table>
+    <tr><th>Metric</th><th>Calculation</th><th>Result</th></tr>
+    <tr><td>Tweet writes/sec (avg)</td><td>500M / 86,400</td><td>~5,800 writes/sec</td></tr>
+    <tr><td>Tweet writes/sec (peak)</td><td>~50x average burst</td><td>~300,000 writes/sec</td></tr>
+    <tr><td>Timeline reads/sec</td><td>500M users &times; 5 opens/day / 86,400</td><td>~29,000 reads/sec</td></tr>
+    <tr><td>Read:Write ratio</td><td>Timeline reads dominate</td><td>~1000:1</td></tr>
+    <tr><td>Tweet storage/day</td><td>500M &times; 300 bytes avg</td><td>~150 GB/day</td></tr>
+    <tr><td>Media storage/day</td><td>~20% tweets have media, 1MB avg</td><td>~100 TB/day</td></tr>
+    <tr><td>Fan-out operations/sec</td><td>5,800 tweets &times; 200 avg followers</td><td>~1.16M fan-out ops/sec</td></tr>
+  </table>
+</div>
+
+<!-- ==================== SECTION 2 ==================== -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>Tweet Creation &amp; Fan-Out</h2>
+
+  <p>The central architectural challenge of Twitter is the <strong>fan-out problem</strong>: when a user tweets, that tweet must appear in the timeline of every follower. With some users having 100M+ followers, naive approaches break down. There are three fundamental strategies.</p>
+
+  <div class="diagram">
+    <img src="images/sd_twitter_01_architecture.png" alt="Twitter Fan-Out Architecture">
+    <div class="caption">Figure 1 &mdash; High-level architecture showing tweet ingestion, fan-out service, timeline cache, and read path</div>
+  </div>
+
+  <!-- Fan-Out on Write -->
+  <h3 id="sec-2-1">Fan-Out on Write (Push Model)</h3>
+
+  <div class="card success">
+    <h4>How It Works</h4>
+    <p>When a user posts a tweet, the system <strong>immediately pushes</strong> the tweet ID into the timeline cache (Redis sorted set) of every follower. The timeline is pre-computed at write time.</p>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Step-by-Step: Fan-Out on Write</h4>
+    <ol>
+      <li><strong>Tweet arrives</strong> &mdash; user posts a tweet via the API gateway. The tweet is written to the Tweets table (primary storage) and gets a unique <code>tweet_id</code> (Snowflake ID).</li>
+      <li><strong>Follower lookup</strong> &mdash; the Fan-Out Service queries the <code>follows</code> table to retrieve the list of all follower IDs for the author.</li>
+      <li><strong>Timeline insertion</strong> &mdash; for each follower, the service does <code>ZADD timeline:{user_id} {timestamp} {tweet_id}</code> in Redis, inserting the tweet into every follower's pre-computed timeline.</li>
+      <li><strong>Async via message queue</strong> &mdash; the fan-out is done asynchronously through a message queue (Kafka) so the tweet post returns immediately to the author.</li>
+      <li><strong>Timeline read</strong> &mdash; when a follower opens their home feed, they simply do <code>ZREVRANGE timeline:{user_id} 0 49</code> to get the latest 50 tweet IDs, already sorted. Extremely fast: O(log N + K).</li>
+    </ol>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Pros</h4>
+      <ul>
+        <li>Timeline read is <strong>O(1)</strong> &mdash; pre-computed, just a Redis lookup</li>
+        <li>Read latency is extremely low (&lt; 5ms from cache)</li>
+        <li>Simple read path &mdash; no joins, no aggregation at read time</li>
+      </ul>
+    </div>
+    <div class="card danger">
+      <h4>Cons</h4>
+      <ul>
+        <li>Celebrities with 100M followers &rarr; 100M Redis writes per tweet</li>
+        <li>Huge write amplification and potential minutes of lag</li>
+        <li>Wasted work for inactive followers who never read their timeline</li>
+        <li>High storage cost for per-user timeline caches</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Fan-Out on Read -->
+  <h3 id="sec-2-2">Fan-Out on Read (Pull Model)</h3>
+
+  <div class="card highlight">
+    <h4>How It Works</h4>
+    <p>No pre-computation at write time. When a user opens their timeline, the system <strong>fetches tweets at read time</strong> by querying the followed users' tweet lists and merging them.</p>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Step-by-Step: Fan-Out on Read</h4>
+    <ol>
+      <li><strong>Tweet arrives</strong> &mdash; user posts a tweet. It is written only to the Tweets table indexed by <code>author_id</code>. No fan-out happens.</li>
+      <li><strong>Timeline request</strong> &mdash; when a follower opens their home feed, the Timeline Service fetches their <code>following</code> list (e.g., 500 users).</li>
+      <li><strong>Parallel fetch</strong> &mdash; the service queries the Tweets table for the latest N tweets from each of the 500 followed users, in parallel.</li>
+      <li><strong>K-way merge</strong> &mdash; results are merged using a min-heap (priority queue) to produce a sorted timeline of the top 50 tweets by timestamp.</li>
+      <li><strong>Return</strong> &mdash; the merged result is returned to the client. Optionally cached briefly for repeat loads.</li>
+    </ol>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Pros</h4>
+      <ul>
+        <li>No write amplification &mdash; tweet is stored once</li>
+        <li>Celebrity tweets are not a problem at write time</li>
+        <li>No wasted computation for inactive users</li>
+      </ul>
+    </div>
+    <div class="card danger">
+      <h4>Cons</h4>
+      <ul>
+        <li>Read latency is <strong>high</strong> &mdash; must query 500+ users' tweet lists and merge</li>
+        <li>Read-heavy system (1000:1 ratio) means this is expensive at scale</li>
+        <li>Difficult to meet &lt;200ms SLA with large following lists</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Hybrid Approach -->
+  <h3 id="sec-2-3">Hybrid Approach (Twitter's Actual Solution)</h3>
+
+  <div class="card danger">
+    <h4>The Winning Architecture</h4>
+    <p>Twitter uses a <strong>hybrid approach</strong>: Fan-Out on Write for regular users, Fan-Out on Read for celebrities. A user is classified as a "celebrity" if their follower count exceeds a threshold (e.g., &gt; 500K followers).</p>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Step-by-Step: Hybrid Fan-Out</h4>
+    <ol>
+      <li><strong>Regular user tweets</strong> &mdash; fan-out on write. The tweet ID is pushed into all followers' Redis timeline caches (same as push model).</li>
+      <li><strong>Celebrity tweets</strong> &mdash; <strong>no fan-out at write time</strong>. The tweet is stored in the Tweets table and in a separate <code>celebrity_tweets</code> cache indexed by author.</li>
+      <li><strong>Timeline read</strong> &mdash; the Timeline Service fetches the user's pre-computed timeline from Redis (covers regular users' tweets) <strong>AND</strong> fetches latest tweets from each celebrity the user follows.</li>
+      <li><strong>Merge</strong> &mdash; the two result sets are merged by timestamp and ranked. The merged timeline is returned to the client.</li>
+      <li><strong>Threshold tuning</strong> &mdash; the celebrity threshold is tuned dynamically based on system load. Users near the boundary might be re-classified periodically.</li>
+    </ol>
+  </div>
+
+  <table>
+    <tr><th>Approach</th><th>Write Cost</th><th>Read Cost</th><th>Best For</th></tr>
+    <tr><td>Fan-Out on Write</td><td>O(followers)</td><td>O(1)</td><td>Users with &lt; 500K followers</td></tr>
+    <tr><td>Fan-Out on Read</td><td>O(1)</td><td>O(following)</td><td>Celebrity accounts</td></tr>
+    <tr><td>Hybrid</td><td>Mixed</td><td>O(1) + O(celeb_following)</td><td>Production Twitter</td></tr>
+  </table>
+
+  <!-- Celebrity Problem -->
+  <h3 id="sec-2-4">The Celebrity Problem</h3>
+
+  <div class="card warn">
+    <h4>Why Celebrities Break Fan-Out on Write</h4>
+    <p>Consider a celebrity with <strong>50 million followers</strong> who tweets. Under pure fan-out on write:</p>
+    <ul>
+      <li>50M Redis <code>ZADD</code> operations must complete</li>
+      <li>At 100K ops/sec per Redis shard, that's <strong>500 seconds</strong> (8+ minutes) of fan-out</li>
+      <li>Followers see the tweet with minutes of delay, not seconds</li>
+      <li>A burst of celebrity tweets (e.g., during a live event) can overwhelm the entire fan-out pipeline</li>
+      <li>Most of those 50M followers are inactive &mdash; the work is wasted</li>
+    </ul>
+  </div>
+
+  <div class="card success">
+    <h4>Hybrid Solution to the Celebrity Problem</h4>
+    <ul>
+      <li>Celebrity tweets skip the fan-out pipeline entirely</li>
+      <li>Only ~10&ndash;50 celebrity accounts need fan-out on read per user (most people follow few celebrities)</li>
+      <li>Merging 10&ndash;50 celebrity tweet lists at read time adds only ~20&ndash;50ms</li>
+      <li>Net result: tweet posting is fast for everyone, timeline reads stay under 200ms</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ==================== SECTION 3 ==================== -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>Timeline Generation</h2>
+
+  <p>The home timeline is the core product surface. It must feel instant, be personalized, and reflect near-real-time activity. The architecture combines <strong>pre-computed caches</strong>, a <strong>hydration pipeline</strong>, and <strong>cursor-based pagination</strong>.</p>
+
+  <h3 id="sec-3-1">Redis Sorted Sets for Timeline Storage</h3>
+
+  <div class="card highlight">
+    <h4>Data Structure</h4>
+    <p>Each user's timeline is stored as a Redis <strong>Sorted Set</strong> keyed by <code>timeline:{user_id}</code>. The score is the tweet's Snowflake timestamp, and the member is the <code>tweet_id</code>.</p>
+  </div>
+
+  <pre>
+Key:    timeline:12345
+Type:   Sorted Set (ZSET)
+
+Score (timestamp)       Member (tweet_id)
+───────────────────     ─────────────────
+1712345678901           tweet_98765
+1712345679234           tweet_98770
+1712345680100           tweet_98773
+1712345681456           tweet_98780
+...
+
+Commands:
+  ZADD  timeline:12345 1712345681456 tweet_98780    # Insert tweet
+  ZREVRANGE timeline:12345 0 49                     # Get latest 50
+  ZREMRANGEBYRANK timeline:12345 0 -801             # Trim to 800 max
+  ZCARD timeline:12345                              # Count entries</pre>
+
+  <div class="walkthrough">
+    <h4>Why Sorted Sets?</h4>
+    <ol>
+      <li><strong>O(log N) insert</strong> &mdash; adding a tweet to a sorted set is logarithmic, fast even with 800 entries per user.</li>
+      <li><strong>O(log N + K) range query</strong> &mdash; fetching the top K tweets by score (timestamp) is efficient.</li>
+      <li><strong>Automatic ordering</strong> &mdash; tweets are always sorted by time; no client-side sorting needed.</li>
+      <li><strong>Built-in dedup</strong> &mdash; a tweet_id can only appear once per set, preventing duplicates.</li>
+      <li><strong>Trim support</strong> &mdash; <code>ZREMRANGEBYRANK</code> keeps the set bounded (e.g., max 800 entries), preventing unbounded memory growth.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-3-2">Hydration Pipeline</h3>
+
+  <p>The timeline cache stores only <code>tweet_id</code>s for compactness. Before returning to the client, those IDs must be <strong>hydrated</strong> into full tweet objects with author info and media URLs.</p>
+
+  <div class="card success">
+    <h4>Hydration Flow: tweet_ids &rarr; Full Response</h4>
+    <pre>
+Timeline Cache (Redis)
+    │
+    ▼
+[tweet_id_1, tweet_id_2, ..., tweet_id_50]
+    │
+    ├──▶ Tweet Service    ──▶ { text, created_at, media_ids, author_id, ... }
+    │        (batch GET from Tweets table / cache)
+    │
+    ├──▶ User Service     ──▶ { username, display_name, avatar_url, verified }
+    │        (batch GET from Users table / cache)
+    │
+    └──▶ Media Service    ──▶ { image_url, video_url, thumbnail }
+             (resolve media_ids to CDN URLs)
+    │
+    ▼
+Merge &amp; return hydrated timeline JSON to client</pre>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Hydration Pipeline Steps</h4>
+    <ol>
+      <li><strong>Fetch tweet_ids</strong> &mdash; <code>ZREVRANGE timeline:{user_id} 0 49</code> returns the latest 50 tweet IDs.</li>
+      <li><strong>Batch tweet lookup</strong> &mdash; multiget against the Tweet Service (backed by a cache + database). Returns tweet text, author_id, media_ids, timestamp, reply/retweet metadata.</li>
+      <li><strong>Batch user lookup</strong> &mdash; extract unique <code>author_id</code>s, multiget against User Service. Returns display names, avatars, verification badges.</li>
+      <li><strong>Batch media lookup</strong> &mdash; extract <code>media_id</code>s, resolve to CDN URLs via Media Service. Images are served from edge CDN.</li>
+      <li><strong>Merge &amp; serialize</strong> &mdash; combine tweet data + user data + media URLs into the final JSON response. Apply any ranking adjustments.</li>
+      <li><strong>Client cache headers</strong> &mdash; set <code>Cache-Control</code> for short-lived client-side caching (e.g., 30s).</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-3-3">Cursor-Based Pagination</h3>
+
+  <div class="card highlight">
+    <h4>Why Not Offset-Based?</h4>
+    <p>Offset pagination (<code>LIMIT 50 OFFSET 100</code>) breaks in real-time feeds because new tweets shift the offset window, causing duplicates or missed tweets. <strong>Cursor-based pagination</strong> uses a stable reference point.</p>
+  </div>
+
+  <pre>
+GET /api/timeline?count=50
+Response: { tweets: [...], next_cursor: "1712345678901" }
+
+GET /api/timeline?count=50&cursor=1712345678901
+  → ZREVRANGEBYSCORE timeline:{uid} (1712345678901 +inf 0 49
+Response: { tweets: [...], next_cursor: "1712345670500" }
+
+# Cursor = Snowflake timestamp of the LAST tweet in previous page
+# Each page fetches tweets OLDER than the cursor
+# Immune to new tweets arriving between page loads</pre>
+
+  <div class="walkthrough">
+    <h4>Cursor Pagination Benefits</h4>
+    <ol>
+      <li><strong>No duplicates</strong> &mdash; new tweets inserted after the cursor don't shift results.</li>
+      <li><strong>No gaps</strong> &mdash; deleted tweets between pages don't cause skips.</li>
+      <li><strong>Efficient</strong> &mdash; Redis <code>ZREVRANGEBYSCORE</code> with score boundaries is O(log N + K).</li>
+      <li><strong>Stateless server</strong> &mdash; the cursor is a timestamp; the server doesn't need to track session state.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ==================== SECTION 4 ==================== -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Search &amp; Trending</h2>
+
+  <p>Twitter Search and Trending Topics are two distinct but interconnected systems. Search requires a full-text <strong>inverted index</strong> over hundreds of billions of tweets, while trending requires <strong>real-time stream processing</strong> to detect velocity spikes in hashtags and keywords.</p>
+
+  <h3 id="sec-4-1">Inverted Index for Hashtags</h3>
+
+  <div class="card highlight">
+    <h4>How Tweet Search Works</h4>
+    <p>Every tweet is tokenized and indexed into an <strong>inverted index</strong> that maps terms (words, hashtags, mentions) to lists of tweet IDs. This enables sub-second full-text search across the entire tweet corpus.</p>
+  </div>
+
+  <pre>
+Inverted Index Structure:
+─────────────────────────
+Term              → Posting List (sorted by timestamp desc)
+─────────────────────────
+#worldcup         → [tweet_999, tweet_987, tweet_950, tweet_912, ...]
+#breakingnews     → [tweet_998, tweet_975, tweet_960, ...]
+"earthquake"      → [tweet_997, tweet_990, tweet_985, ...]
+@elonmusk         → [tweet_996, tweet_980, ...]
+
+Query: "#worldcup goal"
+  1. Fetch posting list for #worldcup
+  2. Fetch posting list for "goal"
+  3. Intersect lists (AND) or union (OR) depending on query type
+  4. Rank by recency + engagement score
+  5. Return top K results</pre>
+
+  <div class="walkthrough">
+    <h4>Index Architecture</h4>
+    <ol>
+      <li><strong>Early bird index</strong> &mdash; Twitter uses an in-memory, real-time index called Earlybird. New tweets are indexed within seconds of posting, enabling real-time search.</li>
+      <li><strong>Sharding</strong> &mdash; the index is hash-partitioned by tweet ID across thousands of index shards. Each shard holds a subset of the inverted index.</li>
+      <li><strong>Scatter-gather</strong> &mdash; a search query is broadcast to all shards (scatter), each returns top-K results, and a root aggregator merges them (gather).</li>
+      <li><strong>Tiered storage</strong> &mdash; recent tweets (last 7 days) are in hot in-memory index; older tweets are in on-disk index with longer query latency.</li>
+      <li><strong>Hashtag tokenization</strong> &mdash; hashtags are treated as single tokens. <code>#WorldCup</code> is indexed as-is (case-normalized) for exact hashtag search.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-4-2">Trending Detection</h3>
+
+  <div class="card warn">
+    <h4>Detecting Trends in Real Time</h4>
+    <p>Trending isn't about absolute volume &mdash; it's about <strong>velocity</strong>. A hashtag that goes from 100 to 10,000 tweets in 5 minutes is trending, even if another hashtag has 50,000 steady tweets. The system detects anomalous acceleration.</p>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Sliding Window + Count-Min Sketch</h4>
+    <ol>
+      <li><strong>Stream ingestion</strong> &mdash; every tweet flows through a Kafka topic. A stream processor (like Heron/Storm) extracts hashtags and keywords from each tweet.</li>
+      <li><strong>Count-Min Sketch</strong> &mdash; a probabilistic data structure that approximates the frequency of each term using sub-linear memory. Instead of exact counts for millions of terms, it uses a 2D array of counters with multiple hash functions.</li>
+      <li><strong>Sliding window</strong> &mdash; counts are maintained over rolling time windows (e.g., 1-min, 5-min, 1-hour). Old windows are decayed or dropped.</li>
+      <li><strong>Velocity calculation</strong> &mdash; for each term, compute <code>velocity = count(current_window) / count(previous_window)</code>. A velocity &gt; threshold (e.g., 5x) flags the term as trending.</li>
+      <li><strong>Filtering</strong> &mdash; remove spam, NSFW, and known-noisy terms. Apply geo-filtering for location-specific trends.</li>
+      <li><strong>Ranking</strong> &mdash; trending topics are ranked by a combination of velocity, total volume, and topic diversity. Personalized trends layer in user interests.</li>
+    </ol>
+  </div>
+
+  <div class="card success">
+    <h4>Count-Min Sketch Internals</h4>
+    <pre>
+┌─────────────────────────────────────────────────┐
+│  Count-Min Sketch (width W × depth D)           │
+│                                                  │
+│  h1("earthquake") → slot 42  → counter++         │
+│  h2("earthquake") → slot 17  → counter++         │
+│  h3("earthquake") → slot 89  → counter++         │
+│                                                  │
+│  Estimate = min(h1[42], h2[17], h3[89])          │
+│                                                  │
+│  Properties:                                     │
+│  • Never underestimates (may overestimate)       │
+│  • Fixed memory: W × D counters (e.g., 10MB)    │
+│  • Works for millions of unique terms            │
+│  • Error rate ≤ ε with probability 1 − δ         │
+│    (W = ⌈e/ε⌉, D = ⌈ln(1/δ)⌉)                  │
+└─────────────────────────────────────────────────┘</pre>
+  </div>
+
+  <h3 id="sec-4-3">Search Ranking</h3>
+
+  <div class="card highlight">
+    <h4>Ranking Signals</h4>
+    <p>Raw search results from the inverted index are ranked using a multi-signal scoring model:</p>
+    <table>
+      <tr><th>Signal</th><th>Weight</th><th>Description</th></tr>
+      <tr><td>Recency</td><td>High</td><td>Newer tweets score higher; exponential decay over time</td></tr>
+      <tr><td>Engagement</td><td>High</td><td>Likes, retweets, replies boost relevance</td></tr>
+      <tr><td>Author authority</td><td>Medium</td><td>Verified accounts, follower count, account age</td></tr>
+      <tr><td>Text relevance</td><td>Medium</td><td>TF-IDF score of query terms in tweet text</td></tr>
+      <tr><td>Social proximity</td><td>Medium</td><td>Tweets from users you follow or interact with rank higher</td></tr>
+      <tr><td>Media presence</td><td>Low</td><td>Tweets with images/videos may get slight boost</td></tr>
+      <tr><td>Spam score</td><td>Negative</td><td>ML model penalizes spammy/low-quality tweets</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== SECTION 5 ==================== -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>Data Model</h2>
+
+  <p>The data model balances between relational integrity (users, follows) and high-throughput NoSQL access (tweets, timelines). In practice, Twitter uses a mix of MySQL (for social graph), Manhattan/Gizzard (for tweets), and Redis (for timelines).</p>
+
+  <h3>Users Table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>user_id</code></td><td>BIGINT (PK)</td><td>Snowflake ID, globally unique</td></tr>
+    <tr><td><code>username</code></td><td>VARCHAR(15)</td><td>Unique handle, indexed</td></tr>
+    <tr><td><code>display_name</code></td><td>VARCHAR(50)</td><td>User's display name</td></tr>
+    <tr><td><code>email</code></td><td>VARCHAR(255)</td><td>Unique, hashed for lookup</td></tr>
+    <tr><td><code>bio</code></td><td>VARCHAR(160)</td><td>Profile bio text</td></tr>
+    <tr><td><code>avatar_url</code></td><td>VARCHAR(512)</td><td>CDN URL to profile image</td></tr>
+    <tr><td><code>follower_count</code></td><td>INT</td><td>Denormalized counter</td></tr>
+    <tr><td><code>following_count</code></td><td>INT</td><td>Denormalized counter</td></tr>
+    <tr><td><code>is_verified</code></td><td>BOOLEAN</td><td>Verified badge status</td></tr>
+    <tr><td><code>is_celebrity</code></td><td>BOOLEAN</td><td>Fan-out threshold flag (&gt;500K followers)</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Account creation time</td></tr>
+  </table>
+
+  <h3>Tweets Table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>tweet_id</code></td><td>BIGINT (PK)</td><td>Snowflake ID, encodes timestamp + worker + sequence</td></tr>
+    <tr><td><code>author_id</code></td><td>BIGINT (FK)</td><td>References users.user_id, sharding key</td></tr>
+    <tr><td><code>text</code></td><td>VARCHAR(280)</td><td>Tweet content</td></tr>
+    <tr><td><code>media_ids</code></td><td>JSON</td><td>Array of media attachment IDs</td></tr>
+    <tr><td><code>reply_to_id</code></td><td>BIGINT</td><td>NULL if not a reply; parent tweet_id otherwise</td></tr>
+    <tr><td><code>retweet_of_id</code></td><td>BIGINT</td><td>NULL if original; source tweet_id for retweets</td></tr>
+    <tr><td><code>like_count</code></td><td>INT</td><td>Denormalized, updated async</td></tr>
+    <tr><td><code>retweet_count</code></td><td>INT</td><td>Denormalized, updated async</td></tr>
+    <tr><td><code>reply_count</code></td><td>INT</td><td>Denormalized, updated async</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Extracted from Snowflake ID</td></tr>
+  </table>
+  <p><em>Indexes: <code>(author_id, created_at DESC)</code> for user profile timeline, <code>(tweet_id)</code> for direct lookup.</em></p>
+
+  <h3>Follows Table (Social Graph)</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>follower_id</code></td><td>BIGINT</td><td>The user who follows</td></tr>
+    <tr><td><code>followee_id</code></td><td>BIGINT</td><td>The user being followed</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>When the follow happened</td></tr>
+  </table>
+  <p><em>Composite PK: <code>(follower_id, followee_id)</code>. Indexes: <code>(followee_id)</code> for "who follows me" queries (fan-out lookup), <code>(follower_id)</code> for "who do I follow" queries.</em></p>
+
+  <h3>Likes Table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>user_id</code></td><td>BIGINT</td><td>User who liked</td></tr>
+    <tr><td><code>tweet_id</code></td><td>BIGINT</td><td>Tweet that was liked</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>When the like happened</td></tr>
+  </table>
+  <p><em>Composite PK: <code>(user_id, tweet_id)</code>. Prevents double-likes. Index on <code>(tweet_id)</code> for "who liked this tweet" queries.</em></p>
+
+  <h3>Timelines (Redis)</h3>
+  <div class="card highlight">
+    <h4>Timeline Cache Structure</h4>
+    <table>
+      <tr><th>Key</th><th>Type</th><th>Contents</th><th>TTL</th></tr>
+      <tr><td><code>timeline:{user_id}</code></td><td>Sorted Set</td><td>tweet_ids scored by timestamp</td><td>No TTL (trimmed to 800)</td></tr>
+      <tr><td><code>tweet:{tweet_id}</code></td><td>Hash</td><td>Cached tweet object for hydration</td><td>24 hours</td></tr>
+      <tr><td><code>user:{user_id}</code></td><td>Hash</td><td>Cached user profile for hydration</td><td>1 hour</td></tr>
+      <tr><td><code>celeb_tweets:{user_id}</code></td><td>Sorted Set</td><td>Latest tweets from celebrity users</td><td>7 days</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== SECTION 6 ==================== -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <p>Many of Twitter's architectural patterns map directly to components in the LinkedIn tech stack. Understanding these parallels demonstrates depth in system design interviews.</p>
+
+  <h3>LinkedIn Tech Stack Mapping</h3>
+  <table>
+    <tr><th>Twitter Component</th><th>LinkedIn Equivalent</th><th>Role</th></tr>
+    <tr>
+      <td>Home Timeline / Feed</td>
+      <td><span class="linkedin-tag">Feed Service</span></td>
+      <td>LinkedIn's Feed Service generates the main feed using a hybrid push/pull model similar to Twitter's approach</td>
+    </tr>
+    <tr>
+      <td>Tweets Table (Manhattan)</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn's document store for user-generated content, partitioned by member ID, supports secondary indexes</td>
+    </tr>
+    <tr>
+      <td>Timeline Cache (Redis)</td>
+      <td><span class="linkedin-tag">Couchbase</span></td>
+      <td>Distributed cache for feed materialization and timeline data; replaced Voldemort for many use cases</td>
+    </tr>
+    <tr>
+      <td>Fan-Out Queue (Kafka)</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>Kafka was invented at LinkedIn. Used for all async event processing including feed fan-out, metrics, and change data capture</td>
+    </tr>
+    <tr>
+      <td>Feed Ranking ML</td>
+      <td><span class="linkedin-tag">Pro-ML</span></td>
+      <td>LinkedIn's ML platform for feed ranking, combining engagement prediction, relevance scoring, and diversity optimization</td>
+    </tr>
+    <tr>
+      <td>Stream Processing (Heron)</td>
+      <td><span class="linkedin-tag">Samza</span></td>
+      <td>LinkedIn's stream processing framework (built on Kafka) for real-time feed updates, trending, and notifications</td>
+    </tr>
+    <tr>
+      <td>REST API Layer</td>
+      <td><span class="linkedin-tag">Rest.li</span></td>
+      <td>LinkedIn's RESTful framework for service-to-service communication with schema evolution support via Pegasus</td>
+    </tr>
+    <tr>
+      <td>Social Graph (FlockDB)</td>
+      <td><span class="linkedin-tag">Social Graph Service</span></td>
+      <td>LinkedIn's graph service managing 1st/2nd/3rd degree connections, used for "People You May Know" and feed personalization</td>
+    </tr>
+    <tr>
+      <td>Search (Earlybird)</td>
+      <td><span class="linkedin-tag">Galene</span></td>
+      <td>LinkedIn's search engine built on Lucene, powering people search, job search, and content search with real-time indexing</td>
+    </tr>
+  </table>
+
+  <h3>Key Interview Questions</h3>
+
+  <div class="card highlight">
+    <h4>Fan-Out Strategy</h4>
+    <p><strong>Q: How would you design the tweet delivery system? Why not use a single approach?</strong></p>
+    <p><strong>A:</strong> The key insight is that no single approach works for all users. Fan-out on write gives O(1) read latency for regular users but breaks for celebrities with millions of followers (write amplification). Fan-out on read avoids write amplification but is too slow for the read-heavy workload (1000:1 ratio). The hybrid approach classifies users by follower count: regular users (&lt;500K followers) use push, celebrities use pull. At read time, merge the pre-computed timeline with a small number of celebrity tweet fetches. This keeps timeline load under 200ms while bounding write amplification.</p>
+  </div>
+
+  <div class="card warn">
+    <h4>Celebrity Problem Deep Dive</h4>
+    <p><strong>Q: What happens when a celebrity with 50M followers tweets during the Super Bowl?</strong></p>
+    <p><strong>A:</strong> Under pure fan-out on write, this single tweet triggers 50M Redis writes, taking 8+ minutes and saturating the fan-out pipeline. Meanwhile, other users' tweets queue behind it. The hybrid model solves this: the celebrity tweet is stored once and fetched at read time. Additionally, implement rate limiting on the fan-out pipeline, priority queues (celebrity tweets get lower fan-out priority), and circuit breakers that automatically switch high-traffic accounts to pull mode. For burst events like the Super Bowl, pre-warm caches and scale the read-path infrastructure horizontally.</p>
+  </div>
+
+  <div class="card success">
+    <h4>Real-Time Search</h4>
+    <p><strong>Q: How do tweets become searchable within seconds of posting?</strong></p>
+    <p><strong>A:</strong> Twitter's Earlybird uses an in-memory inverted index optimized for write-heavy workloads. New tweets are tokenized and indexed into the in-memory segment within seconds (not minutes like batch-indexed systems). The index is sharded by tweet ID and uses a scatter-gather pattern: a query is broadcast to all shards, each returns its top-K matches, and a root node merges results. For hashtag trending detection, a parallel stream processing pipeline (Count-Min Sketch with sliding windows) identifies velocity spikes. At LinkedIn, <span class="linkedin-tag">Galene</span> serves a similar role with near-real-time indexing, while <span class="linkedin-tag">Samza</span> handles the streaming analytics equivalent of Twitter's trending pipeline.</p>
+  </div>
+
+  <div class="card danger">
+    <h4>Timeline Consistency &amp; Edge Cases</h4>
+    <p><strong>Q: A user posts a tweet and immediately checks their profile. The tweet isn't there yet. How do you handle this?</strong></p>
+    <p><strong>A:</strong> This is the <strong>read-after-write consistency</strong> problem. Solutions: (1) For the author's own timeline, read from the primary database (not the cache) for a short window after posting. (2) Remember the timestamp of the user's last write in a client-side cookie; if the cached timeline is older, bypass cache and read from the primary. (3) Use <code>async_write_ack</code>: the API returns success only after the tweet is confirmed in the primary store, but fan-out is still async. (4) For the author's profile page specifically, always include a "your recent tweets" section that reads directly from the Tweets table with a <code>WHERE author_id = ?</code> query.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Snowflake ID Generation</h4>
+    <p><strong>Q: How does Twitter generate globally unique, time-ordered IDs at 300K tweets/sec?</strong></p>
+    <p><strong>A:</strong> Twitter's Snowflake generates 64-bit IDs composed of: timestamp (41 bits, ~69 years), datacenter ID (5 bits), worker ID (5 bits), and sequence number (12 bits, 4096 per ms per worker). This gives time-ordering without coordination between ID generators. Each worker generates IDs independently, avoiding a single point of failure. The timestamp prefix enables efficient range queries (<code>WHERE tweet_id > ?</code> is equivalent to <code>WHERE created_at > ?</code>) and enables cursor-based pagination using the tweet_id directly as the cursor.</p>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <p>Design Twitter &mdash; System Design Interview Guide</p>
+  <p>Built for study and reference &bull; Not affiliated with Twitter/X</p>
+</footer>
+
+</body>
+</html>

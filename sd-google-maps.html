@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Google Maps</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #34A853;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a0d 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.green { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.green:hover { background: rgba(52,168,83,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Google Maps</span></h1>
+    <p>A complete deep dive into the architecture of the world's most-used navigation platform &mdash; map tiles, routing algorithms, live traffic, ETA prediction, and search at planetary scale.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-google-maps.html" class="green">Design Google Maps (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale</a></li>
+    <li><a href="#sec-2">High-Level Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-walk">Architecture Walkthrough</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Map Tiles</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Slippy Map Tile System</a></li>
+        <li><a href="#sec-3-2">Raster vs Vector Tiles</a></li>
+        <li><a href="#sec-3-3">CDN &amp; Caching Strategy</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Routing Engine</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Graph Model</a></li>
+        <li><a href="#sec-4-2">Algorithm Comparison</a></li>
+        <li><a href="#sec-4-3">Turn-by-Turn Directions</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">ETA &amp; Live Traffic</a>
+      <ul class="sub">
+        <li><a href="#sec-5-1">GPS Probe Data Pipeline</a></li>
+        <li><a href="#sec-5-2">ML-Based ETA Model</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-6">LinkedIn Tech Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 1 : Overview & Scale -->
+<!-- ================================================================ -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale</h2>
+
+  <p>Google Maps is a navigation and geospatial platform that provides map rendering, point-to-point routing, real-time traffic overlays, place search, and turn-by-turn directions to over a billion monthly active users. The system must return optimal driving, walking, cycling, and transit routes in under one second while continuously ingesting live traffic data from billions of GPS probes.</p>
+
+  <h3>Functional Requirements</h3>
+  <div class="card highlight">
+    <ul>
+      <li><strong>Map Rendering</strong> &mdash; Display interactive, zoomable map tiles for the entire planet.</li>
+      <li><strong>Route Planning</strong> &mdash; Compute shortest/fastest path between two or more waypoints.</li>
+      <li><strong>Turn-by-Turn Navigation</strong> &mdash; Issue step-by-step driving instructions with real-time recalculation.</li>
+      <li><strong>Place Search</strong> &mdash; Autocomplete and full-text search over points of interest (POIs).</li>
+      <li><strong>Live Traffic</strong> &mdash; Overlay real-time congestion data and suggest faster alternate routes.</li>
+      <li><strong>ETA Estimation</strong> &mdash; Predict arrival time using current + historical traffic conditions.</li>
+    </ul>
+  </div>
+
+  <h3>Scale Numbers</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">1B+</div>
+      <div class="label">Monthly Active Users</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">25M</div>
+      <div class="label">Road Segments in Graph</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">20M</div>
+      <div class="label">Route Searches / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt;1s</div>
+      <div class="label">P99 Routing Latency</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">220+</div>
+      <div class="label">Countries Mapped</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~1B km</div>
+      <div class="label">Roads Mapped</div>
+    </div>
+  </div>
+
+  <h3>Non-Functional Requirements</h3>
+  <div class="card warn">
+    <ul>
+      <li><strong>Latency</strong> &mdash; Tile fetch &lt;200ms, route computation &lt;1s even cross-continent.</li>
+      <li><strong>Availability</strong> &mdash; 99.99% uptime &mdash; navigation is safety-critical.</li>
+      <li><strong>Consistency</strong> &mdash; Eventual consistency acceptable for traffic overlays; strong consistency for map edits.</li>
+      <li><strong>Scalability</strong> &mdash; Handle peak load during holidays and commute hours (5&times; average QPS).</li>
+      <li><strong>Offline Support</strong> &mdash; Downloaded map regions usable without connectivity.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 2 : Architecture -->
+<!-- ================================================================ -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>High-Level Architecture</h2>
+
+  <p>The system is composed of five core services that handle distinct responsibilities, fronted by an API Gateway and backed by a CDN for tile delivery.</p>
+
+  <div class="card highlight">
+    <table>
+      <tr><th>Service</th><th>Responsibility</th><th>Key Data</th></tr>
+      <tr>
+        <td><strong>Routing Service</strong></td>
+        <td>Computes optimal path across the road graph using Contraction Hierarchies</td>
+        <td>Preprocessed road graph, edge weights</td>
+      </tr>
+      <tr>
+        <td><strong>ETA Service</strong></td>
+        <td>Predicts arrival time using live + historical traffic</td>
+        <td>GPS probe stream, ML model weights</td>
+      </tr>
+      <tr>
+        <td><strong>Map Tile Service</strong></td>
+        <td>Serves pre-rendered/vector map tiles at all zoom levels</td>
+        <td>Tile cache, raw geospatial data (OSM, satellite)</td>
+      </tr>
+      <tr>
+        <td><strong>Search Service</strong></td>
+        <td>Autocomplete and full-text place/POI search</td>
+        <td>Inverted index of places, coordinates, categories</td>
+      </tr>
+      <tr>
+        <td><strong>Traffic Service</strong></td>
+        <td>Aggregates real-time GPS probes into road-segment speed estimates</td>
+        <td>Streaming GPS data, segment speed cache</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="diagram" id="sec-2-diag">
+    <img src="images/sd_googlemaps_01_architecture.png" alt="Google Maps High-Level Architecture">
+    <div class="caption">Figure 1 &mdash; High-level architecture: client, API Gateway, five core services, CDN, and data stores.</div>
+  </div>
+
+  <div class="walkthrough" id="sec-2-walk">
+    <h4>Architecture Walkthrough</h4>
+    <ol>
+      <li><strong>User opens the app</strong> &mdash; The client requests map tiles for the viewport. The <em>API Gateway</em> routes the request to the <strong>Map Tile Service</strong>, which checks the CDN edge cache first. On a cache miss, the tile is fetched from blob storage, served, and cached.</li>
+      <li><strong>User types a destination</strong> &mdash; Keystrokes hit the <strong>Search Service</strong> for prefix-based autocomplete against a geospatially partitioned inverted index. Results are ranked by proximity, popularity, and personal history.</li>
+      <li><strong>User requests directions</strong> &mdash; The <strong>Routing Service</strong> receives origin + destination coordinates. It queries the precomputed Contraction Hierarchies graph, retrieves current edge weights from the <strong>Traffic Service</strong>, and returns the optimal path with alternatives.</li>
+      <li><strong>ETA is computed</strong> &mdash; The <strong>ETA Service</strong> takes the selected route's road segments, pulls live speeds from the <strong>Traffic Service</strong> and historical speed profiles, feeds them into an ML model, and returns predicted arrival time.</li>
+      <li><strong>Navigation begins</strong> &mdash; The client streams GPS location to the <strong>Traffic Service</strong> (contributing to the probe pool). The client-side engine issues turn-by-turn instructions. If the user deviates, the client requests a reroute from the <strong>Routing Service</strong> with &lt;500ms latency.</li>
+      <li><strong>Traffic overlay updates</strong> &mdash; Every 30 seconds the <strong>Traffic Service</strong> publishes updated segment speeds. The client fetches traffic tiles showing green/yellow/red congestion overlays via the CDN.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 3 : Map Tiles -->
+<!-- ================================================================ -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>Map Tiles</h2>
+
+  <p>Rendering the entire planet at interactive speed requires a <strong>tiled approach</strong> &mdash; the map is divided into a grid of small, pre-rendered images (or vector tile bundles) that the client fetches on demand as the user pans and zooms.</p>
+
+  <h3 id="sec-3-1">Slippy Map Tile System</h3>
+
+  <p>The industry-standard <em>Slippy Map</em> convention divides the world into a square Mercator projection. At each zoom level <code>z</code>, the world is split into <code>2<sup>z</sup> &times; 2<sup>z</sup></code> tiles. Each tile is addressed by three coordinates:</p>
+
+  <div class="card highlight">
+    <pre>/{zoom}/{x}/{y}.png
+
+Zoom 0  →  1 tile   (entire world)
+Zoom 1  →  4 tiles  (2×2)
+Zoom 10 →  ~1M tiles
+Zoom 15 →  ~1B tiles (street level)
+Zoom 20 →  ~1T tiles (building level)</pre>
+  </div>
+
+  <table>
+    <tr><th>Zoom Level</th><th>Tiles</th><th>Detail</th><th>Typical Use</th></tr>
+    <tr><td>0</td><td>1</td><td>Whole world</td><td>Globe overview</td></tr>
+    <tr><td>5</td><td>1,024</td><td>Country level</td><td>Continent browsing</td></tr>
+    <tr><td>10</td><td>~1M</td><td>City level</td><td>Metro overview</td></tr>
+    <tr><td>15</td><td>~1B</td><td>Street level</td><td>Street navigation</td></tr>
+    <tr><td>18</td><td>~69B</td><td>Building footprints</td><td>Last-mile detail</td></tr>
+    <tr><td>20</td><td>~1.1T</td><td>Sub-building</td><td>Indoor maps</td></tr>
+  </table>
+
+  <h3 id="sec-3-2">Raster vs Vector Tiles</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Raster Tiles (PNG/JPEG)</h4>
+      <ul>
+        <li>Pre-rendered server-side &mdash; cheap client rendering</li>
+        <li>Fixed style baked in at render time</li>
+        <li>Larger payload (~20-40 KB per tile)</li>
+        <li>No rotation/tilt without distortion</li>
+        <li>Good for satellite/terrain imagery</li>
+      </ul>
+    </div>
+    <div class="card danger">
+      <h4>Vector Tiles (PBF/MVT)</h4>
+      <ul>
+        <li>Send geometry + metadata; client renders with GPU</li>
+        <li>Dynamic styling (dark mode, custom themes)</li>
+        <li>Smaller payload (~5-15 KB per tile, gzipped)</li>
+        <li>Smooth rotation, tilt, and continuous zoom</li>
+        <li>Higher client CPU/GPU cost</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card warn">
+    <strong>Google's approach:</strong> Google Maps uses vector tiles on mobile (since 2010) and WebGL-rendered vector tiles on web (since 2018). Satellite view remains raster. The vector tile format encodes roads, labels, buildings, and POIs as protobuf geometries, allowing the client to render 60fps smooth zoom and 3D buildings.
+  </div>
+
+  <h3 id="sec-3-3">CDN &amp; Caching Strategy</h3>
+
+  <div class="card highlight">
+    <h4>Three-Layer Tile Cache</h4>
+    <ol>
+      <li><strong>Client Cache</strong> &mdash; SQLite database on device stores recently viewed tiles. Offline maps pre-download all tiles for a region at zoom levels 0&ndash;17.</li>
+      <li><strong>CDN Edge Cache</strong> &mdash; 200+ edge PoPs worldwide. Cache key = <code>/{z}/{x}/{y}?style=v3&amp;lang=en</code>. TTL ranges from 1 hour (high-zoom urban) to 7 days (low-zoom ocean). Hit rate: ~95%.</li>
+      <li><strong>Origin Tile Servers</strong> &mdash; On cache miss, origin renders the tile from raw geospatial data (road geometry, building polygons, elevation models) stored in a columnar geo-database.</li>
+    </ol>
+  </div>
+
+  <table>
+    <tr><th>Layer</th><th>Latency</th><th>Hit Rate</th><th>Storage</th></tr>
+    <tr><td>Client Cache</td><td>&lt;10ms</td><td>~70%</td><td>100 MB&ndash;2 GB per device</td></tr>
+    <tr><td>CDN Edge</td><td>20&ndash;80ms</td><td>~95%</td><td>Petabytes across all PoPs</td></tr>
+    <tr><td>Origin</td><td>100&ndash;500ms</td><td>N/A</td><td>Hundreds of TB raw geo data</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 4 : Routing Engine -->
+<!-- ================================================================ -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Routing Engine</h2>
+
+  <p>The routing engine models the global road network as a <strong>weighted directed graph</strong> and finds optimal paths across it. The sheer scale of 25 million road segments demands algorithms far more sophisticated than textbook Dijkstra.</p>
+
+  <h3 id="sec-4-1">Graph Model</h3>
+
+  <div class="card highlight">
+    <h4>Road Network as a Graph</h4>
+    <ul>
+      <li><strong>Nodes</strong> &mdash; Intersections, road endpoints, and points where road attributes change (speed limit, number of lanes). ~60M nodes globally.</li>
+      <li><strong>Edges</strong> &mdash; Road segments connecting two nodes. Each edge stores: length, speed limit, road class (highway/local/residential), one-way flag, turn restrictions, toll flag. ~25M segments.</li>
+      <li><strong>Weights</strong> &mdash; Travel time = <code>segment_length / current_speed</code>. Updated dynamically from the Traffic Service. Penalties added for U-turns, left turns across traffic, and toll avoidance preferences.</li>
+    </ul>
+  </div>
+
+  <pre>Node:  { id, lat, lng }
+Edge:  { from, to, distance_m, speed_limit_kmh, road_class,
+         is_oneway, turn_restriction, toll, live_speed_kmh }
+Weight = distance_m / live_speed_kmh  (+penalties)</pre>
+
+  <h3 id="sec-4-2">Algorithm Comparison</h3>
+
+  <table>
+    <tr><th>Algorithm</th><th>Preprocessing</th><th>Query Time</th><th>Space</th><th>Notes</th></tr>
+    <tr>
+      <td><strong>Dijkstra</strong></td>
+      <td>None</td>
+      <td>O(V log V)</td>
+      <td>O(V)</td>
+      <td>Explores all directions equally; too slow for continental graphs</td>
+    </tr>
+    <tr>
+      <td><strong>A*</strong></td>
+      <td>None</td>
+      <td>O(V log V) better in practice</td>
+      <td>O(V)</td>
+      <td>Heuristic (great-circle distance) focuses search toward goal; 2&ndash;10&times; faster than Dijkstra</td>
+    </tr>
+    <tr>
+      <td><strong>Contraction Hierarchies</strong></td>
+      <td>O(hours), one-time</td>
+      <td>O(ms), ~0.5ms avg</td>
+      <td>2&ndash;3&times; graph</td>
+      <td>Precomputes "shortcut" edges; bidirectional search meets in the middle. <span class="linkedin-tag">Production choice</span></td>
+    </tr>
+    <tr>
+      <td><strong>A* + Landmarks (ALT)</strong></td>
+      <td>O(minutes)</td>
+      <td>O(ms)</td>
+      <td>O(V &times; L)</td>
+      <td>Uses landmark distances as tighter heuristic; good balance of preprocessing and query speed</td>
+    </tr>
+  </table>
+
+  <div class="card success">
+    <h4>Why Contraction Hierarchies Win</h4>
+    <p>CH preprocesses the graph by iteratively "contracting" (removing) less-important nodes and adding shortcut edges that preserve shortest-path distances. At query time, a bidirectional Dijkstra on the hierarchical graph explores only ~500&ndash;1000 nodes (vs millions for plain Dijkstra), yielding <strong>sub-millisecond query times</strong>.</p>
+    <p>The tradeoff: preprocessing takes hours and the shortcut edges use static weights. To incorporate live traffic, Google uses a <strong>Customizable Contraction Hierarchies (CCH)</strong> variant that separates the hierarchy structure (topology) from edge weights, allowing weight updates in seconds without full reprocessing.</p>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Routing Request Flow</h4>
+    <ol>
+      <li><strong>Snap to graph</strong> &mdash; Map origin/destination GPS coordinates to the nearest road segment edges using a spatial index (R-tree).</li>
+      <li><strong>Fetch live weights</strong> &mdash; Query the Traffic Service for current speeds on edges in the relevant geographic region.</li>
+      <li><strong>CH bidirectional search</strong> &mdash; Run forward search from origin and backward search from destination, meeting at the highest-level node in the hierarchy.</li>
+      <li><strong>Unpack shortcuts</strong> &mdash; Expand the shortcut edges back into the original road segments to produce the full path.</li>
+      <li><strong>Generate alternatives</strong> &mdash; Run penalized re-searches (increase weight on edges in the best path) to find 2&ndash;3 meaningfully different routes.</li>
+      <li><strong>Attach directions</strong> &mdash; Convert the path into human-readable turn-by-turn instructions with street names, distances, and maneuver types.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-4-3">Turn-by-Turn Directions</h3>
+
+  <div class="card highlight">
+    <p>Once a route is selected, the client-side navigation engine handles real-time guidance:</p>
+    <ul>
+      <li><strong>GPS Matching</strong> &mdash; Snap the user's live GPS to the route polyline using Hidden Markov Model (HMM) map matching.</li>
+      <li><strong>Instruction Triggering</strong> &mdash; Fire voice/visual instructions based on distance-to-maneuver thresholds (e.g., "In 300m, turn right").</li>
+      <li><strong>Rerouting</strong> &mdash; If the user deviates &gt;50m from the route or a faster path appears due to traffic changes, request a new route from the Routing Service. Target: &lt;500ms reroute latency.</li>
+      <li><strong>Lane Guidance</strong> &mdash; Overlay recommended lane based on upcoming maneuver and intersection geometry data.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 5 : ETA & Live Traffic -->
+<!-- ================================================================ -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>ETA &amp; Live Traffic</h2>
+
+  <p>Accurate ETA prediction is the single most important quality signal for a navigation app. Google Maps combines real-time GPS probe data, historical traffic patterns, and machine learning to produce ETAs that are accurate within 2&ndash;5% on average.</p>
+
+  <h3 id="sec-5-1">GPS Probe Data Pipeline</h3>
+
+  <div class="card highlight">
+    <h4>Data Collection &amp; Aggregation</h4>
+    <ol>
+      <li><strong>Collection</strong> &mdash; Billions of anonymized GPS pings per day from Android phones, Google Maps users, and Waze. Each ping: <code>{lat, lng, speed, heading, timestamp}</code>.</li>
+      <li><strong>Map Matching</strong> &mdash; Raw GPS points are matched to road segments using HMM-based algorithms (handling GPS noise of &plusmn;10m).</li>
+      <li><strong>Segment Speed Estimation</strong> &mdash; For each road segment, compute median speed from matched probes in the last 2&ndash;5 minutes. Minimum probe threshold: 3 probes per segment to avoid noisy estimates.</li>
+      <li><strong>Traffic State Classification</strong> &mdash; Segment speed compared to free-flow speed: <span style="color:#3fb950;">green</span> (&gt;75%), <span style="color:#f0883e;">yellow</span> (40&ndash;75%), <span style="color:#f85149;">red</span> (&lt;40%), <span style="color:#8b0000;">dark red</span> (&lt;20%).</li>
+      <li><strong>Publication</strong> &mdash; Updated segment speeds published to the Traffic Service cache and traffic tile layer every 30&ndash;60 seconds.</li>
+    </ol>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Traffic Data Pipeline</h4>
+    <ol>
+      <li><strong>Ingest</strong> &mdash; GPS pings land in a streaming queue (Kafka-equivalent) partitioned by geographic region.</li>
+      <li><strong>Map Match</strong> &mdash; Stream processor matches pings to road segments in real-time using Viterbi algorithm on the road graph HMM.</li>
+      <li><strong>Aggregate</strong> &mdash; Windowed aggregation (2-minute tumbling windows) computes per-segment speed statistics: median, p25, p75, probe count.</li>
+      <li><strong>Merge</strong> &mdash; Where probe coverage is sparse, fall back to historical speed for that segment/time-of-week.</li>
+      <li><strong>Serve</strong> &mdash; Merged speeds written to a low-latency key-value store (segment_id &rarr; speed) and published as traffic tile overlays.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-5-2">ML-Based ETA Model</h3>
+
+  <div class="card success">
+    <h4>Feature Engineering</h4>
+    <table>
+      <tr><th>Feature</th><th>Source</th><th>Why It Matters</th></tr>
+      <tr>
+        <td>Time of day</td>
+        <td>Request timestamp</td>
+        <td>Rush hour vs off-peak dramatically changes speeds</td>
+      </tr>
+      <tr>
+        <td>Day of week</td>
+        <td>Request timestamp</td>
+        <td>Weekday vs weekend traffic patterns differ</td>
+      </tr>
+      <tr>
+        <td>Road type</td>
+        <td>Graph edge attributes</td>
+        <td>Highways flow differently than residential streets</td>
+      </tr>
+      <tr>
+        <td>Current segment speed</td>
+        <td>Traffic Service (live)</td>
+        <td>Real-time conditions on the route</td>
+      </tr>
+      <tr>
+        <td>Historical speed profile</td>
+        <td>Historical DB</td>
+        <td>Baseline expectation for this segment/time</td>
+      </tr>
+      <tr>
+        <td>Weather conditions</td>
+        <td>Weather API</td>
+        <td>Rain/snow can reduce speeds 10&ndash;30%</td>
+      </tr>
+      <tr>
+        <td>Segment sequence</td>
+        <td>Route path</td>
+        <td>Captures correlations &mdash; congestion propagates along corridors</td>
+      </tr>
+      <tr>
+        <td>Number of traffic signals</td>
+        <td>Graph metadata</td>
+        <td>Signals add variable wait time</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card warn">
+    <h4>Model Architecture</h4>
+    <p>Google's published approach (<em>DeepETA</em>, 2021) uses a <strong>Graph Neural Network (GNN)</strong> that treats the route as a subgraph of the road network:</p>
+    <ul>
+      <li><strong>Input</strong>: Sequence of road segments with per-segment features (live speed, historical speed, road class, length).</li>
+      <li><strong>Spatial encoding</strong>: GNN message passing captures how congestion on one segment affects neighbors.</li>
+      <li><strong>Temporal encoding</strong>: Time-of-day and day-of-week embeddings capture periodic patterns.</li>
+      <li><strong>Output</strong>: Predicted travel time for the entire route (not per-segment summation, which ignores correlations).</li>
+      <li><strong>Training</strong>: Supervised on billions of completed trips. Loss = MAE between predicted and actual travel time.</li>
+    </ul>
+    <p>This end-to-end approach reduced ETA error by <strong>~50%</strong> compared to summing per-segment estimates.</p>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Naive ETA (Sum of Segments)</h4>
+      <ul>
+        <li>ETA = &Sigma; (segment_length / segment_speed)</li>
+        <li>Ignores signal wait times</li>
+        <li>Ignores congestion propagation</li>
+        <li>~15% average error</li>
+      </ul>
+    </div>
+    <div class="card success">
+      <h4>DeepETA (ML Model)</h4>
+      <ul>
+        <li>End-to-end prediction from segment features</li>
+        <li>Learns signal delays implicitly</li>
+        <li>GNN captures spatial correlations</li>
+        <li>~2&ndash;5% average error</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 6 : LinkedIn Mapping & Interview Questions -->
+<!-- ================================================================ -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>LinkedIn Tech Mapping &amp; Interview Questions</h2>
+
+  <p>Mapping Google Maps concepts to LinkedIn's infrastructure shows how general-purpose platform primitives solve domain-specific problems at scale.</p>
+
+  <h3>LinkedIn Tech Mapping</h3>
+
+  <table>
+    <tr><th>Google Maps Component</th><th>LinkedIn Equivalent</th><th>Mapping</th></tr>
+    <tr>
+      <td>Search Service (place autocomplete)</td>
+      <td><span class="linkedin-tag">Galene</span></td>
+      <td>LinkedIn's search engine handles typeahead over members, jobs, and companies &mdash; same inverted-index + prefix-trie pattern as place autocomplete.</td>
+    </tr>
+    <tr>
+      <td>Road Graph / POI Store</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn's distributed document store would serve the role of persistent graph/POI storage with strong consistency and secondary indexing.</td>
+    </tr>
+    <tr>
+      <td>Map Tile CDN</td>
+      <td><span class="linkedin-tag">LinkedIn CDN</span></td>
+      <td>Static asset delivery for profile images, video, and JS bundles &mdash; identical multi-tier caching pattern (edge &rarr; mid-tier &rarr; origin).</td>
+    </tr>
+    <tr>
+      <td>GPS Probe Ingest / Traffic Pipeline</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>LinkedIn invented Kafka. The GPS probe pipeline is a textbook Kafka use case &mdash; high-throughput, partitioned by geo-region, consumed by stream processors.</td>
+    </tr>
+    <tr>
+      <td>DeepETA ML Model</td>
+      <td><span class="linkedin-tag">Pro-ML</span></td>
+      <td>LinkedIn's ML platform for training and serving models (feed ranking, job recommendations). Same train-on-historical / serve-in-real-time pattern as DeepETA.</td>
+    </tr>
+    <tr>
+      <td>Traffic Stream Processing</td>
+      <td><span class="linkedin-tag">Samza / Flink</span></td>
+      <td>LinkedIn's stream processing frameworks for real-time aggregation &mdash; windowed speed computation maps directly to Samza/Flink operators.</td>
+    </tr>
+  </table>
+
+  <h3>Interview Questions</h3>
+
+  <div class="card highlight">
+    <h4>Routing at Scale</h4>
+    <ol>
+      <li><strong>Q: How would you compute a route between NYC and LA in under 1 second?</strong><br>
+        A: Use Contraction Hierarchies with precomputed shortcuts. The preprocessing (hours) amortizes over millions of queries. Bidirectional search on the hierarchy explores ~1000 nodes instead of millions, yielding sub-millisecond query time. For live traffic, use CCH which separates topology from weights.</li>
+      <li><strong>Q: How do you handle turn restrictions and road closures?</strong><br>
+        A: Turn restrictions are modeled as edge-to-edge constraints in the graph (not just node penalties). Road closures are handled by setting the edge weight to infinity and invalidating affected CH shortcuts. CCH supports incremental weight updates in seconds.</li>
+      <li><strong>Q: Why not just use A*?</strong><br>
+        A: A* is excellent for small graphs but explores too many nodes on continental-scale networks. With 60M nodes, even A*'s heuristic still visits millions of nodes. CH reduces this to hundreds by exploiting the hierarchical structure of real road networks (highways connect cities, local roads connect neighborhoods).</li>
+    </ol>
+  </div>
+
+  <div class="card warn">
+    <h4>Live Traffic &amp; ETA</h4>
+    <ol>
+      <li><strong>Q: How do you update ETAs with live traffic without recomputing the entire graph?</strong><br>
+        A: Use Customizable CH (CCH) which decouples the contraction order from edge weights. When traffic changes, only the weight array is updated (takes seconds). The query algorithm is the same as standard CH, but uses the updated weights at query time.</li>
+      <li><strong>Q: What do you do when you have no probe data for a road segment?</strong><br>
+        A: Fall back to historical speed profiles &mdash; median speed for that segment at the same time-of-day and day-of-week, computed from months of historical data. If no historical data exists (new road), use the speed limit with a discount factor based on road class.</li>
+      <li><strong>Q: How do you prevent a single slow GPS ping from corrupting traffic data?</strong><br>
+        A: Use robust aggregation: require a minimum of 3 probes per segment per window, use median instead of mean (resistant to outliers), apply speed sanity bounds (0 &lt; speed &lt; 200 km/h), and use map-matching confidence scores to discard low-quality matches.</li>
+    </ol>
+  </div>
+
+  <div class="card success">
+    <h4>Offline Maps &amp; Tile Design</h4>
+    <ol>
+      <li><strong>Q: How would you implement offline maps?</strong><br>
+        A: Pre-download all vector tiles for a selected region at zoom levels 0&ndash;17 plus the road graph subgraph for that region. Store in an on-device SQLite database. The routing engine runs locally using the downloaded graph with speed-limit-based weights (no live traffic). Total size: ~100MB for a large metro area with vector tiles.</li>
+      <li><strong>Q: How do you decide what to show at each zoom level?</strong><br>
+        A: Feature generalization: at zoom 5 show only highways and country borders; at zoom 10 add major roads and city labels; at zoom 15 add all streets and building footprints; at zoom 18+ add house numbers and indoor maps. Each feature has a <code>min_zoom</code> attribute. Vector tiles include only features whose <code>min_zoom &le; current_zoom</code>.</li>
+      <li><strong>Q: Why vector tiles over raster for mobile?</strong><br>
+        A: 3&times; smaller payloads (protobuf geometry vs PNG pixels), dynamic styling (dark mode, accessibility), smooth continuous zoom instead of discrete levels, 3D building rendering, and text labels that rotate/resize without pixelation. The tradeoff is higher client GPU usage, but modern phones handle it easily.</li>
+    </ol>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="container">
+    <p>System Design Interview Guide &mdash; Design Google Maps</p>
+    <p style="margin-top: 8px;">
+      <a href="index.html" style="color:var(--accent); text-decoration:none;">Home</a> &bull;
+      <a href="system-design.html" style="color:var(--accent); text-decoration:none;">Design Uber</a> &bull;
+      <a href="youtube-system-design.html" style="color:var(--accent); text-decoration:none;">Design YouTube</a> &bull;
+      <a href="sd-url-shortener.html" style="color:var(--accent); text-decoration:none;">URL Shortener</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Netflix</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #E50914;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a0a0a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.red { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.red:hover { background: rgba(229,9,20,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Netflix</span></h1>
+    <p>A complete deep dive into the architecture of the world's largest streaming platform &mdash; adaptive bitrate, transcoding pipeline, CDN, recommendations, and global scale.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-netflix.html" class="red">Design Netflix (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale</a></li>
+    <li><a href="#sec-2">High-Level Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-walk">Architecture Walkthrough</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Video Transcoding Pipeline</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Codec &amp; Resolution Matrix</a></li>
+        <li><a href="#sec-3-2">Pipeline Stages</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Adaptive Bitrate Streaming</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">DASH / HLS Manifests</a></li>
+        <li><a href="#sec-4-2">Client-Side ABR Algorithm</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">CDN Architecture &amp; Open Connect</a>
+      <ul class="sub">
+        <li><a href="#sec-5-1">Three-Tier Topology</a></li>
+        <li><a href="#sec-5-2">Cache Warming &amp; ISP Appliances</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-6">Recommendation Engine</a>
+      <ul class="sub">
+        <li><a href="#sec-6-1">Collaborative &amp; Content-Based Filtering</a></li>
+        <li><a href="#sec-6-2">Deep Learning &amp; A/B Testing</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-7">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+
+<!-- ================================================================== -->
+<!-- SECTION 1: Overview -->
+<!-- ================================================================== -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale</h2>
+
+  <p>Netflix is the world's leading subscription video-on-demand (SVOD) streaming platform. Unlike user-generated content platforms, Netflix controls the entire pipeline from studio ingestion to last-mile delivery, enabling deep optimization at every layer.</p>
+
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">200M+</div>
+      <div class="label">Paid subscribers globally</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">17,000+</div>
+      <div class="label">Titles in the catalog</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">100M+</div>
+      <div class="label">Hours streamed per day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~15%</div>
+      <div class="label">Of global downstream internet traffic</div>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <strong>Key Differentiators from YouTube:</strong>
+    <ul style="margin-top: 8px; padding-left: 20px;">
+      <li><strong>Professional content only</strong> &mdash; no user uploads; content arrives from studios and internal production</li>
+      <li><strong>Subscription model</strong> &mdash; no ads (for most tiers), so no ad-serving infrastructure</li>
+      <li><strong>Pre-encoded catalog</strong> &mdash; all transcoding happens offline before release, not at upload time</li>
+      <li><strong>Own CDN hardware</strong> &mdash; Open Connect Appliances (OCAs) deployed inside ISP networks</li>
+      <li><strong>Extreme personalization</strong> &mdash; even artwork thumbnails are personalized per user</li>
+    </ul>
+  </div>
+
+  <h3>Functional Requirements</h3>
+  <div class="card">
+    <ul style="padding-left: 20px;">
+      <li>Users can browse, search, and stream video content on demand</li>
+      <li>Adaptive quality streaming adjusts to network conditions in real time</li>
+      <li>Personalized recommendations drive content discovery on the homepage</li>
+      <li>Multi-device support: smart TVs, phones, tablets, browsers, game consoles</li>
+      <li>Content available in multiple languages with subtitles and audio tracks</li>
+      <li>Offline downloads for mobile viewing</li>
+    </ul>
+  </div>
+
+  <h3>Non-Functional Requirements</h3>
+  <div class="card warn">
+    <ul style="padding-left: 20px;">
+      <li><strong>Low latency playback start</strong> &mdash; video should begin within 2-3 seconds</li>
+      <li><strong>High availability</strong> &mdash; 99.99% uptime, graceful degradation during failures</li>
+      <li><strong>Global reach</strong> &mdash; serve 190+ countries with low latency</li>
+      <li><strong>Fault tolerance</strong> &mdash; Chaos Engineering (Chaos Monkey) validates resilience</li>
+      <li><strong>DRM protection</strong> &mdash; Widevine, FairPlay, PlayReady for content security</li>
+      <li><strong>Scalability</strong> &mdash; handle peak evening traffic (often 2-3x daily average)</li>
+    </ul>
+  </div>
+</div>
+
+
+<!-- ================================================================== -->
+<!-- SECTION 2: Architecture -->
+<!-- ================================================================== -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>High-Level Architecture</h2>
+
+  <p>Netflix uses a microservices architecture running on AWS for the control plane (user management, recommendations, API gateway) and its own <strong>Open Connect CDN</strong> for the data plane (actual video delivery). This separation is fundamental to understanding the system.</p>
+
+  <div class="card highlight">
+    <strong>Two-Plane Design:</strong>
+    <ul style="margin-top: 8px; padding-left: 20px;">
+      <li><strong>Control Plane (AWS)</strong> &mdash; handles everything except streaming bytes: auth, billing, search, recommendations, API routing</li>
+      <li><strong>Data Plane (Open Connect)</strong> &mdash; handles the actual video byte delivery from CDN edge servers to client devices</li>
+    </ul>
+  </div>
+
+  <h3>Core Microservices</h3>
+  <table>
+    <tr>
+      <th>Service</th>
+      <th>Responsibility</th>
+      <th>Key Tech</th>
+    </tr>
+    <tr>
+      <td><strong>User Service</strong></td>
+      <td>Authentication, profiles, subscription management, viewing history</td>
+      <td>Cassandra, Memcached</td>
+    </tr>
+    <tr>
+      <td><strong>Content Service</strong></td>
+      <td>Catalog metadata, title info, availability by region, licensing</td>
+      <td>Cassandra, EVCache</td>
+    </tr>
+    <tr>
+      <td><strong>Search Service</strong></td>
+      <td>Full-text search across titles, actors, genres, descriptions</td>
+      <td>Elasticsearch</td>
+    </tr>
+    <tr>
+      <td><strong>Recommendation Service</strong></td>
+      <td>Personalized row generation, artwork selection, ranking</td>
+      <td>Spark, custom ML models</td>
+    </tr>
+    <tr>
+      <td><strong>Streaming Service</strong></td>
+      <td>Playback session management, manifest generation, DRM license serving</td>
+      <td>Zuul, custom playback APIs</td>
+    </tr>
+    <tr>
+      <td><strong>Transcoding Pipeline</strong></td>
+      <td>Offline encoding of source content into all delivery formats</td>
+      <td>Cosmos, Archer, custom encoders</td>
+    </tr>
+  </table>
+
+  <div class="diagram" id="sec-2-diag">
+    <img src="images/sd_netflix_01_architecture.png" alt="Netflix High-Level Architecture">
+    <div class="caption">Figure 1 &mdash; Netflix two-plane architecture: AWS control plane + Open Connect data plane</div>
+  </div>
+
+  <div class="walkthrough" id="sec-2-walk">
+    <h4>Architecture Walkthrough</h4>
+    <ol>
+      <li><strong>Client opens Netflix app</strong> &rarr; request hits <span class="linkedin-tag">Zuul API Gateway</span> on AWS, which handles auth, routing, and rate limiting</li>
+      <li><strong>Zuul routes to User Service</strong> &rarr; validates session token, loads user profile and viewing history from <span class="linkedin-tag">Cassandra</span></li>
+      <li><strong>Homepage request fans out</strong> &rarr; Recommendation Service generates personalized rows (trending, continue watching, because you watched X), each row ranked by ML models</li>
+      <li><strong>Content Service enriches metadata</strong> &rarr; title details, personalized artwork, availability, and maturity ratings fetched from catalog store</li>
+      <li><strong>User hits Play</strong> &rarr; Streaming Service creates a playback session, selects optimal <span class="linkedin-tag">Open Connect</span> server based on client IP/ISP, generates a DASH/HLS manifest pointing to CDN URLs</li>
+      <li><strong>Client fetches video chunks</strong> &rarr; requests go directly to the nearest Open Connect Appliance (OCA), bypassing AWS entirely for data-plane traffic</li>
+      <li><strong>ABR algorithm adapts</strong> &rarr; client measures download throughput per chunk, switches bitrate/resolution up or down to maintain smooth playback</li>
+      <li><strong>Viewing telemetry streams back</strong> &rarr; play/pause/seek events sent to <span class="linkedin-tag">Kafka</span> for real-time analytics and recommendation model training</li>
+    </ol>
+  </div>
+</div>
+
+
+<!-- ================================================================== -->
+<!-- SECTION 3: Video Pipeline -->
+<!-- ================================================================== -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>Video Transcoding Pipeline</h2>
+
+  <p>Unlike YouTube which transcodes at upload time, Netflix transcodes <strong>offline</strong> before content release. This allows much more compute-intensive encoding &mdash; a single title may take thousands of CPU-hours to encode but the result is higher quality per bit, reducing CDN bandwidth costs.</p>
+
+  <h3 id="sec-3-1">Codec &amp; Resolution Matrix</h3>
+
+  <table>
+    <tr>
+      <th>Codec</th>
+      <th>Use Case</th>
+      <th>Compression Efficiency</th>
+    </tr>
+    <tr>
+      <td><strong>H.264 (AVC)</strong></td>
+      <td>Legacy devices, broadest compatibility</td>
+      <td>Baseline</td>
+    </tr>
+    <tr>
+      <td><strong>H.265 (HEVC)</strong></td>
+      <td>4K HDR content, smart TVs, mobile</td>
+      <td>~40% better than H.264</td>
+    </tr>
+    <tr>
+      <td><strong>VP9</strong></td>
+      <td>Chrome, Android, royalty-free option</td>
+      <td>~35% better than H.264</td>
+    </tr>
+    <tr>
+      <td><strong>AV1</strong></td>
+      <td>Next-gen, highest efficiency, growing support</td>
+      <td>~50% better than H.264</td>
+    </tr>
+  </table>
+
+  <div class="card highlight">
+    <strong>Per-Title &amp; Per-Shot Encoding:</strong> Netflix pioneered <em>per-title encoding</em> &mdash; each title gets its own bitrate ladder based on content complexity. A simple animated show needs less bitrate than an action film. They later evolved to <em>per-shot encoding</em>, where each scene within a title gets individually optimized.
+  </div>
+
+  <h3 id="sec-3-2">Pipeline Stages</h3>
+
+  <div class="card">
+    <h4>Stage 1: Ingest</h4>
+    <p>Raw content (mezzanine files, often ProRes or JPEG2000) arrives from studios or Netflix production. Files can be 100+ GB for a single episode in 4K HDR.</p>
+  </div>
+
+  <div class="card">
+    <h4>Stage 2: Quality Analysis</h4>
+    <p>VMAF (Video Multi-Method Assessment Fusion) &mdash; Netflix's own perceptual quality metric &mdash; analyzes each shot to determine optimal encoding parameters. This drives the per-shot bitrate ladder.</p>
+  </div>
+
+  <div class="card">
+    <h4>Stage 3: Parallel Transcoding</h4>
+    <p>Content is split into chunks and distributed across a massive compute cluster. Each chunk is encoded independently into every combination of codec, resolution, and bitrate.</p>
+  </div>
+
+  <div class="card">
+    <h4>Stage 4: Output Assembly</h4>
+    <p>Encoded chunks are reassembled. Subtitles, multiple audio tracks, and DRM encryption (Widevine, FairPlay, PlayReady) are muxed into final packages.</p>
+  </div>
+
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">~1,200</div>
+      <div class="label">Encoded versions per title</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">240p &rarr; 4K</div>
+      <div class="label">Resolution range</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">3 &ndash; 4</div>
+      <div class="label">Codecs per title</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">10 &ndash; 15</div>
+      <div class="label">Bitrate rungs per codec</div>
+    </div>
+  </div>
+
+  <div class="card success">
+    <strong>End-to-End Pipeline Flow:</strong>
+    <pre>
+Raw Upload (Studio/Production)
+  &darr;
+Quality Analysis (VMAF per-shot)
+  &darr;
+Parallel Transcoding &rarr; H.264, VP9, H.265, AV1
+  &darr;                     &times; 240p, 360p, 480p, 720p, 1080p, 4K
+  &darr;                     &times; 10-15 bitrate rungs each
+  &darr;
+DRM Encryption + Subtitle/Audio Muxing
+  &darr;
+~1,200 versions per title
+  &darr;
+Origin Storage (AWS S3)
+  &darr;
+CDN Push &rarr; Open Connect Appliances worldwide</pre>
+  </div>
+</div>
+
+
+<!-- ================================================================== -->
+<!-- SECTION 4: Adaptive Bitrate Streaming -->
+<!-- ================================================================== -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Adaptive Bitrate Streaming</h2>
+
+  <p>Adaptive Bitrate (ABR) streaming is the technique that lets Netflix adjust video quality in real time based on network conditions, device capability, and user plan. The goal: maximize perceived quality while minimizing rebuffering.</p>
+
+  <h3 id="sec-4-1">DASH / HLS Manifests</h3>
+
+  <div class="card highlight">
+    <strong>How Manifests Work:</strong>
+    <p style="margin-top: 8px;">When a user presses Play, the Streaming Service returns a <strong>manifest file</strong> (MPD for DASH, M3U8 for HLS). This manifest lists all available streams &mdash; every combination of codec, resolution, and bitrate &mdash; along with URLs for each 2-4 second video segment.</p>
+  </div>
+
+  <pre>
+&lt;!-- Simplified DASH MPD manifest --&gt;
+&lt;MPD type="dynamic"&gt;
+  &lt;Period&gt;
+    &lt;AdaptationSet mimeType="video/mp4" codecs="avc1.640028"&gt;
+      &lt;Representation bandwidth="235000"  width="320"  height="240" /&gt;
+      &lt;Representation bandwidth="560000"  width="640"  height="360" /&gt;
+      &lt;Representation bandwidth="1050000" width="854"  height="480" /&gt;
+      &lt;Representation bandwidth="2100000" width="1280" height="720" /&gt;
+      &lt;Representation bandwidth="4200000" width="1920" height="1080"/&gt;
+      &lt;Representation bandwidth="8000000" width="3840" height="2160"/&gt;
+    &lt;/AdaptationSet&gt;
+    &lt;AdaptationSet mimeType="audio/mp4" codecs="mp4a.40.2"&gt;
+      &lt;Representation bandwidth="128000" /&gt;
+    &lt;/AdaptationSet&gt;
+  &lt;/Period&gt;
+&lt;/MPD&gt;</pre>
+
+  <h3 id="sec-4-2">Client-Side ABR Algorithm</h3>
+
+  <p>Netflix's ABR algorithm is more sophisticated than simple throughput-based switching. It considers multiple signals:</p>
+
+  <table>
+    <tr>
+      <th>Signal</th>
+      <th>What It Measures</th>
+      <th>Impact on Decision</th>
+    </tr>
+    <tr>
+      <td><strong>Throughput History</strong></td>
+      <td>Download speed of recent segments</td>
+      <td>Primary signal for sustainable bitrate selection</td>
+    </tr>
+    <tr>
+      <td><strong>Buffer Level</strong></td>
+      <td>Seconds of video buffered ahead of playhead</td>
+      <td>If buffer is low, aggressively drop quality to avoid stall</td>
+    </tr>
+    <tr>
+      <td><strong>Device Capability</strong></td>
+      <td>Screen resolution, decoder support, DRM tier</td>
+      <td>No point sending 4K to a 720p phone screen</td>
+    </tr>
+    <tr>
+      <td><strong>User Plan</strong></td>
+      <td>Basic (720p), Standard (1080p), Premium (4K)</td>
+      <td>Hard cap on max resolution per subscription tier</td>
+    </tr>
+    <tr>
+      <td><strong>ISP History</strong></td>
+      <td>Historical throughput from this ISP/region</td>
+      <td>Initial bitrate selection before measurements exist</td>
+    </tr>
+  </table>
+
+  <div class="card warn">
+    <strong>Buffer Management Strategy:</strong>
+    <ul style="margin-top: 8px; padding-left: 20px;">
+      <li><strong>Startup phase</strong> &mdash; start at a lower bitrate for fast initial buffer fill (goal: play within 2s)</li>
+      <li><strong>Steady state</strong> &mdash; ramp up quality as buffer grows past the safe threshold (~30-40s)</li>
+      <li><strong>Emergency mode</strong> &mdash; if buffer drops below ~5s, immediately drop to lowest bitrate</li>
+      <li><strong>Quality lock</strong> &mdash; avoid oscillating between qualities by requiring sustained throughput improvement before upgrading</li>
+    </ul>
+  </div>
+
+  <div class="card success">
+    <strong>Key Insight:</strong> Netflix prefers a <em>slightly lower</em> but <em>stable</em> quality over oscillating between high and low. Human perception penalizes quality switches more than steady medium quality.
+  </div>
+</div>
+
+
+<!-- ================================================================== -->
+<!-- SECTION 5: CDN Architecture -->
+<!-- ================================================================== -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>CDN Architecture &amp; Open Connect</h2>
+
+  <p>Netflix operates one of the largest CDNs in the world: <strong>Open Connect</strong>. Unlike traditional CDNs (Akamai, CloudFront), Netflix owns and operates its own hardware, deployed directly inside ISP networks, eliminating transit costs and reducing latency to a single network hop for most users.</p>
+
+  <h3 id="sec-5-1">Three-Tier Topology</h3>
+
+  <table>
+    <tr>
+      <th>Tier</th>
+      <th>Location</th>
+      <th>Content</th>
+      <th>Cache Hit Rate</th>
+    </tr>
+    <tr>
+      <td><strong>Tier 1: Edge PoPs</strong></td>
+      <td>Inside ISP data centers (Open Connect Appliances)</td>
+      <td>Popular content for that region/ISP, pre-warmed nightly</td>
+      <td>~95% of requests</td>
+    </tr>
+    <tr>
+      <td><strong>Tier 2: Regional Hubs</strong></td>
+      <td>Major IXPs (Internet Exchange Points)</td>
+      <td>Broader catalog, serves cache misses from Tier 1</td>
+      <td>~4% of requests</td>
+    </tr>
+    <tr>
+      <td><strong>Tier 3: Origin</strong></td>
+      <td>AWS S3 in US regions</td>
+      <td>Complete catalog, all encoded versions</td>
+      <td>~1% of requests</td>
+    </tr>
+  </table>
+
+  <h3 id="sec-5-2">Cache Warming &amp; ISP Appliances</h3>
+
+  <div class="card highlight">
+    <strong>Proactive Cache Fill:</strong>
+    <p style="margin-top: 8px;">Every night during off-peak hours, the Open Connect control plane analyzes viewing patterns and pre-populates edge caches with content predicted to be popular the next day. New releases are pushed to all edges before the launch time. This means most content is served from the closest possible server with zero origin fetches.</p>
+  </div>
+
+  <div class="card">
+    <h4>Open Connect Appliance (OCA) Specs</h4>
+    <ul style="padding-left: 20px;">
+      <li><strong>Hardware:</strong> Custom-designed servers with high-density SSD/HDD storage (up to 280 TB per unit)</li>
+      <li><strong>Software:</strong> FreeBSD-based OS, custom nginx fork, optimized for sequential reads</li>
+      <li><strong>Throughput:</strong> A single OCA can serve 90+ Gbps of video traffic</li>
+      <li><strong>Deployment:</strong> Free to ISPs &mdash; Netflix provides hardware, ISP provides power and rack space</li>
+      <li><strong>Steering:</strong> DNS-based client steering routes users to the optimal OCA based on real-time health metrics</li>
+    </ul>
+  </div>
+
+  <div class="card success">
+    <strong>Why This Architecture Wins:</strong>
+    <ul style="margin-top: 8px; padding-left: 20px;">
+      <li>ISPs save on transit/peering costs &mdash; traffic stays local</li>
+      <li>Users get lower latency and fewer rebuffers</li>
+      <li>Netflix avoids paying third-party CDN fees at massive scale</li>
+      <li>Cache hit rates above 95% mean origin infrastructure can be modest</li>
+    </ul>
+  </div>
+</div>
+
+
+<!-- ================================================================== -->
+<!-- SECTION 6: Recommendation Engine -->
+<!-- ================================================================== -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>Recommendation Engine</h2>
+
+  <p>Recommendations drive <strong>80% of content watched</strong> on Netflix. The homepage is not a static catalog &mdash; it's a fully personalized storefront where every row, every title position, and even every thumbnail image is selected by ML models specific to each user.</p>
+
+  <h3 id="sec-6-1">Collaborative &amp; Content-Based Filtering</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card">
+      <h4>Collaborative Filtering</h4>
+      <p>"Users who watched X also watched Y." Finds patterns across the entire user base. Works well when there is lots of viewing history but fails for new users or new content.</p>
+      <ul style="margin-top: 8px; padding-left: 20px;">
+        <li>Matrix factorization (SVD)</li>
+        <li>Item-item similarity</li>
+        <li>Implicit feedback (watch time, completion rate)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Content-Based Filtering</h4>
+      <p>"Because this title has attributes similar to what you like." Uses metadata: genre, actors, director, tags, mood, pacing. Works for new content but can create filter bubbles.</p>
+      <ul style="margin-top: 8px; padding-left: 20px;">
+        <li>Human-curated micro-genres (76,000+)</li>
+        <li>NLP on descriptions and reviews</li>
+        <li>Visual features from video frames</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="sec-6-2">Deep Learning &amp; A/B Testing</h3>
+
+  <div class="card highlight">
+    <strong>Modern Netflix Recommendation Stack:</strong>
+    <ul style="margin-top: 8px; padding-left: 20px;">
+      <li><strong>Candidate generation</strong> &mdash; fast retrieval of ~1000 potentially relevant titles from the 17K catalog</li>
+      <li><strong>Ranking</strong> &mdash; deep neural network scores each candidate based on user context (time, device, recent activity)</li>
+      <li><strong>Row generation</strong> &mdash; titles are organized into thematic rows ("Because you watched Breaking Bad", "Trending Now")</li>
+      <li><strong>Artwork personalization</strong> &mdash; each title has multiple thumbnail images; the system picks the one most likely to engage this specific user</li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <strong>A/B Testing with Interleaving:</strong>
+    <p style="margin-top: 8px;">Netflix runs hundreds of concurrent A/B tests. For recommendations, they use <em>interleaving</em> &mdash; a technique where results from two ranking models are interleaved in a single page, and user engagement determines the winner. This requires 10-100x fewer users than traditional A/B splits.</p>
+    <p style="margin-top: 8px;"><span class="linkedin-tag">LinkedIn Parallel</span> LinkedIn uses <strong>LIX</strong> for feature flagging and A/B testing across Feed ranking, Job recommendations, and Ads targeting &mdash; same concept of controlled experimentation at scale.</p>
+  </div>
+
+  <table>
+    <tr>
+      <th>Signal Type</th>
+      <th>Examples</th>
+      <th>Weight</th>
+    </tr>
+    <tr>
+      <td><strong>Explicit</strong></td>
+      <td>Thumbs up/down, "My List" additions</td>
+      <td>High but sparse</td>
+    </tr>
+    <tr>
+      <td><strong>Implicit</strong></td>
+      <td>Watch duration, completion %, rewatch, time of day</td>
+      <td>Primary signal (abundant)</td>
+    </tr>
+    <tr>
+      <td><strong>Contextual</strong></td>
+      <td>Device type, day of week, recent viewing session</td>
+      <td>Modulates ranking</td>
+    </tr>
+    <tr>
+      <td><strong>Social</strong></td>
+      <td>Trending in your country, popular with similar profiles</td>
+      <td>Discovery boost</td>
+    </tr>
+  </table>
+</div>
+
+
+<!-- ================================================================== -->
+<!-- SECTION 7: LinkedIn Mapping & Interview Questions -->
+<!-- ================================================================== -->
+<div class="section" id="sec-7">
+  <div class="section-num">Section 7</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>Technology Mapping: Netflix &harr; LinkedIn</h3>
+
+  <table>
+    <tr>
+      <th>Netflix Component</th>
+      <th>LinkedIn Equivalent</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td>Recommendation Engine</td>
+      <td><span class="linkedin-tag">Pro-ML</span></td>
+      <td>LinkedIn's ML platform for Feed ranking, job recs, people-you-may-know; same candidate-gen &rarr; ranking &rarr; re-ranking pipeline</td>
+    </tr>
+    <tr>
+      <td>Cassandra (user/content data)</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn's NoSQL document store; serves profile, messaging, and entity data at low latency</td>
+    </tr>
+    <tr>
+      <td>S3 (origin blob storage)</td>
+      <td><span class="linkedin-tag">Ambry</span></td>
+      <td>LinkedIn's distributed blob store for images, videos, documents, and large objects</td>
+    </tr>
+    <tr>
+      <td>Open Connect CDN</td>
+      <td><span class="linkedin-tag">LinkedIn CDN</span></td>
+      <td>LinkedIn uses a combination of internal PoPs and third-party CDNs (Akamai) for static assets and media delivery</td>
+    </tr>
+    <tr>
+      <td>Kafka (event streaming)</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>LinkedIn created Kafka; it remains the backbone for activity tracking, change data capture, and async processing</td>
+    </tr>
+    <tr>
+      <td>Elasticsearch (search)</td>
+      <td><span class="linkedin-tag">Galene</span></td>
+      <td>LinkedIn's custom search engine; powers People Search, Job Search, Content Search with graph-aware ranking</td>
+    </tr>
+    <tr>
+      <td>Zuul API Gateway</td>
+      <td><span class="linkedin-tag">LiX + Rest.li</span></td>
+      <td>LinkedIn uses Rest.li for service APIs and LiX for dynamic feature control at the gateway layer</td>
+    </tr>
+    <tr>
+      <td>Chaos Monkey (resilience)</td>
+      <td><span class="linkedin-tag">LinkedOut</span></td>
+      <td>LinkedIn's own chaos engineering framework for fault injection and resilience validation</td>
+    </tr>
+  </table>
+
+  <h3>Common Interview Questions</h3>
+
+  <div class="card danger">
+    <h4>Q1: How do you handle the cold start problem for new users?</h4>
+    <p style="margin-top: 8px;"><strong>Answer:</strong> Use a multi-pronged approach: (1) onboarding quiz asking for genre/title preferences, (2) popularity-based recommendations as a fallback, (3) demographic-based priors (country, language, sign-up device), (4) contextual bandits that explore-exploit to learn preferences quickly. The key insight is that even a few signals (3-5 title ratings) dramatically improve recommendation quality.</p>
+  </div>
+
+  <div class="card danger">
+    <h4>Q2: How do you minimize buffering (rebuffering)?</h4>
+    <p style="margin-top: 8px;"><strong>Answer:</strong> Multiple layers: (1) ABR algorithm aggressively adapts quality to prevent buffer underrun, (2) predictive buffer management starts at lower quality for fast initial fill, (3) CDN placement inside ISP networks reduces latency to single-hop, (4) per-shot encoding optimizes bitrate so the same quality requires fewer bytes, (5) client pre-fetches the next episode's initial segments before the current one ends.</p>
+  </div>
+
+  <div class="card danger">
+    <h4>Q3: How does DRM work in a streaming system?</h4>
+    <p style="margin-top: 8px;"><strong>Answer:</strong> Content is encrypted at rest (AES-128 or AES-256) during the transcoding pipeline. The manifest contains key IDs. When the client needs to decrypt, it contacts a <strong>license server</strong> (separate from the CDN) to obtain a decryption key. The license server validates the user's subscription, device trust level, and entitlements. Different DRM systems serve different platforms: <strong>Widevine</strong> (Android/Chrome), <strong>FairPlay</strong> (Apple), <strong>PlayReady</strong> (Windows/Xbox). The encrypted content itself is identical across DRM systems &mdash; only the key-wrapping differs (CENC standard).</p>
+  </div>
+
+  <div class="card danger">
+    <h4>Q4: How do you design a CDN that serves 15% of global internet traffic?</h4>
+    <p style="margin-top: 8px;"><strong>Answer:</strong> Key principles: (1) <strong>Push, don't pull</strong> &mdash; proactively fill edge caches during off-peak rather than waiting for cache misses, (2) <strong>Embed in ISPs</strong> &mdash; deploy hardware inside ISP networks to eliminate transit hops, (3) <strong>DNS-based steering</strong> &mdash; route clients to the optimal server considering load, health, and latency, (4) <strong>Tiered architecture</strong> &mdash; Edge &rarr; Regional &rarr; Origin with 95%+ hit rate at the edge, (5) <strong>Catalog-aware caching</strong> &mdash; use viewing prediction models to decide what to cache where, not just LRU.</p>
+  </div>
+
+  <div class="card danger">
+    <h4>Q5: How would you handle a new show launch that millions of users will watch simultaneously?</h4>
+    <p style="margin-top: 8px;"><strong>Answer:</strong> (1) Pre-warm all edge caches with the new content days before launch, (2) over-provision CDN capacity in predicted hot regions, (3) use progressive rollout by timezone to spread the load wave, (4) the ABR algorithm naturally handles congestion by downgrading quality gracefully, (5) separate the control plane (can degrade recommendations) from data plane (must keep streaming) so a metadata service failure doesn't stop playback.</p>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Interview Tip: Netflix vs YouTube Design Differences</h4>
+    <ol>
+      <li><strong>Content model:</strong> Netflix = curated professional catalog (17K titles) vs YouTube = user-generated (800M+ videos). This changes everything about the transcoding pipeline, storage, and search.</li>
+      <li><strong>Encoding strategy:</strong> Netflix encodes offline with unlimited compute (per-shot optimization) vs YouTube must encode in near-real-time at upload.</li>
+      <li><strong>Monetization:</strong> Netflix = subscription (optimize engagement/retention) vs YouTube = ads (optimize watch time and ad impressions). This fundamentally shapes the recommendation objectives.</li>
+      <li><strong>CDN:</strong> Netflix owns its CDN hardware inside ISPs vs YouTube relies on Google's private backbone. Both are valid at scale but with different cost structures.</li>
+      <li><strong>Search importance:</strong> Low for Netflix (recommendations dominate) vs critical for YouTube (search is primary content discovery).</li>
+    </ol>
+  </div>
+</div>
+
+
+</div><!-- /container -->
+
+<footer>
+  <p>System Design Interview Guide &mdash; Netflix Architecture Deep Dive</p>
+  <p style="margin-top: 8px;">Built for interview prep &bull; Not affiliated with Netflix, Inc.</p>
+</footer>
+
+</body>
+</html>

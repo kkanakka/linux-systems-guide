@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Rate Limiter</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #FF9800;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a150a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.orange { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.orange:hover { background: rgba(255,152,0,0.1); }
+  .nav-links a.red { color: var(--red); border-color: var(--red); }
+  .nav-links a.red:hover { background: rgba(248,81,73,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Rate Limiter</span></h1>
+    <p>A deep dive into rate limiting algorithms, distributed architectures with Redis, race condition handling, and real-world API throttling strategies.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html" class="red">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-rate-limiter.html" class="orange">Rate Limiter (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#overview">Overview &amp; Requirements</a>
+      <ul class="sub">
+        <li><a href="#what-is">What Is Rate Limiting?</a></li>
+        <li><a href="#requirements">Functional &amp; Non-Functional Requirements</a></li>
+        <li><a href="#placement">Where to Place the Rate Limiter</a></li>
+      </ul>
+    </li>
+    <li><a href="#algorithms">Rate Limiting Algorithms</a>
+      <ul class="sub">
+        <li><a href="#token-bucket">Token Bucket</a></li>
+        <li><a href="#leaky-bucket">Leaky Bucket</a></li>
+        <li><a href="#fixed-window">Fixed Window Counter</a></li>
+        <li><a href="#sliding-log">Sliding Window Log</a></li>
+        <li><a href="#sliding-counter">Sliding Window Counter</a></li>
+      </ul>
+    </li>
+    <li><a href="#architecture">Distributed Architecture</a>
+      <ul class="sub">
+        <li><a href="#redis-counters">Redis Counters &amp; Atomic Ops</a></li>
+        <li><a href="#race-conditions">Race Conditions</a></li>
+        <li><a href="#response-headers">Response Headers</a></li>
+        <li><a href="#linkedin-mapping">LinkedIn Mapping</a></li>
+      </ul>
+    </li>
+    <li><a href="#decisions">Design Decisions &amp; Trade-offs</a></li>
+    <li><a href="#real-world">Real-World Examples</a></li>
+    <li><a href="#interview">Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ===== SECTION 1: OVERVIEW ===== -->
+<div class="section" id="overview">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Requirements</h2>
+
+  <h3 id="what-is">What Is Rate Limiting?</h3>
+  <p>A rate limiter controls the number of requests a client can send to a server within a defined time window. When the threshold is exceeded, excess requests are throttled &mdash; typically returning <code>HTTP 429 Too Many Requests</code>.</p>
+
+  <div class="card highlight">
+    <strong>Why Rate Limiting Matters:</strong>
+    <ul style="margin-top: 10px; padding-left: 20px;">
+      <li><strong>Prevent resource starvation</strong> &mdash; one abusive client can't starve others</li>
+      <li><strong>Security</strong> &mdash; mitigate brute-force attacks, credential stuffing, DDoS</li>
+      <li><strong>Cost control</strong> &mdash; prevent runaway API usage from inflating infra costs</li>
+      <li><strong>Ensure SLA compliance</strong> &mdash; guarantee fair bandwidth across tenants</li>
+      <li><strong>Stability</strong> &mdash; protect downstream services from cascading overloads</li>
+    </ul>
+  </div>
+
+  <h3 id="requirements">Functional &amp; Non-Functional Requirements</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Functional Requirements</h4>
+      <ul style="padding-left: 20px; margin-top: 10px;">
+        <li>Limit requests by client ID, IP, API key, or user ID</li>
+        <li>Support configurable limits per endpoint/service</li>
+        <li>Return clear error responses (<code>429</code>) with retry info</li>
+        <li>Support multiple rate tiers (free, premium, enterprise)</li>
+        <li>Allow soft limits (warn) vs hard limits (reject)</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h4>Non-Functional Requirements</h4>
+      <ul style="padding-left: 20px; margin-top: 10px;">
+        <li><strong>Low latency</strong> &mdash; must not add significant overhead (&lt; 1ms p99)</li>
+        <li><strong>High availability</strong> &mdash; rate limiter failure should not block all requests</li>
+        <li><strong>Distributed</strong> &mdash; consistent enforcement across multiple servers</li>
+        <li><strong>Accuracy</strong> &mdash; minimal over-counting or under-counting</li>
+        <li><strong>Fault tolerance</strong> &mdash; graceful degradation if Redis/store is unavailable</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="placement">Where to Place the Rate Limiter</h3>
+  <p>The rate limiter can live at different layers in the request path. Each has trade-offs:</p>
+
+  <table>
+    <tr>
+      <th>Placement</th>
+      <th>Pros</th>
+      <th>Cons</th>
+      <th>Best For</th>
+    </tr>
+    <tr>
+      <td><strong>Client-side</strong></td>
+      <td>Reduces unnecessary network traffic</td>
+      <td>Easily bypassed; unreliable</td>
+      <td>Mobile SDK throttling</td>
+    </tr>
+    <tr>
+      <td><strong>API Gateway</strong></td>
+      <td>Centralized; uniform enforcement; offloads services</td>
+      <td>Single point of failure; coarse-grained</td>
+      <td>Most production systems</td>
+    </tr>
+    <tr>
+      <td><strong>Middleware / Sidecar</strong></td>
+      <td>Per-service granularity; service mesh integration</td>
+      <td>Each service needs its own config</td>
+      <td>Microservice architectures</td>
+    </tr>
+    <tr>
+      <td><strong>Application Layer</strong></td>
+      <td>Fine-grained; business-logic-aware rules</td>
+      <td>Duplicated logic across services</td>
+      <td>Custom per-endpoint limits</td>
+    </tr>
+  </table>
+
+  <div class="card highlight">
+    <span class="linkedin-tag">LinkedIn Parallel</span>
+    <p style="margin-top: 8px;">LinkedIn uses <strong>API gateway-level rate limiting</strong> (via the Rest.li framework and Frontdoor proxy) combined with <strong>per-service middleware</strong> for fine-grained control. The gateway handles global IP-based throttling, while individual services enforce user-tier-based limits.</p>
+  </div>
+</div>
+
+<!-- ===== SECTION 2: ALGORITHMS ===== -->
+<div class="section" id="algorithms">
+  <div class="section-num">Section 2</div>
+  <h2>Rate Limiting Algorithms</h2>
+
+  <p>Five major algorithms dominate rate limiter design. Each balances accuracy, memory, and implementation complexity differently.</p>
+
+  <div class="diagram">
+    <img src="images/sd_ratelimiter_01_algorithms.png" alt="Rate Limiting Algorithms Comparison">
+    <div class="caption">Figure 1 &mdash; Visual comparison of the five rate limiting algorithms</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough</h4>
+    <ol>
+      <li><strong>Token Bucket</strong> &mdash; tokens are added at a fixed rate; each request consumes one token. When the bucket is empty, requests are rejected. Allows controlled bursts up to bucket capacity.</li>
+      <li><strong>Leaky Bucket</strong> &mdash; requests enter a FIFO queue and are processed at a fixed rate. Excess requests overflow and are dropped. Produces perfectly smooth output regardless of input burstiness.</li>
+      <li><strong>Fixed Window Counter</strong> &mdash; divides time into fixed intervals (e.g., 60s windows). A counter increments per request; resets at each window boundary. Simple but vulnerable to boundary spikes.</li>
+      <li><strong>Sliding Window Log</strong> &mdash; stores timestamps of every request. Counts requests within the trailing window. Most accurate but highest memory cost &mdash; O(n) per user.</li>
+      <li><strong>Sliding Window Counter</strong> &mdash; hybrid of fixed window + sliding window. Estimates current window count using weighted average of current and previous windows. Great accuracy-to-memory trade-off.</li>
+    </ol>
+  </div>
+
+  <h3 id="token-bucket">Token Bucket</h3>
+  <div class="card">
+    <p>The token bucket is the most widely used algorithm. Tokens are added at rate <code>r</code> tokens/second, up to a maximum bucket size <code>b</code>. Each request removes one token.</p>
+    <pre>
+class TokenBucket:
+    def __init__(self, capacity, refill_rate):
+        self.capacity = capacity
+        self.tokens = capacity
+        self.refill_rate = refill_rate   # tokens per second
+        self.last_refill = time.time()
+
+    def allow_request(self):
+        self._refill()
+        if self.tokens >= 1:
+            self.tokens -= 1
+            return True
+        return False
+
+    def _refill(self):
+        now = time.time()
+        elapsed = now - self.last_refill
+        self.tokens = min(self.capacity,
+                          self.tokens + elapsed * self.refill_rate)
+        self.last_refill = now</pre>
+    <p><strong>Memory:</strong> O(1) per bucket &mdash; only stores <code>tokens</code> and <code>last_refill</code>.</p>
+    <p><strong>Used by:</strong> Amazon API Gateway, Stripe, LinkedIn <span class="linkedin-tag">Rest.li</span></p>
+  </div>
+
+  <h3 id="leaky-bucket">Leaky Bucket</h3>
+  <div class="card">
+    <p>Functionally similar to a token bucket, but implemented as a FIFO queue. Requests are processed at a fixed rate. If the queue is full, new requests are dropped.</p>
+    <table>
+      <tr><th>Property</th><th>Token Bucket</th><th>Leaky Bucket</th></tr>
+      <tr><td>Burst handling</td><td>Allows bursts up to capacity</td><td>Smooths all output to fixed rate</td></tr>
+      <tr><td>Implementation</td><td>Counter + timestamp</td><td>FIFO queue</td></tr>
+      <tr><td>Use case</td><td>APIs needing burst tolerance</td><td>Traffic shaping, network QoS</td></tr>
+    </table>
+  </div>
+
+  <h3 id="fixed-window">Fixed Window Counter</h3>
+  <div class="card warn">
+    <p>Divides time into fixed windows (e.g., every 60 seconds). A counter tracks requests in the current window and resets at each boundary.</p>
+    <p><strong>The Boundary Problem:</strong> A user could send the maximum number of requests at the end of window N and again at the start of window N+1 &mdash; effectively doubling their rate across a short burst that spans the boundary.</p>
+    <pre>
+# Example: limit = 100 req/min
+# At 12:00:59 → user sends 100 requests (allowed, counter = 100)
+# At 12:01:00 → counter resets to 0
+# At 12:01:01 → user sends 100 requests (allowed, counter = 100)
+# Result: 200 requests in 2 seconds!</pre>
+  </div>
+
+  <h3 id="sliding-log">Sliding Window Log</h3>
+  <div class="card">
+    <p>Maintains a sorted set of timestamps for each request. On every new request, remove all entries older than <code>now - window_size</code>, then check if count exceeds the limit.</p>
+    <pre>
+# Redis implementation
+def is_allowed(user_id, limit, window_secs):
+    key = f"rate:{user_id}"
+    now = time.time()
+    cutoff = now - window_secs
+
+    pipe = redis.pipeline()
+    pipe.zremrangebyscore(key, 0, cutoff)  # Remove old entries
+    pipe.zadd(key, {str(now): now})        # Add current request
+    pipe.zcard(key)                        # Count entries
+    pipe.expire(key, window_secs)
+    _, _, count, _ = pipe.execute()
+
+    return count <= limit</pre>
+    <p><strong>Accuracy:</strong> Perfect &mdash; no boundary issues. <strong>Memory:</strong> O(n) per user, where n = number of requests in the window. Expensive for high-volume users.</p>
+  </div>
+
+  <h3 id="sliding-counter">Sliding Window Counter</h3>
+  <div class="card success">
+    <p>The best trade-off for most systems. Uses counters from the current and previous fixed windows, weighted by how far into the current window we are.</p>
+    <pre>
+# Formula:
+# estimated_count = prev_window_count × overlap_ratio + current_window_count
+#
+# Example: window = 60s, limit = 100
+# Previous window (12:00-12:01): 84 requests
+# Current window  (12:01-12:02): 36 requests
+# Current time:    12:01:15 → 75% of prev window overlaps
+#
+# estimated = 84 × 0.75 + 36 = 63 + 36 = 99 → ALLOWED (under 100)</pre>
+    <p><strong>Memory:</strong> O(1) per user &mdash; only two counters. <strong>Accuracy:</strong> ~99.7% according to Cloudflare&rsquo;s analysis.</p>
+  </div>
+
+  <h3>Algorithm Comparison</h3>
+  <table>
+    <tr>
+      <th>Algorithm</th>
+      <th>Memory</th>
+      <th>Accuracy</th>
+      <th>Burst Control</th>
+      <th>Complexity</th>
+    </tr>
+    <tr>
+      <td>Token Bucket</td>
+      <td><span style="color: var(--accent2);">O(1)</span></td>
+      <td>Good</td>
+      <td>Allows controlled bursts</td>
+      <td>Low</td>
+    </tr>
+    <tr>
+      <td>Leaky Bucket</td>
+      <td><span style="color: var(--accent2);">O(1)</span></td>
+      <td>Good</td>
+      <td>Smooths all bursts</td>
+      <td>Low</td>
+    </tr>
+    <tr>
+      <td>Fixed Window</td>
+      <td><span style="color: var(--accent2);">O(1)</span></td>
+      <td><span style="color: var(--yt-red);">Poor at boundaries</span></td>
+      <td>None</td>
+      <td>Very Low</td>
+    </tr>
+    <tr>
+      <td>Sliding Window Log</td>
+      <td><span style="color: var(--red);">O(n)</span></td>
+      <td><span style="color: var(--accent2);">Perfect</span></td>
+      <td>Precise</td>
+      <td>Medium</td>
+    </tr>
+    <tr>
+      <td>Sliding Window Counter</td>
+      <td><span style="color: var(--accent2);">O(1)</span></td>
+      <td><span style="color: var(--accent2);">~99.7%</span></td>
+      <td>Good</td>
+      <td>Low</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ===== SECTION 3: DISTRIBUTED ARCHITECTURE ===== -->
+<div class="section" id="architecture">
+  <div class="section-num">Section 3</div>
+  <h2>Distributed Architecture</h2>
+
+  <p>In a multi-server environment, a centralized data store (typically Redis) is required so that all API servers enforce a shared counter. Without this, each server would track limits independently, letting users exceed limits by distributing requests across servers.</p>
+
+  <div class="diagram">
+    <img src="images/sd_ratelimiter_02_architecture.png" alt="Distributed Rate Limiter Architecture">
+    <div class="caption">Figure 2 &mdash; Distributed rate limiter architecture with Redis, rules engine, and response flow</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Architecture Walkthrough</h4>
+    <ol>
+      <li><strong>Client Request</strong> &mdash; arrives at the API gateway or load balancer, which extracts the client identifier (API key, user ID, IP address).</li>
+      <li><strong>Rules Engine</strong> &mdash; looks up the rate limit configuration for this client/endpoint pair from a rules cache (backed by a config service or database). Rules define limits like &ldquo;100 req/min for /api/search, 1000 req/min for /api/feed&rdquo;.</li>
+      <li><strong>Redis Check</strong> &mdash; the rate limiter issues an atomic <code>INCR</code> + <code>EXPIRE</code> command to Redis. If the returned counter exceeds the limit, the request is rejected with <code>429</code>.</li>
+      <li><strong>Allow / Deny</strong> &mdash; if under the limit, the request is forwarded to the backend service. If over, a <code>429</code> response is returned with rate limit headers.</li>
+      <li><strong>Async Logging</strong> &mdash; throttled requests are logged asynchronously for analytics, abuse detection, and alerting dashboards.</li>
+    </ol>
+  </div>
+
+  <h3 id="redis-counters">Redis Counters &amp; Atomic Operations</h3>
+  <div class="card">
+    <p>Redis is the de facto choice for distributed rate limiting due to its single-threaded model and sub-millisecond latency. The core operation is atomic increment with expiry:</p>
+    <pre>
+-- Lua script for atomic rate limiting in Redis
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+
+local current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('EXPIRE', key, window)
+end
+
+if current > limit then
+    return 0  -- rejected
+else
+    return 1  -- allowed
+end</pre>
+    <p>Using a Lua script ensures atomicity &mdash; <code>INCR</code> and <code>EXPIRE</code> execute as a single operation, preventing the key from existing without a TTL (which would cause a memory leak).</p>
+  </div>
+
+  <h3 id="race-conditions">Race Conditions</h3>
+  <div class="card danger">
+    <h4>The GET-then-SET Race</h4>
+    <p>A naive implementation that reads the counter, checks the limit, and then writes is vulnerable to race conditions:</p>
+    <pre>
+# WRONG - Race condition between GET and SET
+count = redis.get(key)           # Thread A reads 99
+                                  # Thread B reads 99
+if count < limit:
+    redis.incr(key)              # Thread A writes 100 → allowed
+                                  # Thread B writes 101 → should have been denied!</pre>
+    <p><strong>Solutions:</strong></p>
+    <ul style="padding-left: 20px; margin-top: 10px;">
+      <li><strong>Lua scripts</strong> (recommended) &mdash; execute check + increment atomically on the Redis server</li>
+      <li><strong>Redis sorted sets</strong> &mdash; use <code>ZADD</code>/<code>ZCARD</code> for sliding window log with implicit atomicity</li>
+      <li><strong>MULTI/EXEC transactions</strong> &mdash; pipeline commands, but doesn't provide conditional logic</li>
+      <li><strong>Optimistic locking with WATCH</strong> &mdash; retry on conflict, adds complexity and latency under contention</li>
+    </ul>
+  </div>
+
+  <h3 id="response-headers">Response Headers</h3>
+  <div class="card">
+    <p>Standard rate limit headers inform clients of their usage and remaining quota:</p>
+    <table>
+      <tr>
+        <th>Header</th>
+        <th>Description</th>
+        <th>Example</th>
+      </tr>
+      <tr>
+        <td><code>X-RateLimit-Limit</code></td>
+        <td>Maximum requests allowed per window</td>
+        <td><code>100</code></td>
+      </tr>
+      <tr>
+        <td><code>X-RateLimit-Remaining</code></td>
+        <td>Requests remaining in current window</td>
+        <td><code>37</code></td>
+      </tr>
+      <tr>
+        <td><code>X-RateLimit-Reset</code></td>
+        <td>Unix timestamp when window resets</td>
+        <td><code>1672531260</code></td>
+      </tr>
+      <tr>
+        <td><code>Retry-After</code></td>
+        <td>Seconds to wait before retrying (on 429)</td>
+        <td><code>23</code></td>
+      </tr>
+    </table>
+    <pre>
+HTTP/1.1 429 Too Many Requests
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1672531260
+Retry-After: 23
+Content-Type: application/json
+
+{"error": "rate_limit_exceeded", "message": "Too many requests. Retry after 23 seconds."}</pre>
+  </div>
+
+  <h3 id="linkedin-mapping">LinkedIn Mapping</h3>
+  <div class="card highlight">
+    <span class="linkedin-tag">LinkedIn</span> <span class="linkedin-tag">Rest.li</span> <span class="linkedin-tag">Frontdoor</span>
+    <p style="margin-top: 12px;">LinkedIn&rsquo;s rate limiting architecture maps directly to this design:</p>
+    <table>
+      <tr>
+        <th>Component</th>
+        <th>LinkedIn Implementation</th>
+      </tr>
+      <tr>
+        <td>API Gateway</td>
+        <td><strong>Frontdoor Proxy</strong> &mdash; handles global rate limiting at the edge, IP-based throttling, and DDoS protection</td>
+      </tr>
+      <tr>
+        <td>Per-Service Limiter</td>
+        <td><strong>Rest.li framework</strong> &mdash; built-in rate limiting middleware with per-endpoint configuration and caller-based quotas</td>
+      </tr>
+      <tr>
+        <td>Counter Store</td>
+        <td><strong>Couchbase / Venice</strong> &mdash; distributed counters with sub-ms latency; some services use in-process counters with gossip-based synchronization</td>
+      </tr>
+      <tr>
+        <td>Rules Engine</td>
+        <td><strong>D2 service registry</strong> + <strong>cfg2 config management</strong> &mdash; dynamic rule updates without deployment</td>
+      </tr>
+      <tr>
+        <td>Algorithm</td>
+        <td><strong>Token bucket</strong> (primary) with sliding window for certain public APIs</td>
+      </tr>
+      <tr>
+        <td>Multi-Tier Limits</td>
+        <td>Different quotas for internal services vs external API partners vs public apps (LinkedIn Developer Platform)</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ===== SECTION 4: DESIGN DECISIONS ===== -->
+<div class="section" id="decisions">
+  <div class="section-num">Section 4</div>
+  <h2>Design Decisions &amp; Trade-offs</h2>
+
+  <h3>Gateway vs Service-Level Limiting</h3>
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Gateway-Level (Centralized)</h4>
+      <ul style="padding-left: 20px; margin-top: 10px;">
+        <li>Single enforcement point &mdash; easier to manage</li>
+        <li>Protects all backend services uniformly</li>
+        <li>No code changes required in services</li>
+        <li>Can block requests before they consume backend resources</li>
+      </ul>
+      <p style="margin-top: 10px; color: var(--yt-red);"><strong>Risk:</strong> Single point of failure; coarse rules may over-throttle</p>
+    </div>
+    <div class="card warn">
+      <h4>Service-Level (Distributed)</h4>
+      <ul style="padding-left: 20px; margin-top: 10px;">
+        <li>Fine-grained per-endpoint control</li>
+        <li>Business-logic-aware (e.g., different limits for search vs write)</li>
+        <li>Each service owns its rate limit policy</li>
+        <li>No single point of failure</li>
+      </ul>
+      <p style="margin-top: 10px; color: var(--yt-red);"><strong>Risk:</strong> Inconsistent policies; harder to get global view</p>
+    </div>
+  </div>
+  <div class="card highlight">
+    <strong>Recommendation:</strong> Use both. The gateway handles broad abuse prevention (IP-based, DDoS) while individual services enforce business-level limits (per-user, per-endpoint, per-tier).
+  </div>
+
+  <h3>Hard Limits vs Soft Limits</h3>
+  <div class="card">
+    <table>
+      <tr>
+        <th>Type</th>
+        <th>Behavior</th>
+        <th>Use Case</th>
+      </tr>
+      <tr>
+        <td><strong>Hard Limit</strong></td>
+        <td>Request is immediately rejected with <code>429</code></td>
+        <td>External APIs, untrusted clients, security-sensitive endpoints</td>
+      </tr>
+      <tr>
+        <td><strong>Soft Limit</strong></td>
+        <td>Request is allowed but flagged; alert is triggered; may be degraded</td>
+        <td>Internal services, gradual rollout, observability</td>
+      </tr>
+      <tr>
+        <td><strong>Elastic Limit</strong></td>
+        <td>Temporary burst allowed up to N% over quota; hard stop after that</td>
+        <td>Handling legitimate traffic spikes without user disruption</td>
+      </tr>
+    </table>
+  </div>
+
+  <h3>Multi-Tier Rate Limiting</h3>
+  <div class="card">
+    <p>Production systems typically enforce limits at multiple granularities simultaneously:</p>
+    <div class="scale-box">
+      <div class="scale-item">
+        <div class="number">10K</div>
+        <div class="label">req/day per API key</div>
+      </div>
+      <div class="scale-item">
+        <div class="number">500</div>
+        <div class="label">req/min per user</div>
+      </div>
+      <div class="scale-item">
+        <div class="number">50</div>
+        <div class="label">req/sec per IP</div>
+      </div>
+      <div class="scale-item">
+        <div class="number">10</div>
+        <div class="label">req/sec per endpoint</div>
+      </div>
+    </div>
+    <p>A request must pass <strong>all</strong> tiers to be allowed. This prevents abuse at every level &mdash; a valid API key can&rsquo;t be used to DDoS a single endpoint.</p>
+  </div>
+
+  <h3>Graceful Degradation</h3>
+  <div class="card danger">
+    <h4>What happens when Redis goes down?</h4>
+    <p>If the rate limiter&rsquo;s backing store is unavailable, you have two choices:</p>
+    <div class="tradeoff-grid">
+      <div class="card success" style="margin: 8px 0;">
+        <h4>Fail Open (Allow All)</h4>
+        <p>If Redis is down, allow all requests. Prioritize availability over protection.</p>
+        <p style="color: var(--text-muted); margin-top: 8px;">Best for: internal services, non-critical APIs where downtime is worse than over-serving.</p>
+      </div>
+      <div class="card warn" style="margin: 8px 0;">
+        <h4>Fail Closed (Deny All)</h4>
+        <p>If Redis is down, reject all requests. Prioritize safety over availability.</p>
+        <p style="color: var(--text-muted); margin-top: 8px;">Best for: payment APIs, auth endpoints, security-critical paths.</p>
+      </div>
+    </div>
+    <p style="margin-top: 16px;"><strong>Hybrid approach:</strong> Fall back to local in-memory counters (per server) with approximate limits. This provides degraded-but-functional rate limiting without a centralized store. Sync counters when Redis recovers.</p>
+  </div>
+</div>
+
+<!-- ===== SECTION 5: REAL-WORLD EXAMPLES ===== -->
+<div class="section" id="real-world">
+  <div class="section-num">Section 5</div>
+  <h2>Real-World Examples</h2>
+
+  <p>How major tech companies implement rate limiting in production:</p>
+
+  <table>
+    <tr>
+      <th>Company</th>
+      <th>Algorithm</th>
+      <th>Limits</th>
+      <th>Headers</th>
+      <th>Notable Details</th>
+    </tr>
+    <tr>
+      <td><strong>Stripe</strong></td>
+      <td>Token Bucket</td>
+      <td>100 req/sec (live), 25 req/sec (test)</td>
+      <td>Standard <code>X-RateLimit-*</code></td>
+      <td>Per-API-key; returns <code>429</code> with <code>Retry-After</code>; burst-friendly for payment retries</td>
+    </tr>
+    <tr>
+      <td><strong>GitHub</strong></td>
+      <td>Fixed Window</td>
+      <td>5,000 req/hr (authenticated), 60 req/hr (unauthenticated)</td>
+      <td><code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code>, <code>X-RateLimit-Reset</code></td>
+      <td>Separate limits for Search API (30 req/min); GraphQL has point-based cost system</td>
+    </tr>
+    <tr>
+      <td><strong>Twitter / X</strong></td>
+      <td>Sliding Window</td>
+      <td>300 tweets/3hr, 900 reads/15min (app-level)</td>
+      <td><code>x-rate-limit-limit</code>, <code>x-rate-limit-remaining</code>, <code>x-rate-limit-reset</code></td>
+      <td>Per-user AND per-app limits; different tiers for Basic/Pro/Enterprise API access</td>
+    </tr>
+    <tr>
+      <td><strong>Cloudflare</strong></td>
+      <td>Sliding Window Counter</td>
+      <td>Configurable per zone/path</td>
+      <td>Custom headers via Rules</td>
+      <td>Edge-based; challenges via CAPTCHA before hard block; published <a href="https://blog.cloudflare.com/counting-things-a-lot-of-different-things/" style="color: var(--accent);">the sliding window counter analysis</a></td>
+    </tr>
+    <tr>
+      <td><strong>LinkedIn</strong> <span class="linkedin-tag">LI</span></td>
+      <td>Token Bucket</td>
+      <td>Varies by API product and app tier</td>
+      <td><code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code></td>
+      <td>Developer Platform enforces daily + per-minute limits; internal services use Rest.li middleware with Couchbase counters</td>
+    </tr>
+  </table>
+
+  <div class="card highlight">
+    <h4>Key Takeaway</h4>
+    <p>No single algorithm wins everywhere. Stripe and LinkedIn pick <strong>token bucket</strong> for burst tolerance on payment/API platforms. GitHub uses <strong>fixed window</strong> for simplicity with large windows (1 hour). Cloudflare pioneered <strong>sliding window counter</strong> at edge scale where memory matters. Twitter uses <strong>sliding windows</strong> for tighter per-user fairness.</p>
+  </div>
+</div>
+
+<!-- ===== SECTION 6: INTERVIEW QUESTIONS ===== -->
+<div class="section" id="interview">
+  <div class="section-num">Section 6</div>
+  <h2>Interview Questions</h2>
+
+  <div class="card">
+    <h4>Q1: How would you implement distributed rate limiting across multiple data centers?</h4>
+    <p style="margin-top: 10px;"><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li><strong>Option A &mdash; Global Redis cluster:</strong> Single source of truth with cross-DC replication. Consistent but adds latency for remote DCs. Use Redis Cluster with read replicas in each DC.</li>
+      <li><strong>Option B &mdash; Local counters with sync:</strong> Each DC maintains its own counter; periodically synchronize via gossip or event stream. Faster locally but may briefly over-serve during sync gaps.</li>
+      <li><strong>Option C &mdash; Split quota:</strong> Divide the total limit across DCs proportionally (e.g., 3 DCs → each gets 1/3 of the quota). Simple but inflexible if traffic is unevenly distributed.</li>
+      <li><strong>Best practice:</strong> Combine local enforcement with async global sync. Accept slight inaccuracy (e.g., 5% over-serve) in exchange for low latency. Alert if global aggregate exceeds hard limits.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>Q2: How do you handle race conditions in a distributed rate limiter?</h4>
+    <p style="margin-top: 10px;"><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li>Never use GET-then-SET &mdash; always use atomic operations</li>
+      <li><strong>Redis Lua scripts</strong> execute atomically on the server side; this is the standard solution</li>
+      <li>For sorted-set-based sliding windows, use <code>MULTI/EXEC</code> pipelines</li>
+      <li>If using a database instead of Redis, use <code>UPDATE ... SET count = count + 1 WHERE count < limit</code> (row-level locking)</li>
+      <li>For extremely high throughput, consider probabilistic data structures (Count-Min Sketch) that trade perfect accuracy for zero contention</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>Q3: What happens if Redis fails? How does the rate limiter degrade?</h4>
+    <p style="margin-top: 10px;"><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li><strong>Fail-open vs fail-closed</strong> &mdash; depends on the criticality of the protected endpoint (see Section 4)</li>
+      <li><strong>Local fallback:</strong> Each server keeps an in-memory token bucket scoped to that instance. Limits are divided by number of servers (e.g., 100/min global → 10/min per server with 10 servers)</li>
+      <li><strong>Circuit breaker:</strong> Stop querying Redis after N consecutive failures; periodically probe to check recovery</li>
+      <li><strong>Redis Sentinel / Cluster:</strong> Automatic failover to replica; most outages are short (&lt; 30s) and handled by Sentinel promotion</li>
+      <li><strong>Monitoring:</strong> Alert on Redis latency p99, connection pool exhaustion, and replication lag. These are leading indicators of rate limiter degradation.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>Q4: How would you rate-limit by multiple dimensions simultaneously?</h4>
+    <p style="margin-top: 10px;"><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li>Use composite keys: <code>rate:{user_id}:{endpoint}:{window}</code></li>
+      <li>Check all applicable limits in a single Lua script or pipeline</li>
+      <li>A request is allowed only if ALL limits pass</li>
+      <li>Return the most restrictive remaining count in headers</li>
+      <li>Consider hierarchical limits: org → team → user → endpoint</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>Q5: Token Bucket vs Sliding Window Counter &mdash; when would you choose each?</h4>
+    <p style="margin-top: 10px;"><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li><strong>Token Bucket:</strong> When you want to allow controlled bursts (e.g., APIs where a client might batch requests). Two parameters (rate + capacity) provide intuitive tuning.</li>
+      <li><strong>Sliding Window Counter:</strong> When you need smooth, consistent enforcement without burst tolerance. Better for user-facing rate limits where fairness matters more than burst flexibility.</li>
+      <li>Both are O(1) memory. Token bucket is simpler to implement; sliding window counter is more accurate near window boundaries.</li>
+      <li>For interviews, mention that most production systems use token bucket due to its simplicity and natural burst handling.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>Q6: How would you design rate limiting for a multi-tenant SaaS platform?</h4>
+    <p style="margin-top: 10px;"><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li>Define rate limit tiers in a configuration service (free: 100/hr, pro: 10K/hr, enterprise: custom)</li>
+      <li>Use tenant ID as the primary key in Redis, with per-endpoint sub-limits</li>
+      <li>Support dynamic tier upgrades without restart (config hot-reload via pub/sub)</li>
+      <li>Implement quota reservation for enterprise tenants &mdash; guaranteed minimum capacity</li>
+      <li>Provide a self-service dashboard showing usage vs limits with historical trends</li>
+      <li>Consider cost-based limiting for expensive operations (e.g., 1 search = 10 &ldquo;points&rdquo;, 1 read = 1 point)</li>
+    </ul>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<footer>
+  <p>System Design &mdash; Rate Limiter &bull; Interview Preparation Guide</p>
+  <p style="margin-top: 8px;">Covers algorithms, distributed systems, Redis, and production patterns</p>
+</footer>
+
+</body>
+</html>

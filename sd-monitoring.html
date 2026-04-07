@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Realtime Monitoring System</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #00BCD4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a1c 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.cyan { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.cyan:hover { background: rgba(0,188,212,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Realtime Monitoring System</span></h1>
+    <p>A deep dive into metrics collection, time-series storage, alerting pipelines, and dashboard rendering at scale &mdash; ingesting millions of data points per second with sub-second query latency.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-monitoring.html" class="cyan">Monitoring (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale Requirements</a></li>
+    <li><a href="#sec-2">High-Level Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Component Walkthrough</a></li>
+        <li><a href="#sec-2-2">Push vs Pull Collection</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Data Model</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Metric Format &amp; Label Cardinality</a></li>
+        <li><a href="#sec-3-2">Metric Types: Counter, Gauge, Histogram, Summary</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Time-Series Storage Engine</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Write-Optimized Append-Only Design</a></li>
+        <li><a href="#sec-4-2">Compression: Delta-of-Delta &amp; XOR</a></li>
+        <li><a href="#sec-4-3">Downsampling &amp; Retention</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Alerting Pipeline</a>
+      <ul class="sub">
+        <li><a href="#sec-5-1">Threshold Rules &amp; Anomaly Detection</a></li>
+        <li><a href="#sec-5-2">De-duplication &amp; Escalation</a></li>
+        <li><a href="#sec-5-3">Alert Fatigue Prevention</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ======================================================== -->
+<!-- SECTION 1: Overview -->
+<!-- ======================================================== -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 01</div>
+  <h2>Overview &amp; Scale Requirements</h2>
+
+  <p>A realtime monitoring system observes infrastructure and application health by collecting metrics, storing them in a time-series database, evaluating alerting rules, and rendering dashboards. The four pillars are:</p>
+
+  <div class="card highlight">
+    <strong>Four Pillars of Monitoring</strong>
+    <ol style="padding-left: 20px; margin-top: 10px;">
+      <li><strong>Metrics Collection</strong> &mdash; Agents on every host scrape or receive metrics (CPU, memory, request latency, error rates) and forward them to a central pipeline.</li>
+      <li><strong>Time-Series Storage</strong> &mdash; A purpose-built database that stores <code>(metric, labels, timestamp, value)</code> tuples with extreme write throughput and compression.</li>
+      <li><strong>Alerting Engine</strong> &mdash; Continuously evaluates rules against live data, fires alerts, de-duplicates, groups, and routes them to the right on-call engineer.</li>
+      <li><strong>Dashboard &amp; Query</strong> &mdash; Interactive dashboards let engineers visualize trends, drill down into anomalies, and correlate signals across services.</li>
+    </ol>
+  </div>
+
+  <h3>Scale Requirements</h3>
+
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">100M</div>
+      <div class="label">Active Metrics</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">10M/s</div>
+      <div class="label">Data Points Ingested</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">1 PB+</div>
+      <div class="label">Total Storage</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt;1s</div>
+      <div class="label">Dashboard Query Latency</div>
+    </div>
+  </div>
+
+  <div class="card warn">
+    <strong>Key Challenge:</strong> The write-to-read ratio is extremely skewed. A typical monitoring system has a 1000:1 write-to-read ratio &mdash; the storage engine must be optimized for sequential writes while still enabling fast range scans for dashboard queries.
+  </div>
+
+  <table>
+    <tr><th>Characteristic</th><th>Detail</th></tr>
+    <tr><td>Collection interval</td><td>10&ndash;60 seconds per metric</td></tr>
+    <tr><td>Metric cardinality</td><td>100M unique time series</td></tr>
+    <tr><td>Average label count</td><td>5&ndash;10 labels per metric</td></tr>
+    <tr><td>Query pattern</td><td>Range scans over 1h&ndash;7d windows</td></tr>
+    <tr><td>Alert evaluation</td><td>Every 15&ndash;60 seconds per rule</td></tr>
+    <tr><td>Dashboard refresh</td><td>Auto-refresh every 10&ndash;30 seconds</td></tr>
+    <tr><td>Retention</td><td>Raw: 7d, 1min: 30d, 5min: 1yr, 1hr: 5yr</td></tr>
+  </table>
+</div>
+
+<!-- ======================================================== -->
+<!-- SECTION 2: Architecture -->
+<!-- ======================================================== -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 02</div>
+  <h2>High-Level Architecture</h2>
+
+  <p>The system is organized as a pipeline: data sources emit metrics, agents collect and forward them through a Kafka buffer, stream processors fan out to the time-series database, alerting engine, and dashboard query layer.</p>
+
+  <div class="diagram">
+    <img src="images/sd_monitoring_01_architecture.png" alt="Monitoring System Architecture Diagram">
+    <div class="caption">Fig 1 &mdash; End-to-end architecture: from data sources to dashboards and alerts</div>
+  </div>
+
+  <div class="walkthrough" id="sec-2-1">
+    <h4>Component Walkthrough</h4>
+    <ol>
+      <li><strong>Data Sources:</strong> Application servers, databases, Kubernetes pods, network devices, and custom instrumented services emit raw metrics via StatsD, OpenTelemetry, or Prometheus exposition format.</li>
+      <li><strong>Metrics Agents:</strong> Lightweight per-host agents (e.g., Telegraf, node_exporter, or custom agents) scrape local metrics, add host-level labels (hostname, datacenter, pool), batch samples, and push to Kafka.</li>
+      <li><strong>Kafka Buffer:</strong> A Kafka cluster acts as the durable, ordered, partitioned buffer between producers and consumers. Partitioning by metric name or hash ensures write locality. Kafka absorbs ingest spikes without backpressuring agents.</li>
+      <li><strong>Stream Processor:</strong> Samza/Flink consumers read from Kafka, perform pre-aggregation (e.g., per-minute rollups), label enrichment, and fan-out writes to the TSDB and the alerting engine.</li>
+      <li><strong>Time-Series DB (TSDB):</strong> Purpose-built storage (e.g., InfluxDB, Thanos, Cortex, or custom) optimized for append-only writes, time-range scans, and heavy compression. Sharded by metric hash across nodes.</li>
+      <li><strong>Dashboard / Query Layer:</strong> A query frontend (like Grafana) translates user queries into TSDB range reads, applies aggregation functions (rate, avg, percentile), and renders charts with sub-second latency.</li>
+      <li><strong>Alert Engine:</strong> A separate stateful service evaluates alerting rules against the latest data, manages alert state machines (pending &rarr; firing &rarr; resolved), and dispatches notifications through configured channels.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-2-2">Push vs Pull Collection</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Pull Model (Prometheus-style)</h4>
+      <ul style="padding-left: 18px; margin-top: 8px;">
+        <li>Central server scrapes <code>/metrics</code> endpoints</li>
+        <li>Server controls scrape interval and targets</li>
+        <li>Easy to detect if a target is down (scrape fails)</li>
+        <li>Simpler security: server initiates connections</li>
+        <li>Challenge: doesn't work well behind firewalls or with short-lived jobs</li>
+      </ul>
+    </div>
+    <div class="card highlight">
+      <h4>Push Model (StatsD-style)</h4>
+      <ul style="padding-left: 18px; margin-top: 8px;">
+        <li>Agents push metrics to a central gateway / Kafka</li>
+        <li>Works with ephemeral / serverless / batch jobs</li>
+        <li>Easier to scale: adding sources doesn't burden a scraper</li>
+        <li>Better for high-cardinality, event-driven metrics</li>
+        <li>Challenge: harder to detect silent failures (no push = dead or idle?)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card warn">
+    <strong>Hybrid Approach:</strong> Most production systems use both. Pull for long-lived services (easy health detection), push for ephemeral jobs and edge devices. A <strong>Pushgateway</strong> bridges the two: short-lived jobs push to it, the monitoring server pulls from it.
+  </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- SECTION 3: Data Model -->
+<!-- ======================================================== -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 03</div>
+  <h2>Data Model</h2>
+
+  <h3 id="sec-3-1">Metric Format &amp; Label Cardinality</h3>
+
+  <p>Metrics follow the <code>metric_name{label=value, ...} timestamp value</code> format. Each unique combination of metric name + label set creates a distinct <strong>time series</strong>.</p>
+
+  <pre>
+http_requests_total{method="GET", handler="/api/users", status="200"}  1681234567  42871
+http_requests_total{method="POST", handler="/api/users", status="201"} 1681234567  1203
+node_cpu_seconds_total{cpu="0", mode="idle", instance="host-42"}       1681234567  98123.45
+  </pre>
+
+  <div class="card danger">
+    <h4>The Cardinality Explosion Problem</h4>
+    <p>Cardinality = product of all label values. A metric with 5 labels, each having 100 unique values, creates <strong>100<sup>5</sup> = 10 billion</strong> potential time series. Real-world culprits:</p>
+    <table>
+      <tr><th>Bad Label</th><th>Why It's Dangerous</th><th>Fix</th></tr>
+      <tr><td><code>user_id</code></td><td>Millions of unique users = millions of series</td><td>Use histograms/logs instead</td></tr>
+      <tr><td><code>request_id</code></td><td>Unique per request &rarr; unbounded</td><td>Never use as a metric label</td></tr>
+      <tr><td><code>email</code></td><td>PII + unbounded cardinality</td><td>Use aggregated cohorts</td></tr>
+      <tr><td><code>url_path</code> (raw)</td><td><code>/users/123</code> vs <code>/users/456</code> &rarr; explosion</td><td>Use route templates: <code>/users/:id</code></td></tr>
+    </table>
+    <p style="margin-top: 12px;"><strong>Rule of thumb:</strong> Keep total active series under 10M per TSDB node. Monitor <code>prometheus_tsdb_head_series</code> as a meta-metric.</p>
+  </div>
+
+  <h3 id="sec-3-2">Metric Types</h3>
+
+  <table>
+    <tr><th>Type</th><th>Behavior</th><th>Example</th><th>Query Pattern</th></tr>
+    <tr>
+      <td><strong>Counter</strong></td>
+      <td>Monotonically increasing; resets on restart</td>
+      <td><code>http_requests_total</code></td>
+      <td><code>rate(http_requests_total[5m])</code> &rarr; req/sec</td>
+    </tr>
+    <tr>
+      <td><strong>Gauge</strong></td>
+      <td>Goes up and down; snapshot of current state</td>
+      <td><code>node_memory_available_bytes</code></td>
+      <td>Direct value or <code>avg_over_time(...[1h])</code></td>
+    </tr>
+    <tr>
+      <td><strong>Histogram</strong></td>
+      <td>Client-side bucketed distribution; cumulative counters per bucket</td>
+      <td><code>http_request_duration_seconds_bucket{le="0.5"}</code></td>
+      <td><code>histogram_quantile(0.99, rate(...))</code></td>
+    </tr>
+    <tr>
+      <td><strong>Summary</strong></td>
+      <td>Client-side calculated quantiles; not aggregatable across instances</td>
+      <td><code>rpc_duration_seconds{quantile="0.99"}</code></td>
+      <td>Direct read; cannot be re-aggregated</td>
+    </tr>
+  </table>
+
+  <div class="card highlight">
+    <h4>Histogram vs Summary: When to Use What</h4>
+    <p><strong>Prefer Histograms</strong> in almost all cases. Histograms are aggregatable across instances (you can compute a global p99 from multiple servers). Summaries are pre-computed on the client and cannot be combined &mdash; the p99 of p99s is not the global p99.</p>
+    <p style="margin-top: 8px;">Use Summaries only when you need exact quantiles from a single instance and cannot afford the bucket explosion (e.g., a batch job reporting its own latency percentiles).</p>
+  </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- SECTION 4: Time-Series Storage -->
+<!-- ======================================================== -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 04</div>
+  <h2>Time-Series Storage Engine</h2>
+
+  <h3 id="sec-4-1">Write-Optimized Append-Only Design</h3>
+
+  <p>Time-series data has a unique access pattern: <strong>write-once, read-rarely, always in order</strong>. This allows extreme optimization compared to general-purpose databases.</p>
+
+  <div class="card highlight">
+    <h4>LSM-Tree Inspired Architecture</h4>
+    <ul style="padding-left: 18px; margin-top: 8px;">
+      <li><strong>Head Block (in-memory):</strong> Newest data (last 2 hours) lives in RAM. Samples are appended to per-series chunks. A WAL (Write-Ahead Log) ensures durability.</li>
+      <li><strong>Compacted Blocks (on-disk):</strong> Every 2 hours, the head block is flushed to an immutable, compressed block on disk. Background compaction merges small blocks into larger ones.</li>
+      <li><strong>Inverted Index:</strong> A posting list maps each label pair to the set of series IDs containing it, enabling fast label-based filtering (e.g., <code>job="apiserver"</code>).</li>
+      <li><strong>Chunk Files:</strong> Each series stores samples in compressed chunks (~120 samples). Chunks are memory-mapped for fast reads.</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-4-2">Compression: Delta-of-Delta &amp; XOR</h3>
+
+  <p>Facebook's Gorilla paper (2015) showed that time-series data compresses to <strong>1.37 bytes per sample</strong> using two techniques:</p>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Timestamps: Delta-of-Delta</h4>
+      <p>Metrics arrive at regular intervals (e.g., every 15s). Instead of storing the full 64-bit timestamp:</p>
+      <pre style="font-size: 0.85em;">
+t₁ = 1681234500
+t₂ = 1681234515  → Δ = 15
+t₃ = 1681234530  → Δ = 15  → ΔΔ = 0
+t₄ = 1681234545  → Δ = 15  → ΔΔ = 0
+t₅ = 1681234561  → Δ = 16  → ΔΔ = 1</pre>
+      <p style="margin-top: 8px;">Most ΔΔ values are 0 (1 bit) or very small (few bits). Compresses 64-bit timestamps to ~1&ndash;4 bits each.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Values: XOR Encoding</h4>
+      <p>Consecutive metric values tend to be similar (e.g., CPU at 42.3%, 42.1%, 42.4%). XOR of consecutive IEEE 754 floats yields mostly zeros:</p>
+      <pre style="font-size: 0.85em;">
+v₁ = 42.3  (IEEE 754 bits)
+v₂ = 42.1  → XOR(v₁,v₂) = 00...0101
+v₃ = 42.4  → XOR(v₂,v₃) = 00...0011</pre>
+      <p style="margin-top: 8px;">Leading and trailing zeros are run-length encoded. Average: ~0.37 bytes per value.</p>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Encoding</th><th>Raw Size</th><th>Compressed</th><th>Ratio</th></tr>
+    <tr><td>Timestamp (64-bit)</td><td>8 bytes</td><td>~0.5 bytes (ΔΔ)</td><td>16:1</td></tr>
+    <tr><td>Value (64-bit float)</td><td>8 bytes</td><td>~0.87 bytes (XOR)</td><td>9:1</td></tr>
+    <tr><td>Total per sample</td><td>16 bytes</td><td>~1.37 bytes</td><td>12:1</td></tr>
+  </table>
+
+  <div class="card warn">
+    <strong>At Scale:</strong> 10M samples/sec &times; 1.37 bytes = ~13.7 MB/s = ~1.2 TB/day = ~8.2 TB/week for raw data. Without compression, this would be ~138 MB/s = ~12 TB/day. Compression reduces storage costs by 10&times;.
+  </div>
+
+  <h3 id="sec-4-3">Downsampling &amp; Retention</h3>
+
+  <p>Raw data cannot be stored forever. Downsampling progressively reduces resolution while keeping long-term trends queryable.</p>
+
+  <table>
+    <tr><th>Tier</th><th>Resolution</th><th>Retention</th><th>Storage Estimate</th></tr>
+    <tr><td>Raw</td><td>15-second samples</td><td>7 days</td><td>~8 TB</td></tr>
+    <tr><td>1-minute rollup</td><td>min/max/avg/count per minute</td><td>30 days</td><td>~5 TB</td></tr>
+    <tr><td>5-minute rollup</td><td>min/max/avg/count per 5 min</td><td>1 year</td><td>~10 TB</td></tr>
+    <tr><td>1-hour rollup</td><td>min/max/avg/count per hour</td><td>5 years</td><td>~4 TB</td></tr>
+  </table>
+
+  <div class="card success">
+    <h4>How Downsampling Works</h4>
+    <p>A background compaction job reads raw chunks and produces rollup chunks. For each window (e.g., 1 minute), it computes:</p>
+    <ul style="padding-left: 18px; margin-top: 8px;">
+      <li><strong>min</strong> &mdash; lowest value in the window (for threshold alerting)</li>
+      <li><strong>max</strong> &mdash; highest value (for peak detection)</li>
+      <li><strong>sum</strong> &mdash; total (for rate computation)</li>
+      <li><strong>count</strong> &mdash; number of samples (for accurate averaging)</li>
+    </ul>
+    <p style="margin-top: 8px;">Storing all four aggregates (not just avg) is critical. <code>avg(avg(x))</code> is mathematically incorrect for unequal group sizes; storing sum + count allows correct re-aggregation.</p>
+  </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- SECTION 5: Alerting -->
+<!-- ======================================================== -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 05</div>
+  <h2>Alerting Pipeline</h2>
+
+  <h3 id="sec-5-1">Threshold Rules &amp; Anomaly Detection</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Static Threshold Rules</h4>
+      <pre style="font-size: 0.85em;">
+alert: HighErrorRate
+expr:  rate(http_errors_total[5m])
+         / rate(http_requests_total[5m])
+         > 0.05
+for:   5m
+labels:
+  severity: critical
+annotations:
+  summary: "Error rate above 5%"</pre>
+      <ul style="padding-left: 18px; margin-top: 8px;">
+        <li>Simple, predictable, easy to understand</li>
+        <li>Prone to false positives during traffic spikes</li>
+        <li>Requires manual tuning per service</li>
+      </ul>
+    </div>
+    <div class="card success">
+      <h4>Anomaly Detection</h4>
+      <ul style="padding-left: 18px; margin-top: 8px;">
+        <li><strong>Seasonal decomposition:</strong> Learn daily/weekly patterns, alert on deviation from expected baseline</li>
+        <li><strong>Z-score / IQR:</strong> Statistical outlier detection over sliding windows</li>
+        <li><strong>Prophet / Holt-Winters:</strong> Forecasting models that predict expected values and flag anomalies</li>
+        <li><strong>ML-based:</strong> Autoencoders, isolation forests on multi-dimensional metric vectors</li>
+      </ul>
+      <p style="margin-top: 8px;">More adaptive but harder to debug. Engineers distrust "the model said so" without explainability.</p>
+    </div>
+  </div>
+
+  <h3 id="sec-5-2">Alert De-duplication &amp; Escalation</h3>
+
+  <div class="card highlight">
+    <h4>Alert State Machine</h4>
+    <pre style="font-size: 0.85em;">
+                    ┌───────────┐
+  rule matches ───→│  PENDING   │──── "for" duration elapsed ────→ FIRING
+                    └───────────┘                                     │
+                          ↑                                           │
+                     rule stops ◄─── resolved ◄──── condition clears ─┘
+                     matching
+    </pre>
+    <p style="margin-top: 12px;">The <code>for</code> clause prevents flapping: a condition must persist for N minutes before transitioning from PENDING to FIRING.</p>
+  </div>
+
+  <h4>Escalation Chain</h4>
+  <table>
+    <tr><th>Stage</th><th>Delay</th><th>Channel</th><th>Example</th></tr>
+    <tr><td>1. Immediate</td><td>0 min</td><td>Slack channel</td><td>#sre-alerts</td></tr>
+    <tr><td>2. Acknowledge</td><td>5 min (if no ACK)</td><td>PagerDuty page</td><td>Primary on-call phone alert</td></tr>
+    <tr><td>3. Escalate</td><td>15 min (if no ACK)</td><td>Email + secondary page</td><td>Secondary on-call + manager</td></tr>
+    <tr><td>4. War Room</td><td>30 min (if unresolved)</td><td>Incident bridge</td><td>Auto-create Zoom + Slack thread</td></tr>
+  </table>
+
+  <div class="walkthrough">
+    <h4>De-duplication &amp; Grouping</h4>
+    <ol>
+      <li><strong>Group by:</strong> Alerts with the same <code>alertname</code> and <code>cluster</code> labels are grouped into a single notification. Instead of 500 "PodCrashLooping" alerts, the on-call sees "PodCrashLooping: 500 instances in cluster prod-ltx1-k8s-7".</li>
+      <li><strong>Inhibition:</strong> If a higher-severity alert is firing (e.g., "NodeDown"), suppress related lower-severity alerts (e.g., "PodNotReady" on the same node).</li>
+      <li><strong>Silencing:</strong> Temporary mutes during maintenance windows. Engineers create time-bounded silences matching label selectors.</li>
+      <li><strong>Repeat interval:</strong> Re-notify every N hours if still firing, but don't spam. Typical: re-page after 4 hours.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-5-3">Alert Fatigue Prevention</h3>
+
+  <div class="card danger">
+    <h4>The #1 Operational Risk</h4>
+    <p>Alert fatigue kills monitoring effectiveness. When on-call engineers receive 200+ alerts/day, they start ignoring all of them. Prevention strategies:</p>
+    <table>
+      <tr><th>Strategy</th><th>How It Helps</th></tr>
+      <tr><td>Actionable alerts only</td><td>Every alert must have a clear runbook or action. If no one can act on it, delete the rule.</td></tr>
+      <tr><td>SLO-based alerting</td><td>Alert on error budget burn rate, not individual failures. A single 500 error isn't critical; burning 10% of monthly error budget in 1 hour is.</td></tr>
+      <tr><td>Symptom vs cause</td><td>Alert on user-facing symptoms ("p99 latency > 500ms") not causes ("CPU > 80%"). One symptom alert replaces dozens of cause alerts.</td></tr>
+      <tr><td>Regular alert reviews</td><td>Monthly review: delete alerts that fired but required no action. Track signal-to-noise ratio.</td></tr>
+      <tr><td>Tiered severity</td><td>Only <code>critical</code> pages. <code>warning</code> goes to Slack. <code>info</code> goes to dashboard only.</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- SECTION 6: LinkedIn Mapping & Interview Questions -->
+<!-- ======================================================== -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 06</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>LinkedIn's Monitoring Stack</h3>
+
+  <p>LinkedIn operates one of the largest internal monitoring systems in the industry. Here's how the generic components map to LinkedIn's infrastructure:</p>
+
+  <table>
+    <tr><th>Generic Component</th><th>LinkedIn Implementation</th><th>Notes</th></tr>
+    <tr>
+      <td>Metrics Agent</td>
+      <td><span class="linkedin-tag">InGraphs Agent</span></td>
+      <td>Runs on every host; collects JMX, system, and custom metrics; pushes to Kafka</td>
+    </tr>
+    <tr>
+      <td>Message Buffer</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>LinkedIn invented Kafka &mdash; used as the durable transport layer for all metrics</td>
+    </tr>
+    <tr>
+      <td>Stream Processor</td>
+      <td><span class="linkedin-tag">Samza</span></td>
+      <td>Pre-aggregation, label enrichment, fan-out to TSDB and alerting</td>
+    </tr>
+    <tr>
+      <td>Time-Series Database</td>
+      <td><span class="linkedin-tag">InGraphs TSDB</span></td>
+      <td>Custom-built time-series store optimized for LinkedIn's scale; handles 100M+ active series</td>
+    </tr>
+    <tr>
+      <td>Alerting Engine</td>
+      <td><span class="linkedin-tag">IRIS</span></td>
+      <td>Threshold-based alerting with escalation plans, on-call rotation integration, and PagerDuty/Slack routing</td>
+    </tr>
+    <tr>
+      <td>Dashboards</td>
+      <td><span class="linkedin-tag">InGraphs UI</span></td>
+      <td>Internal dashboard platform for visualizing metrics, creating charts, and sharing views across teams</td>
+    </tr>
+  </table>
+
+  <div class="walkthrough">
+    <h4>LinkedIn Data Flow</h4>
+    <ol>
+      <li><strong>InGraphs Agent</strong> on each host collects metrics (JMX from Java services, system stats, custom counters) every 10&ndash;60 seconds.</li>
+      <li>Agent pushes metric batches to <strong>Kafka</strong> topics partitioned by metric namespace. Kafka provides backpressure absorption and durability.</li>
+      <li><strong>Samza</strong> jobs consume from Kafka, perform per-minute rollups, enrich with fabric/pool labels, and write to InGraphs TSDB.</li>
+      <li><strong>InGraphs TSDB</strong> stores data across multiple retention tiers. Engineers query via the InGraphs UI or API.</li>
+      <li><strong>IRIS</strong> evaluates alerting rules against near-real-time data, groups alerts, and routes to on-call via PagerDuty, Slack (#oncall channels), or email escalation chains.</li>
+    </ol>
+  </div>
+
+  <div class="card success">
+    <h4>Why LinkedIn Built Custom (InGraphs) Instead of Using Prometheus</h4>
+    <ul style="padding-left: 18px; margin-top: 8px;">
+      <li><strong>Scale:</strong> Prometheus was designed for single-cluster monitoring. LinkedIn needed a globally federated system across dozens of data centers.</li>
+      <li><strong>Integration:</strong> Deep integration with LinkedIn's deployment system, Kafka, Samza, and IRIS alerting was easier to build natively.</li>
+      <li><strong>History:</strong> InGraphs predates Prometheus (LinkedIn started in ~2011, Prometheus was open-sourced in 2015).</li>
+      <li><strong>Push model:</strong> LinkedIn's Java-heavy microservices naturally push JMX metrics; Prometheus's pull model requires additional adapters.</li>
+    </ul>
+  </div>
+
+  <h3>Common Interview Questions</h3>
+
+  <div class="card highlight">
+    <h4>Design Questions</h4>
+    <ol style="padding-left: 20px; margin-top: 8px;">
+      <li>How would you design a system to ingest 10M metrics per second? What are the bottlenecks?</li>
+      <li>Compare pull-based (Prometheus) vs push-based (StatsD/InGraphs) collection. When would you choose each?</li>
+      <li>How does a time-series database achieve 12:1 compression? Walk through delta-of-delta and XOR encoding.</li>
+      <li>Design a downsampling pipeline. Why must you store sum + count instead of just average?</li>
+      <li>How would you handle label cardinality explosion? A developer added <code>user_id</code> as a metric label &mdash; what happens?</li>
+    </ol>
+  </div>
+
+  <div class="card warn">
+    <h4>Alerting &amp; Operational Questions</h4>
+    <ol style="padding-left: 20px; margin-top: 8px;">
+      <li>Design an alerting pipeline with de-duplication, grouping, and escalation. How do you prevent alert storms?</li>
+      <li>What is alert fatigue and how do you combat it? What metrics would you track for your alerting system itself?</li>
+      <li>Explain SLO-based alerting. How does error budget burn rate work?</li>
+      <li>How would you alert on anomalies without generating false positives? Compare statistical vs ML approaches.</li>
+      <li>A team complains their dashboard is slow. How would you optimize query performance on a TSDB with 100M active series?</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h4>Quick-Fire Answers</h4>
+    <table>
+      <tr><th>Question</th><th>Key Point</th></tr>
+      <tr><td>Why Kafka between agents and TSDB?</td><td>Decouples producers from consumers; absorbs ingest spikes; enables replay and multiple consumers (TSDB + alerting + analytics)</td></tr>
+      <tr><td>Counter vs Gauge?</td><td>Counter only goes up (use <code>rate()</code> to get per-second). Gauge goes up and down (read directly).</td></tr>
+      <tr><td>Why not store metrics in PostgreSQL?</td><td>Write amplification from B-tree index updates kills throughput. TSDB uses append-only + LSM for 10&ndash;100&times; better write performance.</td></tr>
+      <tr><td>How to handle cross-DC queries?</td><td>Global query layer fans out to per-DC TSDB instances, merges results. Use <code>query-frontend</code> with caching for repeated dashboard loads.</td></tr>
+      <tr><td>What is recording rule?</td><td>Pre-computed query results stored as new time series. Avoids expensive repeated computation during dashboard loads.</td></tr>
+    </table>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="container">
+    <p>System Design: Realtime Monitoring System &mdash; Interview Preparation Guide</p>
+    <p style="margin-top: 8px;">
+      <a href="index.html" style="color: var(--accent); text-decoration: none;">Home</a> &bull;
+      <a href="system-design.html" style="color: var(--accent); text-decoration: none;">Design Uber</a> &bull;
+      <a href="youtube-system-design.html" style="color: var(--accent); text-decoration: none;">Design YouTube</a> &bull;
+      <a href="sd-url-shortener.html" style="color: var(--accent); text-decoration: none;">URL Shortener</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

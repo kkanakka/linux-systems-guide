@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Webhook Delivery System</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #009688;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a18 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.teal { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.teal:hover { background: rgba(0,150,136,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Webhook Delivery System</span></h1>
+    <p>A deep dive into building a reliable, scalable webhook infrastructure &mdash; event ingestion, guaranteed delivery, retry mechanics, security, and monitoring at scale.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html" class="teal">Uber Design</a>
+      <a href="youtube-system-design.html" class="purple">YouTube Design</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#overview">Overview &mdash; Push vs Poll, Use Cases &amp; Scale</a></li>
+    <li><a href="#core-components">Core Components</a>
+      <ul class="sub">
+        <li><a href="#event-ingestion">Event Ingestion (Kafka)</a></li>
+        <li><a href="#subscription-registry">Subscription Registry</a></li>
+        <li><a href="#delivery-workers">Delivery Workers</a></li>
+        <li><a href="#retry-engine">Retry Engine (Exponential Backoff)</a></li>
+        <li><a href="#dead-letter-queue">Dead Letter Queue</a></li>
+        <li><a href="#signature-verification">Signature Verification (HMAC-SHA256)</a></li>
+      </ul>
+    </li>
+    <li><a href="#data-model">Data Model &amp; Event Payload</a></li>
+    <li><a href="#reliability">Reliability &amp; Security</a></li>
+    <li><a href="#scaling">Scaling &amp; Monitoring</a></li>
+    <li><a href="#linkedin-mapping">LinkedIn Tech Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- Section 1: Overview -->
+<div class="section" id="overview">
+  <div class="section-num">Section 01</div>
+  <h2>Overview &mdash; Push vs Poll</h2>
+
+  <div class="card highlight">
+    <p><strong>What is a webhook?</strong> A webhook is a user-defined HTTP callback &mdash; when an event occurs in a source system, an HTTP POST request is sent to a pre-configured URL owned by the consumer. Instead of the consumer continuously polling for changes, the producer <em>pushes</em> the data in real time.</p>
+  </div>
+
+  <h3>Push vs Poll</h3>
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Push (Webhooks)</h4>
+      <ul style="padding-left: 18px;">
+        <li>Near real-time delivery</li>
+        <li>No wasted requests &mdash; fire only on events</li>
+        <li>Lower consumer-side infrastructure cost</li>
+        <li>Server controls delivery rate</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h4>Poll (API Polling)</h4>
+      <ul style="padding-left: 18px;">
+        <li>Consumer controls timing</li>
+        <li>Simpler to implement initially</li>
+        <li>Wasteful when events are sparse</li>
+        <li>Latency = polling interval / 2 on average</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Use Cases</h3>
+  <table>
+    <tr><th>Domain</th><th>Event Examples</th><th>Why Webhooks?</th></tr>
+    <tr><td>Payment Processing</td><td>Payment succeeded, refund issued, dispute opened</td><td>Merchants need instant notification to fulfill orders</td></tr>
+    <tr><td>CI/CD Pipelines</td><td>Push event, PR merged, build completed</td><td>Triggers automated build/deploy without polling VCS</td></tr>
+    <tr><td>E-Commerce</td><td>Order placed, shipment updated, inventory changed</td><td>Synchronize inventory across multiple channels in real time</td></tr>
+    <tr><td>Communication</td><td>Message received, delivery status, read receipt</td><td>Chat bots and integrations require instant event delivery</td></tr>
+    <tr><td>CRM / SaaS</td><td>Contact created, deal stage changed, form submitted</td><td>Drive workflows and automation without polling APIs</td></tr>
+  </table>
+
+  <h3>Scale Requirements</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">500K+</div>
+      <div class="label">Registered Endpoints</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">1B+</div>
+      <div class="label">Events / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt; 5s</div>
+      <div class="label">p99 Delivery Latency</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">99.95%</div>
+      <div class="label">Delivery SLA</div>
+    </div>
+  </div>
+
+  <h3>High-Level Architecture</h3>
+  <div class="diagram">
+    <img src="images/sd_webhook_01_architecture.png" alt="Webhook Delivery System Architecture">
+    <div class="caption">Figure 1 &mdash; End-to-end webhook delivery architecture: event source &rarr; Kafka &rarr; delivery workers &rarr; consumer endpoints</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Architecture Walkthrough</h4>
+    <ol>
+      <li><strong>Event Source</strong> &mdash; An internal service (payments, orders, users) produces a domain event and publishes it to Kafka.</li>
+      <li><strong>Kafka Topic</strong> &mdash; Events are durably stored in a partitioned topic. Partitioning by <code>subscription_id</code> ensures ordering per consumer.</li>
+      <li><strong>Subscription Registry</strong> &mdash; A datastore mapping event types to consumer endpoint URLs, secrets, and delivery preferences.</li>
+      <li><strong>Delivery Workers</strong> &mdash; A pool of stateless workers consume from Kafka, look up the target URL, sign the payload with HMAC-SHA256, and POST.</li>
+      <li><strong>Retry Engine</strong> &mdash; On failure (non-2xx or timeout), the event is re-enqueued with exponential backoff + jitter into a retry topic.</li>
+      <li><strong>Dead Letter Queue</strong> &mdash; After max retries exhausted, the event moves to a DLQ for manual inspection and replay.</li>
+      <li><strong>Consumer Endpoint</strong> &mdash; The customer's server receives the signed POST, validates the HMAC signature, processes the event, and returns 200.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- Section 2: Core Components -->
+<div class="section" id="core-components">
+  <div class="section-num">Section 02</div>
+  <h2>Core Components</h2>
+
+  <h3 id="event-ingestion">Event Ingestion (Kafka)</h3>
+  <div class="card highlight">
+    <p>All domain events flow through <strong>Apache Kafka</strong> as the central event bus. Kafka provides durability, ordering guarantees within a partition, and decoupling between event producers and the delivery pipeline.</p>
+  </div>
+
+  <table>
+    <tr><th>Property</th><th>Configuration</th><th>Why</th></tr>
+    <tr><td>Topic</td><td><code>webhook-events</code></td><td>Single topic for all webhook-eligible events</td></tr>
+    <tr><td>Partitions</td><td>256+</td><td>Parallelism for delivery workers; partition by <code>subscription_id</code></td></tr>
+    <tr><td>Replication Factor</td><td>3</td><td>Survive broker failures without data loss</td></tr>
+    <tr><td>Retention</td><td>7 days</td><td>Allow replay of events for debugging or backfill</td></tr>
+    <tr><td>Acks</td><td><code>acks=all</code></td><td>Wait for all ISR replicas before acknowledging produce</td></tr>
+  </table>
+
+  <pre>{
+  "event_id":    "evt_a1b2c3d4e5f6",
+  "event_type":  "payment.succeeded",
+  "timestamp":   "2025-01-15T09:30:00Z",
+  "source":      "payments-service",
+  "data": {
+    "payment_id": "pay_xyz789",
+    "amount":     4999,
+    "currency":   "USD",
+    "customer_id":"cust_abc123"
+  }
+}</pre>
+
+  <h3 id="subscription-registry">Subscription Registry</h3>
+  <div class="card highlight">
+    <p>The subscription registry is the control plane of the webhook system. It stores which consumers are subscribed to which event types, along with their endpoint URLs, signing secrets, and configuration.</p>
+  </div>
+
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>subscription_id</code></td><td>UUID</td><td>Unique identifier for this subscription</td></tr>
+    <tr><td><code>tenant_id</code></td><td>UUID</td><td>The customer / application that owns this subscription</td></tr>
+    <tr><td><code>event_types</code></td><td>TEXT[]</td><td>Array of event types to subscribe to (e.g., <code>["payment.*", "order.created"]</code>)</td></tr>
+    <tr><td><code>endpoint_url</code></td><td>TEXT</td><td>The HTTPS URL to deliver events to</td></tr>
+    <tr><td><code>signing_secret</code></td><td>TEXT (encrypted)</td><td>HMAC-SHA256 secret for payload signing</td></tr>
+    <tr><td><code>status</code></td><td>ENUM</td><td><code>active</code> | <code>paused</code> | <code>disabled</code></td></tr>
+    <tr><td><code>rate_limit</code></td><td>INT</td><td>Max deliveries/sec for this endpoint</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>When the subscription was registered</td></tr>
+  </table>
+
+  <div class="card success">
+    <h4>Wildcard Matching</h4>
+    <p>Event type subscriptions support glob patterns: <code>payment.*</code> matches <code>payment.succeeded</code>, <code>payment.failed</code>, <code>payment.refunded</code>. The registry evaluates subscriptions using a prefix tree for O(log n) lookups.</p>
+  </div>
+
+  <h3 id="delivery-workers">Delivery Workers</h3>
+  <div class="card highlight">
+    <p>Delivery workers are stateless, horizontally scalable processes that consume from Kafka, construct the HTTP request, sign it, and POST to the consumer endpoint.</p>
+  </div>
+
+  <h4>Worker Lifecycle</h4>
+  <div class="walkthrough">
+    <h4>Delivery Flow</h4>
+    <ol>
+      <li><strong>Consume</strong> &mdash; Worker pulls a batch of events from the <code>webhook-events</code> Kafka topic.</li>
+      <li><strong>Fan-out</strong> &mdash; For each event, query the subscription registry to find all matching subscriptions.</li>
+      <li><strong>Construct Payload</strong> &mdash; Build the HTTP POST body with the event data, idempotency key, and timestamp.</li>
+      <li><strong>Sign</strong> &mdash; Compute <code>HMAC-SHA256(signing_secret, payload_body)</code> and set the <code>X-Webhook-Signature</code> header.</li>
+      <li><strong>Deliver</strong> &mdash; HTTP POST to <code>endpoint_url</code> with a 10-second connect timeout and 30-second read timeout.</li>
+      <li><strong>Record Result</strong> &mdash; Write delivery attempt (status code, latency, headers) to the <code>deliveries</code> table.</li>
+      <li><strong>Ack or Retry</strong> &mdash; On 2xx, commit the Kafka offset. On failure, enqueue to the retry topic.</li>
+    </ol>
+  </div>
+
+  <pre>POST /webhooks/receive HTTP/1.1
+Host: api.customer.com
+Content-Type: application/json
+X-Webhook-Id: evt_a1b2c3d4e5f6
+X-Webhook-Timestamp: 1705308600
+X-Webhook-Signature: sha256=4d2b8c...a9f1e3
+X-Idempotency-Key: dlv_7g8h9i0j
+
+{
+  "event_id": "evt_a1b2c3d4e5f6",
+  "event_type": "payment.succeeded",
+  "timestamp": "2025-01-15T09:30:00Z",
+  "data": { ... }
+}</pre>
+
+  <h3 id="retry-engine">Retry Engine (Exponential Backoff)</h3>
+  <div class="card warn">
+    <p>Failed deliveries are retried with <strong>exponential backoff + jitter</strong> to avoid thundering herd problems. The retry engine uses a separate Kafka topic with delayed consumption.</p>
+  </div>
+
+  <table>
+    <tr><th>Attempt</th><th>Base Delay</th><th>With Jitter (range)</th><th>Max Cumulative Wait</th></tr>
+    <tr><td>1st retry</td><td>10s</td><td>5 &ndash; 15s</td><td>~15s</td></tr>
+    <tr><td>2nd retry</td><td>30s</td><td>15 &ndash; 45s</td><td>~1m</td></tr>
+    <tr><td>3rd retry</td><td>2m</td><td>1m &ndash; 3m</td><td>~4m</td></tr>
+    <tr><td>4th retry</td><td>10m</td><td>5m &ndash; 15m</td><td>~19m</td></tr>
+    <tr><td>5th retry</td><td>1h</td><td>30m &ndash; 1.5h</td><td>~1.8h</td></tr>
+    <tr><td>6th retry</td><td>4h</td><td>2h &ndash; 6h</td><td>~7.8h</td></tr>
+    <tr><td>7th retry (final)</td><td>8h</td><td>4h &ndash; 12h</td><td>~19.8h</td></tr>
+  </table>
+
+  <pre>delay = min(base_delay * 2^attempt, max_delay)
+jitter = random(0, delay)
+next_retry_at = now() + delay/2 + jitter</pre>
+
+  <div class="card danger">
+    <h4>Circuit Breaker</h4>
+    <p>If an endpoint fails 90%+ of deliveries over a 5-minute window, the circuit opens and the subscription is automatically <strong>paused</strong>. No further deliveries are attempted until the consumer fixes their endpoint and re-enables the subscription via API. This protects both the webhook system and the consumer from cascading failures.</p>
+  </div>
+
+  <h3 id="dead-letter-queue">Dead Letter Queue</h3>
+  <div class="card highlight">
+    <p>Events that exhaust all retry attempts are moved to a <strong>Dead Letter Queue (DLQ)</strong>. The DLQ provides visibility, manual replay, and alerting.</p>
+  </div>
+
+  <table>
+    <tr><th>DLQ Feature</th><th>Description</th></tr>
+    <tr><td>Storage</td><td>Separate Kafka topic (<code>webhook-dlq</code>) with 30-day retention</td></tr>
+    <tr><td>Dashboard</td><td>Consumers can view failed events, error details, and last response via API/UI</td></tr>
+    <tr><td>Manual Replay</td><td>One-click replay of individual events or bulk replay by time range</td></tr>
+    <tr><td>Alerting</td><td>Notify subscription owners when events hit the DLQ (email, Slack, PagerDuty)</td></tr>
+    <tr><td>Auto-disable</td><td>If DLQ backlog exceeds threshold, subscription is auto-disabled with notification</td></tr>
+  </table>
+
+  <h3 id="signature-verification">Signature Verification (HMAC-SHA256)</h3>
+  <div class="card success">
+    <p>Every webhook delivery is cryptographically signed using <strong>HMAC-SHA256</strong>. The consumer verifies the signature to ensure the payload is authentic and untampered.</p>
+  </div>
+
+  <h4>Signing Process (Producer Side)</h4>
+  <pre>timestamp = current_unix_timestamp()
+payload   = f"{timestamp}.{json_body}"
+signature = HMAC-SHA256(signing_secret, payload)
+
+# Set headers:
+X-Webhook-Timestamp: {timestamp}
+X-Webhook-Signature: sha256={hex(signature)}</pre>
+
+  <h4>Verification Process (Consumer Side)</h4>
+  <pre>def verify_webhook(request, secret):
+    timestamp = request.headers["X-Webhook-Timestamp"]
+    signature = request.headers["X-Webhook-Signature"]
+
+    # Reject if timestamp is older than 5 minutes (replay protection)
+    if abs(time.time() - int(timestamp)) > 300:
+        return False
+
+    expected = hmac.new(
+        secret.encode(),
+        f"{timestamp}.{request.body}".encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(f"sha256={expected}", signature)</pre>
+</div>
+
+<!-- Section 3: Data Model -->
+<div class="section" id="data-model">
+  <div class="section-num">Section 03</div>
+  <h2>Data Model &amp; Event Payload</h2>
+
+  <h3>Subscriptions Table</h3>
+  <pre>CREATE TABLE subscriptions (
+    subscription_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id        UUID NOT NULL,
+    event_types      TEXT[] NOT NULL,
+    endpoint_url     TEXT NOT NULL,
+    signing_secret   TEXT NOT NULL,       -- encrypted at rest
+    status           VARCHAR(20) DEFAULT 'active',
+    rate_limit       INT DEFAULT 100,     -- deliveries/sec
+    retry_policy     JSONB DEFAULT '{"max_attempts": 7, "backoff": "exponential"}',
+    metadata         JSONB,
+    created_at       TIMESTAMPTZ DEFAULT now(),
+    updated_at       TIMESTAMPTZ DEFAULT now(),
+
+    CONSTRAINT valid_status CHECK (status IN ('active','paused','disabled'))
+);
+
+CREATE INDEX idx_sub_tenant ON subscriptions(tenant_id);
+CREATE INDEX idx_sub_event_types ON subscriptions USING GIN(event_types);
+CREATE INDEX idx_sub_status ON subscriptions(status) WHERE status = 'active';</pre>
+
+  <h3>Deliveries Table</h3>
+  <pre>CREATE TABLE deliveries (
+    delivery_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id         UUID NOT NULL,
+    subscription_id  UUID NOT NULL REFERENCES subscriptions(subscription_id),
+    idempotency_key  VARCHAR(64) NOT NULL UNIQUE,
+    endpoint_url     TEXT NOT NULL,
+    attempt_number   INT NOT NULL DEFAULT 1,
+    status           VARCHAR(20) NOT NULL,   -- pending, delivered, failed, dlq
+    http_status_code INT,
+    response_body    TEXT,                    -- first 1KB of response
+    latency_ms       INT,
+    error_message    TEXT,
+    next_retry_at    TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ DEFAULT now(),
+
+    CONSTRAINT valid_delivery_status
+      CHECK (status IN ('pending','delivered','failed','retrying','dlq'))
+);
+
+CREATE INDEX idx_dlv_event ON deliveries(event_id);
+CREATE INDEX idx_dlv_sub ON deliveries(subscription_id);
+CREATE INDEX idx_dlv_retry ON deliveries(next_retry_at)
+    WHERE status = 'retrying';
+CREATE INDEX idx_dlv_status ON deliveries(status, created_at);</pre>
+
+  <h3>Event Payload Structure</h3>
+  <div class="card highlight">
+    <p>Every webhook payload follows a consistent envelope format with an <strong>idempotency key</strong> to enable exactly-once processing on the consumer side.</p>
+  </div>
+
+  <pre>{
+  "id":               "evt_a1b2c3d4e5f6",
+  "type":             "payment.succeeded",
+  "api_version":      "2025-01-15",
+  "created":          1705308600,
+  "idempotency_key":  "dlv_7g8h9i0j",
+  "data": {
+    "object": {
+      "id":          "pay_xyz789",
+      "amount":      4999,
+      "currency":    "USD",
+      "status":      "succeeded",
+      "customer_id": "cust_abc123",
+      "metadata":    { "order_id": "ord_456" }
+    }
+  }
+}</pre>
+
+  <table>
+    <tr><th>Field</th><th>Purpose</th></tr>
+    <tr><td><code>id</code></td><td>Globally unique event identifier; same across all delivery attempts</td></tr>
+    <tr><td><code>type</code></td><td>Dot-delimited event type for routing and filtering</td></tr>
+    <tr><td><code>api_version</code></td><td>Schema version for backward compatibility; consumers pin to a version</td></tr>
+    <tr><td><code>created</code></td><td>Unix timestamp of when the event occurred in the source system</td></tr>
+    <tr><td><code>idempotency_key</code></td><td>Unique per delivery attempt; consumers use this to deduplicate</td></tr>
+    <tr><td><code>data.object</code></td><td>The actual resource state at the time of the event</td></tr>
+  </table>
+</div>
+
+<!-- Section 4: Reliability & Security -->
+<div class="section" id="reliability">
+  <div class="section-num">Section 04</div>
+  <h2>Reliability &amp; Security</h2>
+
+  <h3>At-Least-Once Delivery</h3>
+  <div class="card highlight">
+    <p>The webhook system guarantees <strong>at-least-once delivery</strong>. Every event will be delivered to every active subscription at least once. Consumers must be idempotent &mdash; processing the same event twice should produce the same result.</p>
+  </div>
+
+  <table>
+    <tr><th>Guarantee</th><th>How It Works</th><th>Consumer Responsibility</th></tr>
+    <tr><td>At-least-once</td><td>Kafka offset committed only after successful delivery (2xx). Failures trigger retries.</td><td>Deduplicate using <code>idempotency_key</code>; store processed keys in a set with TTL.</td></tr>
+    <tr><td>Ordering</td><td>Events for the same subscription are partitioned together in Kafka, preserving order.</td><td>If strict ordering matters, process sequentially per <code>subscription_id</code>.</td></tr>
+    <tr><td>Durability</td><td>Kafka <code>acks=all</code> + replication factor 3. Events survive broker failures.</td><td>Acknowledge receipt with 200 only after persisting the event.</td></tr>
+  </table>
+
+  <h3>Exponential Backoff with Jitter</h3>
+  <div class="card warn">
+    <p>Retries use <strong>decorrelated jitter</strong> to prevent thundering herd. If 10,000 deliveries fail at the same time, jitter spreads the retries across the entire backoff window instead of all hitting at <code>base * 2^n</code> simultaneously.</p>
+  </div>
+
+  <pre>// Decorrelated jitter (preferred over full jitter)
+sleep = min(max_delay, random_between(base_delay, sleep_prev * 3))</pre>
+
+  <h3>Circuit Breaker Pattern</h3>
+  <div class="card danger">
+    <h4>Three States</h4>
+    <table>
+      <tr><th>State</th><th>Behavior</th><th>Transition</th></tr>
+      <tr><td><strong>Closed</strong> (normal)</td><td>Deliveries proceed normally</td><td>&rarr; Open when failure rate &gt; 90% over 5 min</td></tr>
+      <tr><td><strong>Open</strong> (tripped)</td><td>All deliveries queued, none sent</td><td>&rarr; Half-Open after cool-down period (15 min)</td></tr>
+      <tr><td><strong>Half-Open</strong> (probing)</td><td>Send 1 test delivery</td><td>&rarr; Closed if succeeds; &rarr; Open if fails</td></tr>
+    </table>
+  </div>
+
+  <h3>Security Measures</h3>
+
+  <h4>HMAC-SHA256 Signature</h4>
+  <div class="card success">
+    <p>Every payload is signed with the subscription's unique secret. The consumer verifies the signature to confirm the request originated from the webhook system and was not tampered with in transit. Timestamp inclusion prevents replay attacks.</p>
+  </div>
+
+  <h4>IP Allowlisting</h4>
+  <div class="card highlight">
+    <p>Publish a static set of egress IP addresses. Consumers can allowlist these IPs at their firewall to reject webhook-shaped requests from unknown sources. IPs are published at <code>/.well-known/webhooks/ips.json</code> and change notifications are sent 30 days in advance.</p>
+  </div>
+
+  <h4>Timeout Policy</h4>
+  <table>
+    <tr><th>Timeout</th><th>Value</th><th>Rationale</th></tr>
+    <tr><td>TCP Connect</td><td>10 seconds</td><td>Detect unreachable hosts quickly</td></tr>
+    <tr><td>TLS Handshake</td><td>10 seconds</td><td>Catch certificate issues without blocking workers</td></tr>
+    <tr><td>Response (read)</td><td>30 seconds</td><td>Allow consumer processing time; anything longer suggests a problem</td></tr>
+    <tr><td>Total request</td><td>45 seconds</td><td>Hard cap to prevent worker starvation</td></tr>
+  </table>
+
+  <h4>Additional Hardening</h4>
+  <div class="card warn">
+    <ul style="padding-left: 18px;">
+      <li><strong>HTTPS only</strong> &mdash; Reject any <code>http://</code> endpoint URLs at subscription registration time</li>
+      <li><strong>SSRF protection</strong> &mdash; Block delivery to private/loopback IPs (<code>10.0.0.0/8</code>, <code>127.0.0.0/8</code>, <code>169.254.0.0/16</code>, <code>::1</code>)</li>
+      <li><strong>Payload size limit</strong> &mdash; Max 256 KB per event payload; larger data uses a signed URL to fetch the full resource</li>
+      <li><strong>Secret rotation</strong> &mdash; Support dual active secrets during rotation; both old and new secrets accepted for a 24-hour overlap window</li>
+      <li><strong>Mutual TLS (mTLS)</strong> &mdash; Optional client certificate authentication for high-security consumers</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Section 5: Scaling -->
+<div class="section" id="scaling">
+  <div class="section-num">Section 05</div>
+  <h2>Scaling &amp; Monitoring</h2>
+
+  <h3>Kafka Partitioning Strategy</h3>
+  <div class="card highlight">
+    <p>Events are partitioned by <code>subscription_id</code> to maintain per-consumer ordering. The number of partitions determines the maximum parallelism of the delivery worker pool.</p>
+  </div>
+
+  <table>
+    <tr><th>Strategy</th><th>Partition Key</th><th>Trade-off</th></tr>
+    <tr><td>Per-subscription ordering</td><td><code>subscription_id</code></td><td>Guarantees ordering per consumer but limits parallelism to partition count</td></tr>
+    <tr><td>Per-tenant ordering</td><td><code>tenant_id</code></td><td>Coarser ordering; simpler but may hotspot on large tenants</td></tr>
+    <tr><td>Round-robin (no key)</td><td>None</td><td>Maximum throughput but no ordering guarantee</td></tr>
+  </table>
+
+  <h3>Worker Auto-Scaling</h3>
+  <div class="card success">
+    <h4>Scale Signals</h4>
+    <table>
+      <tr><th>Signal</th><th>Metric</th><th>Action</th></tr>
+      <tr><td>Kafka consumer lag</td><td><code>consumer_lag &gt; 10,000</code></td><td>Scale up workers by 2x</td></tr>
+      <tr><td>p99 delivery latency</td><td><code>p99 &gt; 5s</code></td><td>Scale up workers by 1.5x</td></tr>
+      <tr><td>CPU utilization</td><td><code>CPU &gt; 70%</code></td><td>Scale up by 1 pod per 10% over threshold</td></tr>
+      <tr><td>Idle workers</td><td><code>utilization &lt; 20%</code> for 10 min</td><td>Scale down gradually (1 pod / min)</td></tr>
+    </table>
+  </div>
+
+  <h3>Priority Queues</h3>
+  <div class="card warn">
+    <p>Not all webhooks are equally urgent. A payment notification has higher business value than an analytics event. The system supports <strong>3 priority tiers</strong> implemented as separate Kafka topics with dedicated worker pools.</p>
+  </div>
+
+  <table>
+    <tr><th>Priority</th><th>Topic</th><th>Worker Pool</th><th>SLA</th></tr>
+    <tr><td>P0 &mdash; Critical</td><td><code>webhook-events-p0</code></td><td>Dedicated, always-on pool (min 10 workers)</td><td>p99 &lt; 2s</td></tr>
+    <tr><td>P1 &mdash; Standard</td><td><code>webhook-events-p1</code></td><td>Auto-scaled pool (3&ndash;50 workers)</td><td>p99 &lt; 5s</td></tr>
+    <tr><td>P2 &mdash; Best Effort</td><td><code>webhook-events-p2</code></td><td>Shared pool, scaled down during load</td><td>p99 &lt; 30s</td></tr>
+  </table>
+
+  <h3>Outbound Rate Limiting</h3>
+  <div class="card highlight">
+    <p>Each subscription has a configurable <strong>rate limit</strong> (default: 100 deliveries/sec). This protects consumer endpoints from being overwhelmed. Rate limiting is implemented per-endpoint using a distributed token bucket backed by Redis.</p>
+  </div>
+
+  <pre>// Token bucket rate limiter (per subscription)
+key      = f"ratelimit:{subscription_id}"
+tokens   = redis.get(key) or rate_limit
+if tokens > 0:
+    redis.decr(key)
+    deliver(event)
+else:
+    enqueue_with_delay(event, 1_second)</pre>
+
+  <h3>Monitoring &amp; Observability</h3>
+
+  <h4>Key Metrics Dashboard</h4>
+  <table>
+    <tr><th>Metric</th><th>Type</th><th>Alert Threshold</th></tr>
+    <tr><td>Delivery success rate</td><td>Gauge</td><td>&lt; 99% over 5 min &rarr; page</td></tr>
+    <tr><td>p50 / p99 delivery latency</td><td>Histogram</td><td>p99 &gt; 5s &rarr; warn; &gt; 15s &rarr; page</td></tr>
+    <tr><td>Kafka consumer lag</td><td>Gauge</td><td>&gt; 50,000 events &rarr; page</td></tr>
+    <tr><td>DLQ inflow rate</td><td>Counter</td><td>&gt; 100 events/min &rarr; page</td></tr>
+    <tr><td>Circuit breaker trips</td><td>Counter</td><td>&gt; 5 trips/hour &rarr; investigate</td></tr>
+    <tr><td>Active subscriptions</td><td>Gauge</td><td>Drop &gt; 10% in 1h &rarr; warn</td></tr>
+    <tr><td>Retry queue depth</td><td>Gauge</td><td>&gt; 100,000 &rarr; warn</td></tr>
+  </table>
+
+  <div class="card success">
+    <h4>Distributed Tracing</h4>
+    <p>Every delivery carries a trace ID from the originating event through Kafka, the delivery worker, and to the consumer endpoint. This enables end-to-end latency analysis and pinpoints bottlenecks across the pipeline. Use OpenTelemetry with W3C Trace Context propagation via <code>traceparent</code> header.</p>
+  </div>
+</div>
+
+<!-- Section 6: LinkedIn Tech Mapping & Interview -->
+<div class="section" id="linkedin-mapping">
+  <div class="section-num">Section 06</div>
+  <h2>LinkedIn Tech Mapping &amp; Interview Questions</h2>
+
+  <h3>LinkedIn Technology Mapping</h3>
+  <div class="card highlight">
+    <table>
+      <tr><th>Webhook Component</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+      <tr><td>Kafka (event bus)</td><td><span class="linkedin-tag">Kafka</span></td><td>LinkedIn invented Kafka. Same technology powers the event backbone for all async workflows including notification delivery.</td></tr>
+      <tr><td>Delivery Workers</td><td><span class="linkedin-tag">Samza + Kubernetes</span></td><td>Samza for stream processing consumers; Kubernetes (Nimbus) for deploying and auto-scaling stateless worker pods.</td></tr>
+      <tr><td>Subscription Registry</td><td><span class="linkedin-tag">Espresso</span></td><td>Espresso's document store handles subscription metadata with auto-sharding, secondary indexes, and cross-DC replication.</td></tr>
+      <tr><td>Rate Limiter</td><td><span class="linkedin-tag">Couchbase</span></td><td>Distributed token bucket counters stored in Couchbase for sub-millisecond reads and atomic decrements.</td></tr>
+      <tr><td>Dead Letter Queue</td><td><span class="linkedin-tag">Kafka DLQ Topics</span></td><td>Failed events routed to dedicated Kafka DLQ topics with extended retention for replay and investigation.</td></tr>
+      <tr><td>API Gateway</td><td><span class="linkedin-tag">Rest.li + D2</span></td><td>Rest.li provides the subscription management API. D2 handles service discovery and load balancing for internal routing.</td></tr>
+      <tr><td>Monitoring</td><td><span class="linkedin-tag">InGraphs + AutoMetrics</span></td><td>LinkedIn's monitoring stack: InGraphs for time-series dashboards, AutoMetrics for anomaly detection and alerting.</td></tr>
+      <tr><td>Distributed Tracing</td><td><span class="linkedin-tag">LinkedIn Call Graph</span></td><td>LinkedIn's distributed tracing system tracks request flow across services. Every webhook delivery is traced from source event to consumer response.</td></tr>
+      <tr><td>HMAC Signing</td><td><span class="linkedin-tag">LinkedIn OAuth + API Keys</span></td><td>LinkedIn APIs use OAuth 2.0 and API key signatures. Webhook signing follows a similar HMAC pattern for partner integrations.</td></tr>
+      <tr><td>Circuit Breaker</td><td><span class="linkedin-tag">D2 Degrader</span></td><td>D2's built-in degrader pattern automatically reduces traffic to unhealthy downstream services &mdash; same concept as webhook circuit breaker.</td></tr>
+    </table>
+  </div>
+
+  <h3>Interview Questions</h3>
+
+  <h4>Fundamentals</h4>
+  <div class="card">
+    <table>
+      <tr><th>#</th><th>Question</th><th>Key Points</th></tr>
+      <tr><td>1</td><td>What is a webhook and how does it differ from polling?</td><td>Push vs pull model. Webhooks = HTTP callbacks triggered by events. Polling wastes bandwidth when events are sparse.</td></tr>
+      <tr><td>2</td><td>Why at-least-once and not exactly-once delivery?</td><td>Exactly-once requires 2PC or consumer-side dedup. At-least-once with idempotency keys is simpler, more reliable, and industry standard (Stripe, GitHub, Shopify all use it).</td></tr>
+      <tr><td>3</td><td>How do you handle event ordering?</td><td>Partition by subscription_id in Kafka. Within a partition, ordering is guaranteed. Cross-partition ordering requires sequence numbers and consumer-side reordering.</td></tr>
+    </table>
+  </div>
+
+  <h4>Deep Dive</h4>
+  <div class="card">
+    <table>
+      <tr><th>#</th><th>Question</th><th>Key Points</th></tr>
+      <tr><td>4</td><td>Design the retry mechanism. Why exponential backoff with jitter?</td><td>Prevents thundering herd. Decorrelated jitter spreads retries. Base * 2^n without jitter causes synchronized retry storms. Cap with max_delay.</td></tr>
+      <tr><td>5</td><td>How does the circuit breaker protect the system?</td><td>Three states: Closed/Open/Half-Open. Prevents wasting resources on consistently failing endpoints. Auto-pauses subscriptions. Half-open probes test recovery.</td></tr>
+      <tr><td>6</td><td>How do you prevent SSRF via webhook URLs?</td><td>Block private/loopback IPs, require HTTPS, DNS resolution validation, egress proxy, and URL validation at registration time.</td></tr>
+      <tr><td>7</td><td>How would you implement secret rotation without downtime?</td><td>Dual-secret model: both old and new secrets are active during overlap window (24h). Sign with new, verify with both. Consumer updates at their pace.</td></tr>
+    </table>
+  </div>
+
+  <h4>Scale &amp; Operations</h4>
+  <div class="card">
+    <table>
+      <tr><th>#</th><th>Question</th><th>Key Points</th></tr>
+      <tr><td>8</td><td>How do you handle a tenant sending 10x normal traffic?</td><td>Per-subscription rate limiting with token bucket. Priority queues ensure critical webhooks aren't starved. Tenant-level quotas at the API layer.</td></tr>
+      <tr><td>9</td><td>A consumer endpoint is down for 6 hours. What happens?</td><td>Retries with exponential backoff (7 attempts over ~20h). Circuit breaker trips after 5 min. Events accumulate in retry queue. After max retries → DLQ. Consumer replays from DLQ on recovery.</td></tr>
+      <tr><td>10</td><td>How do you monitor webhook delivery health?</td><td>Success rate, p99 latency, Kafka lag, DLQ inflow rate, circuit breaker trips. Per-subscription and aggregate views. Distributed tracing for end-to-end visibility.</td></tr>
+      <tr><td>11</td><td>How would you migrate from a monolithic webhook system to this architecture?</td><td>Dual-write during migration. Shadow mode: new system delivers alongside old, compare results. Feature flags per tenant. Gradually shift traffic. Keep old system as fallback.</td></tr>
+    </table>
+  </div>
+
+  <h4>Trade-offs &amp; Alternatives</h4>
+  <div class="card">
+    <table>
+      <tr><th>#</th><th>Question</th><th>Key Points</th></tr>
+      <tr><td>12</td><td>Webhooks vs WebSockets vs SSE for event delivery?</td><td>Webhooks: fire-and-forget, no persistent connection. WebSockets: bidirectional, real-time. SSE: unidirectional streaming. Webhooks best for server-to-server async events.</td></tr>
+      <tr><td>13</td><td>Why Kafka instead of a traditional message queue (RabbitMQ)?</td><td>Kafka: replay, ordering, high throughput, durable log. RabbitMQ: lower latency, simpler routing, but no replay. Kafka's log model is ideal for webhook retry and DLQ patterns.</td></tr>
+      <tr><td>14</td><td>At-least-once vs at-most-once: when would you choose at-most-once?</td><td>At-most-once for low-value notifications (analytics pings). At-least-once for financial events where missing a delivery is unacceptable. Trade-off: dedup complexity vs data loss risk.</td></tr>
+    </table>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="container">
+    <p>System Design &mdash; Webhook Delivery System &bull; Interview Preparation Guide</p>
+  </div>
+</footer>
+
+</body>
+</html>

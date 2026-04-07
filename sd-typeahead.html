@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Typeahead System</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #673AB7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a0a2a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.red { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.red:hover { background: rgba(103,58,183,0.15); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Typeahead</span></h1>
+    <p>A deep dive into autocomplete and search suggestion systems &mdash; trie data structures, real-time data pipelines, prefix sharding, and sub-100ms latency at billion-query scale.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-typeahead.html" class="red">Design Typeahead (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale Requirements</a></li>
+    <li><a href="#sec-2">Trie Data Structure</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">How Tries Work</a></li>
+        <li><a href="#sec-2-2">Precomputed Top-K</a></li>
+        <li><a href="#sec-2-3">Architecture Diagram</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Data Collection Pipeline</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Log Aggregation &amp; Frequency Decay</a></li>
+        <li><a href="#sec-3-2">Trie Build &amp; Deploy</a></li>
+        <li><a href="#sec-3-3">Trending Boost</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Scaling &amp; Performance</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Prefix-Range Sharding</a></li>
+        <li><a href="#sec-4-2">Replication &amp; Failover</a></li>
+        <li><a href="#sec-4-3">Client-Side Optimizations</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Design Decisions &amp; Trade-offs</a></li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ======================================================================= -->
+<!-- SECTION 1: Overview -->
+<!-- ======================================================================= -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale Requirements</h2>
+
+  <p>A <strong>typeahead</strong> (autocomplete) system provides real-time search suggestions as the user types. Every keystroke triggers a prefix lookup that must return the most relevant completions within a strict latency budget. The system bridges two worlds: an <em>offline pipeline</em> that builds the suggestion index from search logs, and an <em>online serving layer</em> that resolves prefix queries in single-digit milliseconds.</p>
+
+  <h3>Functional Requirements</h3>
+  <div class="card highlight">
+    <ul>
+      <li>Return <strong>top-5 suggestions</strong> for every prefix typed by the user.</li>
+      <li>Rank suggestions by a blended score of frequency, freshness, and personalization.</li>
+      <li>Update suggestion corpus at least hourly to reflect trending queries.</li>
+      <li>Support multiple languages and Unicode-aware prefix matching.</li>
+    </ul>
+  </div>
+
+  <h3>Non-Functional Requirements</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">1B</div>
+      <div class="label">Queries / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt;100ms</div>
+      <div class="label">p99 Latency</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">100M</div>
+      <div class="label">Unique Terms</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">Top 5</div>
+      <div class="label">Suggestions Returned</div>
+    </div>
+  </div>
+
+  <h3>Back-of-Envelope Math</h3>
+  <div class="card">
+    <table>
+      <tr><th>Metric</th><th>Value</th><th>Derivation</th></tr>
+      <tr><td>QPS (avg)</td><td>~11,500</td><td>1B / 86,400s</td></tr>
+      <tr><td>QPS (peak 3&times;)</td><td>~35,000</td><td>Peak traffic multiplier</td></tr>
+      <tr><td>Average query length</td><td>4 chars</td><td>Each search &rarr; ~4 prefix lookups</td></tr>
+      <tr><td>Prefix QPS (peak)</td><td>~140,000</td><td>35K &times; 4 chars</td></tr>
+      <tr><td>Trie memory (100M terms, 15 chars avg)</td><td>~10&ndash;15 GB</td><td>Compressed trie in RAM</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- SECTION 2: Trie Data Structure -->
+<!-- ======================================================================= -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>Trie Data Structure</h2>
+
+  <h3 id="sec-2-1">How Tries Work</h3>
+  <p>A <strong>trie</strong> (prefix tree) is a tree where each node represents a single character. Traversing from root to any node spells out a prefix. Words are marked at terminal nodes. This structure enables prefix lookup in <code>O(L)</code> time where <code>L</code> is the prefix length &mdash; independent of the total number of stored terms.</p>
+
+  <div class="card highlight">
+    <h4>Trie Node Structure</h4>
+<pre>
+class TrieNode:
+    char: str                      # character at this node
+    children: dict[str, TrieNode]  # up to 26+ children
+    is_terminal: bool              # marks end of a valid term
+    top_k: list[tuple[str, int]]   # precomputed top-K completions with scores
+</pre>
+    <p>Each node stores the character it represents, pointers to child nodes, a terminal flag, and &mdash; crucially &mdash; a <strong>precomputed list of top-K completions</strong> reachable from that node.</p>
+  </div>
+
+  <h3 id="sec-2-2">Precomputed Top-K</h3>
+  <p>The naive approach traverses the entire subtree at query time to find the highest-frequency completions. With 100M terms this is far too slow. Instead, during the offline build phase, we propagate the top-K results <em>upward</em> from leaf to root:</p>
+
+  <div class="card">
+    <table>
+      <tr><th>Approach</th><th>Query Complexity</th><th>Build Complexity</th><th>Space Overhead</th></tr>
+      <tr><td>Naive DFS at query time</td><td>O(subtree size)</td><td>O(N)</td><td>None</td></tr>
+      <tr><td><strong>Precomputed top-K</strong></td><td><strong>O(prefix_len)</strong></td><td>O(N &times; K)</td><td>K entries per node</td></tr>
+    </table>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Example: Prefix "fa"</h4>
+    <ol>
+      <li>User types <code>f</code> &rarr; traverse root &rarr; <code>f</code> node &rarr; return <code>f.top_k</code>: [facebook, food, finance, funny, flights]</li>
+      <li>User types <code>a</code> &rarr; traverse <code>f</code> &rarr; <code>a</code> node &rarr; return <code>fa.top_k</code>: [facebook, fashion, family, fast food, favorite]</li>
+      <li>Total nodes visited: <strong>2</strong> (prefix length). No subtree traversal needed.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-2-3">Architecture Diagram</h3>
+  <div class="diagram">
+    <img src="images/sd_typeahead_01_architecture.png" alt="Typeahead system architecture showing trie serving, data pipeline, and client interaction">
+    <div class="caption">Figure 1 &mdash; End-to-end typeahead architecture: search logs feed into an aggregation pipeline that builds a trie, which is deployed to serving nodes for real-time prefix lookups.</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Architecture Walkthrough</h4>
+    <ol>
+      <li><strong>Client</strong> sends each keystroke (debounced) to the Typeahead API gateway.</li>
+      <li><strong>API Gateway</strong> routes the prefix query to the correct <strong>Trie Shard</strong> based on the first 1&ndash;2 characters.</li>
+      <li><strong>Trie Server</strong> walks the in-memory trie to the prefix node and returns the precomputed <code>top_k</code> list in &lt;5ms.</li>
+      <li>Meanwhile, <strong>Search Logs</strong> stream into <strong>Kafka</strong>, where a <strong>Samza</strong> job aggregates query frequencies hourly.</li>
+      <li>The <strong>Trie Builder</strong> constructs a new trie snapshot from aggregated frequencies, applies decay and trending boosts, then serializes to a binary blob.</li>
+      <li>New trie snapshots are pushed to serving nodes via a <strong>blue-green deploy</strong> &mdash; old trie stays live until the new one is fully loaded.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- SECTION 3: Data Collection Pipeline -->
+<!-- ======================================================================= -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>Data Collection Pipeline</h2>
+
+  <h3 id="sec-3-1">Log Aggregation &amp; Frequency Decay</h3>
+  <p>Raw search queries are logged with timestamps and anonymized user IDs. These logs flow through a multi-stage pipeline that converts noisy raw data into a clean frequency table suitable for trie construction.</p>
+
+  <div class="card highlight">
+    <h4>Pipeline Stages</h4>
+<pre>
+Search Logs  &rarr;  Kafka Topic (raw-queries)
+             &rarr;  Samza Job: deduplicate, lowercase, strip special chars
+             &rarr;  Samza Job: hourly frequency aggregation
+             &rarr;  Frequency Table (term &rarr; weighted_count)
+             &rarr;  Trie Builder
+             &rarr;  Deploy to Trie Servers
+</pre>
+  </div>
+
+  <p>Frequencies use <strong>exponential time decay</strong> so stale queries lose weight over time. The formula for a query&rsquo;s effective score is:</p>
+  <div class="card">
+<pre>
+score(term) = &sum; count_i &times; e^(-&lambda; &times; age_hours_i)
+
+where:
+  count_i    = occurrences in time bucket i
+  age_hours_i = hours since bucket i
+  &lambda;        = decay constant (e.g., 0.01 &rarr; half-life ~70 hours)
+</pre>
+  </div>
+
+  <p>This ensures that a query searched 10,000 times last month but rarely today scores lower than a query searched 500 times in the last hour.</p>
+
+  <h3 id="sec-3-2">Trie Build &amp; Deploy</h3>
+  <div class="card success">
+    <h4>Build Process</h4>
+    <ul>
+      <li><strong>Insert all terms</strong> into a fresh trie with their decayed frequency scores.</li>
+      <li><strong>Bottom-up propagation</strong>: at each node, merge children&rsquo;s top-K lists, sort by score, keep only the top 5.</li>
+      <li><strong>Prune</strong>: remove branches where the maximum reachable score falls below a threshold (eliminates long-tail noise).</li>
+      <li><strong>Serialize</strong>: write the trie as a compact binary blob (~8&ndash;12 GB) with memory-mapped access support.</li>
+      <li><strong>Deploy</strong>: push the blob to trie servers via blue-green swap. Old trie serves traffic until new one is warmed up.</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-3-3">Trending Boost</h3>
+  <p>Sudden spikes (breaking news, viral events) need to surface immediately, not wait for the hourly rebuild. A <strong>trending detector</strong> runs alongside the main pipeline:</p>
+
+  <div class="card warn">
+    <h4>Trending Detection</h4>
+    <table>
+      <tr><th>Step</th><th>Detail</th></tr>
+      <tr><td>Sliding window</td><td>Count queries in 5-minute sliding windows</td></tr>
+      <tr><td>Z-score anomaly</td><td>Flag terms where current rate exceeds historical mean + 3&sigma;</td></tr>
+      <tr><td>Hot-patch trie</td><td>Inject trending terms into a small <strong>overlay trie</strong> that is checked before the main trie</td></tr>
+      <tr><td>Merge on next rebuild</td><td>Trending terms get folded into the main trie on the next hourly build</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- SECTION 4: Scaling & Performance -->
+<!-- ======================================================================= -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Scaling &amp; Performance</h2>
+
+  <h3 id="sec-4-1">Prefix-Range Sharding</h3>
+  <p>A single trie with 100M terms fits in ~10&ndash;15 GB of RAM, which is feasible on a single machine. However, at 140K peak QPS a single node can&rsquo;t handle the throughput. The solution is to <strong>shard by prefix range</strong>:</p>
+
+  <div class="card highlight">
+    <table>
+      <tr><th>Shard</th><th>Prefix Range</th><th>% of Terms (approx)</th></tr>
+      <tr><td>Shard 0</td><td>a&ndash;d</td><td>~25%</td></tr>
+      <tr><td>Shard 1</td><td>e&ndash;k</td><td>~25%</td></tr>
+      <tr><td>Shard 2</td><td>l&ndash;r</td><td>~25%</td></tr>
+      <tr><td>Shard 3</td><td>s&ndash;z, 0&ndash;9</td><td>~25%</td></tr>
+    </table>
+    <p style="margin-top:12px; color: var(--text-muted);">Shard boundaries are tuned based on actual query distribution, not uniform alphabet splits. Hot prefixes (e.g., "s", "c") may get their own shard.</p>
+  </div>
+
+  <p>The API gateway uses a <strong>prefix routing table</strong> to direct each query to the correct shard in O(1). The routing table is small (a few hundred entries) and cached in every gateway instance.</p>
+
+  <h3 id="sec-4-2">Replication &amp; Failover</h3>
+  <div class="card">
+    <ul>
+      <li>Each shard has <strong>3 replicas</strong> across different availability zones.</li>
+      <li>Reads are load-balanced across replicas. Writes (trie deploys) use a leader that coordinates blue-green swaps.</li>
+      <li>If a replica goes down, the load balancer routes traffic to healthy replicas within milliseconds.</li>
+      <li>Trie data is <strong>read-only at serving time</strong> &mdash; no write contention, no locks, no consistency issues.</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-4-3">Client-Side Optimizations</h3>
+  <p>Much of the latency and QPS reduction happens on the client, not the server:</p>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Debouncing (100&ndash;300ms)</h4>
+      <p>Don&rsquo;t send a request on every keystroke. Wait 100&ndash;300ms after the user stops typing. Fast typists entering "facebook" (8 chars in ~600ms) trigger only <strong>2&ndash;3 requests</strong> instead of 8.</p>
+    </div>
+    <div class="card success">
+      <h4>Browser Cache</h4>
+      <p>Cache recent prefix &rarr; results mappings in <code>localStorage</code> or an in-memory LRU. If the user types "face", deletes to "fac", then retypes "face", the second "face" lookup is instant.</p>
+    </div>
+    <div class="card success">
+      <h4>Request Cancellation</h4>
+      <p>When a new keystroke arrives before the previous response, cancel the in-flight request using <code>AbortController</code>. Reduces wasted server work by ~40%.</p>
+    </div>
+    <div class="card success">
+      <h4>Adaptive Prefetch</h4>
+      <p>After receiving results for "fac", the client can optimistically request "face" if the user&rsquo;s typing speed suggests they will continue. Hides network latency behind typing time.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Latency Budget Breakdown</h4>
+    <table>
+      <tr><th>Component</th><th>Time</th><th>Notes</th></tr>
+      <tr><td>Client debounce</td><td>100&ndash;300ms</td><td>Configurable; reduces QPS 3&ndash;5&times;</td></tr>
+      <tr><td>Network RTT</td><td>5&ndash;30ms</td><td>Edge PoP or regional DC</td></tr>
+      <tr><td>Gateway routing</td><td>&lt;1ms</td><td>O(1) prefix table lookup</td></tr>
+      <tr><td>Trie lookup</td><td>&lt;1ms</td><td>In-memory, O(prefix_len)</td></tr>
+      <tr><td>Serialization + response</td><td>1&ndash;2ms</td><td>JSON/protobuf top-5 list</td></tr>
+      <tr><td><strong>Total server-side</strong></td><td><strong>&lt;5ms</strong></td><td>Well within 100ms p99 budget</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- SECTION 5: Design Decisions & Trade-offs -->
+<!-- ======================================================================= -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>Design Decisions &amp; Trade-offs</h2>
+
+  <h3>Trie vs. Inverted Index</h3>
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Trie (Chosen)</h4>
+      <ul>
+        <li>Natural fit for prefix matching</li>
+        <li>O(prefix_len) lookup &mdash; constant in practice</li>
+        <li>Compact in memory with compressed tries (Patricia/radix)</li>
+        <li>Precomputed top-K eliminates sorting at query time</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Inverted Index</h4>
+      <ul>
+        <li>Better for full-text and fuzzy search</li>
+        <li>Prefix queries require range scans on sorted posting lists</li>
+        <li>Higher latency for prefix-specific workloads</li>
+        <li>Preferred when typeahead is secondary to full search</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Precomputed vs. On-Demand Top-K</h3>
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Precomputed (Chosen)</h4>
+      <ul>
+        <li>O(prefix_len) query time &mdash; just read the list</li>
+        <li>Higher build cost: O(N &times; K) to propagate</li>
+        <li>More memory: K entries stored per node</li>
+        <li>Stale until next rebuild (mitigated by overlay trie)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>On-Demand</h4>
+      <ul>
+        <li>Zero extra space per node</li>
+        <li>Query cost: O(subtree) &mdash; prohibitive for short prefixes</li>
+        <li>Always fresh (reads live data)</li>
+        <li>Only viable if term count is small (&lt;1M)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Personalized Suggestions</h3>
+  <div class="card warn">
+    <h4>Personalization Layer</h4>
+    <p>Global suggestions work for most users, but personalized suggestions improve relevance significantly. The approach is a <strong>two-tier merge</strong>:</p>
+    <table>
+      <tr><th>Tier</th><th>Source</th><th>Latency Impact</th></tr>
+      <tr><td>Global top-K</td><td>Main trie (precomputed)</td><td>None (&lt;1ms)</td></tr>
+      <tr><td>Personal top-K</td><td>User&rsquo;s recent search history (small per-user trie or hash map)</td><td>+1&ndash;2ms (Redis/Venice lookup)</td></tr>
+    </table>
+    <p style="margin-top:12px;">The serving layer merges global and personal results, de-duplicates, and re-ranks. Personal results get a scoring boost (e.g., 2&times; weight) so the user&rsquo;s own past queries appear first.</p>
+  </div>
+
+  <h3>Additional Considerations</h3>
+  <div class="card">
+    <table>
+      <tr><th>Concern</th><th>Approach</th></tr>
+      <tr><td>Offensive / harmful queries</td><td>Blocklist filter applied during trie build and as a runtime check</td></tr>
+      <tr><td>Multi-language support</td><td>Separate trie per language; language detected from user locale or first character (CJK vs Latin)</td></tr>
+      <tr><td>Spell correction</td><td>Not in typeahead path (too slow). Handled by a separate fuzzy-match service post-search.</td></tr>
+      <tr><td>Phrase suggestions</td><td>Treat multi-word queries as single terms; space is just another character in the trie</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- SECTION 6: LinkedIn Mapping & Interview Questions -->
+<!-- ======================================================================= -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>Component Mapping to LinkedIn Stack</h3>
+  <div class="card highlight">
+    <table>
+      <tr><th>System Design Component</th><th>LinkedIn Equivalent</th><th></th></tr>
+      <tr>
+        <td>Trie Serving Layer</td>
+        <td>Custom in-memory service (Galene typeahead)</td>
+        <td><span class="linkedin-tag">Search Infra</span></td>
+      </tr>
+      <tr>
+        <td>Data Pipeline (aggregation)</td>
+        <td>Kafka + Samza streaming jobs</td>
+        <td><span class="linkedin-tag">Kafka</span> <span class="linkedin-tag">Samza</span></td>
+      </tr>
+      <tr>
+        <td>Serving / Read Store</td>
+        <td>Venice (derived data store)</td>
+        <td><span class="linkedin-tag">Venice</span></td>
+      </tr>
+      <tr>
+        <td>API Layer</td>
+        <td>Rest.li with D2 service discovery</td>
+        <td><span class="linkedin-tag">Rest.li</span> <span class="linkedin-tag">D2</span></td>
+      </tr>
+      <tr>
+        <td>Personalization Store</td>
+        <td>Venice (per-user features) or Espresso</td>
+        <td><span class="linkedin-tag">Venice</span> <span class="linkedin-tag">Espresso</span></td>
+      </tr>
+      <tr>
+        <td>Trending Detection</td>
+        <td>Samza windowed aggregation + UMP signals</td>
+        <td><span class="linkedin-tag">Samza</span> <span class="linkedin-tag">UMP</span></td>
+      </tr>
+      <tr>
+        <td>Blocklist / Content Safety</td>
+        <td>Pembe (content moderation platform)</td>
+        <td><span class="linkedin-tag">Trust &amp; Safety</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="walkthrough">
+    <h4>How LinkedIn Search Typeahead Works (Simplified)</h4>
+    <ol>
+      <li><strong>User types in the search bar</strong> &rarr; debounced request hits the <span class="linkedin-tag">Rest.li</span> typeahead endpoint.</li>
+      <li><strong>D2 routes</strong> the request to the typeahead service cluster based on load and proximity.</li>
+      <li><strong>Galene typeahead index</strong> returns prefix-matched entities (people, companies, jobs, posts) with precomputed ranking.</li>
+      <li><strong>Venice lookup</strong> enriches results with personalization signals (connection degree, past interactions).</li>
+      <li><strong>Blender</strong> merges entity types, applies business rules (e.g., prioritize people for social queries), and returns the top-5 to the client.</li>
+      <li><strong>Offline pipeline</strong>: <span class="linkedin-tag">Kafka</span> ingests search logs &rarr; <span class="linkedin-tag">Samza</span> aggregates frequencies &rarr; Trie/index rebuilt hourly &rarr; blue-green deploy to Galene.</li>
+    </ol>
+  </div>
+
+  <h3>Interview Questions</h3>
+  <div class="card danger">
+    <h4>Commonly Asked Follow-ups</h4>
+    <table>
+      <tr><th>#</th><th>Question</th><th>Key Points</th></tr>
+      <tr>
+        <td>1</td>
+        <td>How do you handle a term that goes viral in 5 minutes?</td>
+        <td>Overlay trie with trending detection; sliding window z-score anomaly; hot-patch without full rebuild.</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>Why not use Elasticsearch for typeahead?</td>
+        <td>ES completion suggesters use FSTs internally (similar to tries). Viable but adds operational overhead. Custom trie gives full control over memory layout and latency.</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>How do you shard when one prefix is extremely hot?</td>
+        <td>Dynamic re-sharding: split the hot prefix into sub-ranges (e.g., "s" &rarr; "sa-sm", "sn-sz"). Monitor QPS per shard and rebalance.</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>How do you prevent offensive suggestions?</td>
+        <td>Blocklist filter at build time + runtime. Human-curated list + ML classifier for new terms. Fail-closed: if uncertain, don&rsquo;t suggest.</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>How does personalization work without adding latency?</td>
+        <td>Per-user data in Venice (single-digit ms reads). Merge with global results at serving time. Cache personal results for repeat queries.</td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>What happens if the trie build fails?</td>
+        <td>Blue-green deploy: old trie stays live. Build failures trigger alerts; system degrades gracefully to stale-but-valid suggestions.</td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td>How do you support multi-language typeahead?</td>
+        <td>Separate trie per language family. Language detection from user profile or Unicode range of first character. CJK needs n-gram segmentation, not character-level trie.</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td>How would you add fuzzy matching (typo tolerance)?</td>
+        <td>Not in the hot path. Use edit-distance on the final result set, or a separate BK-tree / SymSpell index queried in parallel with a timeout.</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <p>System Design Study Guide &bull; Design Typeahead &bull; Built for interview prep</p>
+</footer>
+
+</body>
+</html>

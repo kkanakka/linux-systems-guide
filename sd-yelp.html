@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Yelp (Proximity Search)</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #D32F2F;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a0a0a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.red { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.red:hover { background: rgba(211,47,47,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .geohash-grid {
+    display: grid; grid-template-columns: repeat(3, 60px); gap: 4px;
+    justify-content: center; margin: 20px 0;
+  }
+  .geohash-cell {
+    width: 60px; height: 60px; border: 2px solid var(--border); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.7em; color: var(--text-muted);
+  }
+  .geohash-cell.center {
+    border-color: var(--yt-red); background: rgba(211,47,47,0.15);
+    color: var(--yt-red); font-weight: 700;
+  }
+  .geohash-cell.neighbor {
+    border-color: var(--accent); background: rgba(88,166,255,0.08);
+    color: var(--accent);
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Yelp</span></h1>
+    <p>A deep dive into proximity-based business search &mdash; geospatial indexing, search ranking, review aggregation, and real-time recommendations at scale.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">Design URL Shortener</a>
+      <a href="sd-yelp.html" class="red">Design Yelp (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale</a></li>
+    <li><a href="#sec-2">High-Level Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Core Services</a></li>
+        <li><a href="#sec-2-2">Architecture Walkthrough</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Geospatial Indexing</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Geohash Explained</a></li>
+        <li><a href="#sec-3-2">9-Cell Neighbor Search</a></li>
+        <li><a href="#sec-3-3">QuadTree vs Geohash vs R-Tree</a></li>
+        <li><a href="#sec-3-4">Geohash Precision Levels</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Search &amp; Ranking</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Query Pipeline</a></li>
+        <li><a href="#sec-4-2">Ranking Formula</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Data Model</a></li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 1: Overview & Scale -->
+<!-- ================================================================== -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale</h2>
+
+  <p>Yelp is a <strong>location-based business discovery platform</strong>. Users search for nearby restaurants, shops, and services by combining <em>text queries</em> (e.g., "sushi") with <em>geographic proximity</em> (e.g., within 5 km). The system must return ranked results in sub-200 ms even as the business catalog and review corpus grow to hundreds of millions of entries.</p>
+
+  <h3>Core Requirements</h3>
+  <div class="card highlight">
+    <strong>Functional:</strong>
+    <ul style="margin-top:8px; padding-left:20px;">
+      <li>Search businesses by keyword + location (lat/lng or address)</li>
+      <li>Filter by category, price range, open hours, rating</li>
+      <li>Return results ranked by relevance, distance, and quality</li>
+      <li>Display business details, photos, reviews, and hours</li>
+      <li>Submit reviews and ratings; aggregate star scores in real time</li>
+      <li>Personalized recommendations ("You might also like&hellip;")</li>
+    </ul>
+  </div>
+  <div class="card warn">
+    <strong>Non-Functional:</strong>
+    <ul style="margin-top:8px; padding-left:20px;">
+      <li><strong>Latency:</strong> p99 search &lt; 200 ms</li>
+      <li><strong>Availability:</strong> 99.99% uptime (location search is critical path)</li>
+      <li><strong>Consistency:</strong> eventual consistency for reviews; strong consistency for business ownership</li>
+      <li><strong>Scalability:</strong> horizontal scaling across data centers</li>
+    </ul>
+  </div>
+
+  <h3>Scale Numbers</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">200M</div>
+      <div class="label">Businesses Listed</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">250M</div>
+      <div class="label">Reviews Stored</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">100M</div>
+      <div class="label">Searches / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt;200ms</div>
+      <div class="label">p99 Search Latency</div>
+    </div>
+  </div>
+
+  <div class="card success">
+    <strong>Back-of-Envelope:</strong><br>
+    100M searches/day &asymp; <strong>1,160 QPS</strong> average, ~<strong>3,500 QPS</strong> peak (3x burst).<br>
+    200M businesses &times; ~2 KB each &asymp; <strong>400 GB</strong> business data.<br>
+    250M reviews &times; ~1 KB each &asymp; <strong>250 GB</strong> review data.<br>
+    Geospatial index over 200M points &asymp; <strong>~30 GB</strong> in-memory (geohash + ID per entry).
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 2: Architecture -->
+<!-- ================================================================== -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>High-Level Architecture</h2>
+
+  <h3 id="sec-2-1">Core Services</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Search Service</h4>
+      <p>Accepts user queries (keyword + location), resolves the geohash, fans out to the geo-index and text-search shards, merges results, and applies the ranking model. Stateless &mdash; scales horizontally behind an L7 load balancer.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Business Service</h4>
+      <p>CRUD for business profiles: name, address, coordinates, categories, hours, photos, owner verification. Writes go to a primary DB; reads are served from read replicas and a CDN-backed photo store.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Review Service</h4>
+      <p>Manages user reviews and ratings. On each new review, a Kafka event triggers an async aggregation job that recomputes the business's average star rating and review count.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Recommendation Service</h4>
+      <p>Generates "similar businesses" and "you might like" suggestions using collaborative filtering (user&ndash;business interactions) combined with content-based features (category, price, location).</p>
+    </div>
+  </div>
+
+  <h3 id="sec-2-2">Architecture Diagram</h3>
+  <div class="diagram">
+    <img src="images/sd_yelp_01_architecture.png" alt="Yelp High-Level Architecture">
+    <div class="caption">Figure 1 &mdash; High-level architecture: client &rarr; API Gateway &rarr; core services &rarr; data stores</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Walkthrough: "Find sushi near me"</h4>
+    <ol>
+      <li><strong>Client &rarr; API Gateway:</strong> The mobile app sends <code>GET /v1/search?q=sushi&amp;lat=37.78&amp;lng=-122.41&amp;radius=5km</code>. The gateway authenticates, rate-limits, and routes to <strong>Search Service</strong>.</li>
+      <li><strong>Geocode &amp; Geohash:</strong> Search Service converts <code>(37.78, -122.41)</code> to geohash prefix <code>9q8yy</code> (precision-5, ~4.9 km cell). It also computes the <strong>8 neighbor cells</strong> to handle boundary cases.</li>
+      <li><strong>Geo-Index Lookup:</strong> The service queries a <strong>geohash-prefix index</strong> (Redis sorted set or Elasticsearch geo_point) for all business IDs whose geohash starts with any of the 9 cells.</li>
+      <li><strong>Text Matching:</strong> Among the geo-filtered candidates, an <strong>inverted index</strong> matches the keyword "sushi" against business name, category, and menu fields using BM25 scoring.</li>
+      <li><strong>Ranking:</strong> Candidates are scored: <code>score = α·BM25 + β·distanceDecay(d) + γ·qualityScore(rating, reviewCount)</code>. Top-K results are returned.</li>
+      <li><strong>Hydration:</strong> Search Service calls <strong>Business Service</strong> to fetch full profiles (photos, hours, address) for the top-K IDs. A <strong>Couchbase/Redis cache</strong> serves hot businesses in &lt; 5 ms.</li>
+      <li><strong>Response:</strong> The gateway returns a JSON array of ranked business cards with name, rating, distance, thumbnail, and snippet to the client.</li>
+    </ol>
+  </div>
+
+  <div class="card success">
+    <strong>Key Design Decisions:</strong>
+    <ul style="margin-top:8px; padding-left:20px;">
+      <li><strong>Geo-filter first, then text-match</strong> &mdash; dramatically reduces the candidate set (millions &rarr; thousands) before expensive text scoring</li>
+      <li><strong>Separate read/write paths</strong> &mdash; business writes are infrequent (~1K/day) vs. reads (~3.5K QPS peak); CQRS pattern fits naturally</li>
+      <li><strong>Async rating aggregation</strong> &mdash; avoids write amplification on the hot business row for every review</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 3: Geospatial Indexing -->
+<!-- ================================================================== -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>Geospatial Indexing</h2>
+
+  <p>The heart of any proximity search system is how it indexes 2D coordinates for fast range queries. We compare three approaches and explain why <strong>Geohash</strong> is the go-to choice for most Yelp-like systems.</p>
+
+  <h3 id="sec-3-1">Geohash Explained</h3>
+
+  <div class="card highlight">
+    <p>A <strong>geohash</strong> encodes a latitude/longitude pair into a short alphanumeric string by recursively bisecting the world into grid cells. Each additional character narrows the cell by a factor of ~32. Points that share a longer prefix are geographically closer.</p>
+    <pre>
+Latitude  37.7749 , Longitude -122.4194
+
+Step 1: World → 32 cells    → character "9"    (~5000 km)
+Step 2: Cell  → 32 sub-cells → character "q"    (~1250 km)
+Step 3: Cell  → 32 sub-cells → character "8"    (~156 km)
+Step 4: Cell  → 32 sub-cells → character "y"    (~39 km)
+Step 5: Cell  → 32 sub-cells → character "y"    (~4.9 km)
+Step 6: Cell  → 32 sub-cells → character "k"    (~1.2 km)
+
+Result: "9q8yyk" → San Francisco downtown</pre>
+  </div>
+
+  <p>Because the geohash is a <strong>string prefix</strong>, all businesses within the same cell share the same prefix. A simple SQL query like <code>WHERE geohash LIKE '9q8yy%'</code> or a Redis <code>ZRANGEBYLEX</code> retrieves all points in the cell in O(log N + k) time.</p>
+
+  <h3 id="sec-3-2">9-Cell Neighbor Search</h3>
+
+  <p>A geohash cell has hard boundaries. A business 10 meters away could land in a different cell. The fix: always query the <strong>target cell plus its 8 neighbors</strong>.</p>
+
+  <div class="geohash-grid">
+    <div class="geohash-cell neighbor">9q8yz</div>
+    <div class="geohash-cell neighbor">9q8yy</div>
+    <div class="geohash-cell neighbor">9q8yw</div>
+    <div class="geohash-cell neighbor">9q8yv</div>
+    <div class="geohash-cell center">9q8yt<br>&#x1F4CD;</div>
+    <div class="geohash-cell neighbor">9q8ys</div>
+    <div class="geohash-cell neighbor">9q8yu</div>
+    <div class="geohash-cell neighbor">9q8yk</div>
+    <div class="geohash-cell neighbor">9q8yh</div>
+  </div>
+  <div class="caption" style="text-align:center;">9-cell neighbor pattern: query the center cell (user location) + all 8 adjacent cells</div>
+
+  <div class="walkthrough">
+    <h4>Why 9 Cells?</h4>
+    <ol>
+      <li>The user might be at the <strong>edge</strong> of their geohash cell. A restaurant 50 m away could be in an adjacent cell.</li>
+      <li>Querying 9 cells guarantees full coverage of a <strong>circular radius</strong> inscribed in the 3&times;3 grid.</li>
+      <li>After retrieving candidates from all 9 cells, apply a precise <strong>Haversine distance filter</strong> to discard points outside the requested radius.</li>
+      <li>This two-phase approach (coarse geohash filter &rarr; precise distance check) balances <strong>speed</strong> and <strong>accuracy</strong>.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-3-3">QuadTree vs Geohash vs R-Tree</h3>
+
+  <table>
+    <tr>
+      <th>Property</th>
+      <th>QuadTree</th>
+      <th>Geohash</th>
+      <th>R-Tree</th>
+    </tr>
+    <tr>
+      <td><strong>Structure</strong></td>
+      <td>In-memory tree; each node splits into 4 quadrants</td>
+      <td>String-encoded grid cells; stored in any sorted index</td>
+      <td>Balanced tree of minimum bounding rectangles (MBRs)</td>
+    </tr>
+    <tr>
+      <td><strong>Range Query</strong></td>
+      <td>O(log N + k) &mdash; traverse relevant quadrants</td>
+      <td>O(log N + k) &mdash; prefix scan over sorted keys</td>
+      <td>O(log N + k) &mdash; traverse overlapping MBRs</td>
+    </tr>
+    <tr>
+      <td><strong>Insert / Update</strong></td>
+      <td>O(log N) &mdash; re-split if density exceeds threshold</td>
+      <td>O(1) compute hash + O(log N) index insert</td>
+      <td>O(log N) &mdash; may trigger node splits &amp; rebalance</td>
+    </tr>
+    <tr>
+      <td><strong>Storage</strong></td>
+      <td>In-memory only; hard to persist/replicate</td>
+      <td>String column in any DB; trivially shardable</td>
+      <td>Specialized on-disk structure (PostGIS, etc.)</td>
+    </tr>
+    <tr>
+      <td><strong>Sharding</strong></td>
+      <td>Difficult &mdash; tree is a single structure</td>
+      <td>Easy &mdash; shard by geohash prefix</td>
+      <td>Moderate &mdash; spatial partitioning possible</td>
+    </tr>
+    <tr>
+      <td><strong>Dynamic Density</strong></td>
+      <td>Excellent &mdash; subdivides dense areas automatically</td>
+      <td>Fixed grid &mdash; dense and sparse areas get same cell size</td>
+      <td>Good &mdash; MBRs adapt to data distribution</td>
+    </tr>
+    <tr>
+      <td><strong>Best For</strong></td>
+      <td>In-memory spatial index on single node (e.g., game map)</td>
+      <td>Distributed proximity search (Yelp, Uber, GrubHub)</td>
+      <td>Complex spatial queries with polygons (GIS, PostGIS)</td>
+    </tr>
+  </table>
+
+  <div class="card success">
+    <strong>Why Geohash Wins for Yelp:</strong> Businesses are relatively static points (not moving objects). Geohash strings are trivially <strong>shardable</strong> (prefix-based partitioning), work with any sorted data store (Redis, Cassandra, Elasticsearch), and support <strong>variable precision</strong> by truncating the string. The 9-cell neighbor approach handles boundary issues cleanly.
+  </div>
+
+  <h3 id="sec-3-4">Geohash Precision Levels</h3>
+
+  <table>
+    <tr>
+      <th>Precision (chars)</th>
+      <th>Cell Width</th>
+      <th>Cell Height</th>
+      <th>Use Case</th>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td>~5,000 km</td>
+      <td>~5,000 km</td>
+      <td>Continent-level grouping</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>~1,250 km</td>
+      <td>~625 km</td>
+      <td>Country / large-region partitioning</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>~156 km</td>
+      <td>~156 km</td>
+      <td>State / province level shard key</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>~39 km</td>
+      <td>~19.5 km</td>
+      <td>Metro area &mdash; "restaurants in SF"</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>~4.9 km</td>
+      <td>~4.9 km</td>
+      <td>Neighborhood &mdash; default proximity search radius</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>~1.2 km</td>
+      <td>~0.61 km</td>
+      <td>Walking distance &mdash; "coffee near me"</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>~153 m</td>
+      <td>~153 m</td>
+      <td>Block level &mdash; precise delivery zones</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>~38 m</td>
+      <td>~19 m</td>
+      <td>Building level &mdash; indoor positioning</td>
+    </tr>
+  </table>
+
+  <div class="card warn">
+    <strong>Precision Selection Strategy:</strong> For a 5 km search radius, use <strong>precision 5</strong> (~4.9 km cell). Query the 9-cell neighborhood &rarr; the 3&times;3 grid covers ~15 km, fully encompassing the 5 km circle. For a 1 km "near me" search, bump to <strong>precision 6</strong> (~1.2 km cell). The adaptive precision approach lets the same index serve multiple radius tiers.
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 4: Search & Ranking -->
+<!-- ================================================================== -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Search &amp; Ranking</h2>
+
+  <h3 id="sec-4-1">Query Pipeline</h3>
+
+  <div class="card highlight">
+    <h4>Three-Phase Search</h4>
+    <ol style="padding-left:20px; margin-top:8px;">
+      <li><strong>Geo Filter</strong> &mdash; Convert user location to geohash, compute 9-cell neighborhood, retrieve all business IDs in those cells. Typical result: 500&ndash;5,000 candidates.</li>
+      <li><strong>Text Match</strong> &mdash; Run the keyword query against an <strong>inverted index</strong> (business name, categories, menu items, review text) using <strong>BM25</strong> scoring. Intersect with geo-filtered set.</li>
+      <li><strong>Rank &amp; Return</strong> &mdash; Apply the composite ranking function, take top-K (typically K=20 per page), hydrate with full business details, and return.</li>
+    </ol>
+  </div>
+
+  <p>Filters such as <code>category=japanese</code>, <code>price=$$$</code>, or <code>open_now=true</code> are applied as <strong>post-filters</strong> after geo + text matching, or as <strong>pre-filters</strong> on the inverted index (cheaper if indexed as facets).</p>
+
+  <h3 id="sec-4-2">Ranking Formula</h3>
+
+  <div class="card">
+    <pre>
+final_score = α · text_relevance  +  β · distance_decay  +  γ · quality_score
+
+where:
+  text_relevance  = BM25(query, business_doc)
+  distance_decay  = 1 / (1 + d/d₀)          # d₀ = reference distance (e.g., 1 km)
+  quality_score   = log(1 + review_count) · avg_rating / 5.0
+
+Typical weights:  α = 0.4,  β = 0.35,  γ = 0.25</pre>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Text Relevance (BM25)</h4>
+      <p><strong>BM25</strong> scores how well the business document matches the query terms. Fields are weighted: <code>name &times;3</code>, <code>category &times;2</code>, <code>menu &times;1</code>, <code>reviews &times;0.5</code>. This ensures "Sushi Zen" ranks above a pizza place that happens to mention "sushi" in one review.</p>
+    </div>
+    <div class="card success">
+      <h4>Distance Decay</h4>
+      <p>A <strong>hyperbolic decay function</strong> penalizes distance: a restaurant 100 m away scores ~10x higher than one 1 km away. The reference distance <code>d₀</code> is tunable &mdash; in dense cities it's smaller (500 m), in suburban areas larger (2 km).</p>
+    </div>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Quality Score</h4>
+      <p>Combines <strong>average rating</strong> with <strong>review count</strong> (logarithmic to avoid runaway effect). A 4.5-star restaurant with 500 reviews scores higher than a 5.0-star place with 3 reviews. This is essentially a <strong>Bayesian average</strong> approach.</p>
+    </div>
+    <div class="card warn">
+      <h4>Personalization (Optional)</h4>
+      <p>For logged-in users, add a <strong>user preference signal</strong>: boost categories the user frequently searches for, penalize price tiers they avoid. Implemented as a small additive term <code>δ · user_affinity</code>.</p>
+    </div>
+  </div>
+
+  <div class="card danger">
+    <strong>Anti-Spam &amp; Fraud:</strong> Fake reviews inflate quality scores. Mitigations include: (1) review velocity detection (sudden review spikes), (2) reviewer trust scores based on account age and review history, (3) NLP-based duplicate/template detection, (4) requiring verified check-ins before reviewing.
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 5: Data Model -->
+<!-- ================================================================== -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>Data Model</h2>
+
+  <h3>Businesses Table</h3>
+  <table>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td><code>business_id</code></td>
+      <td>UUID (PK)</td>
+      <td>Globally unique identifier</td>
+    </tr>
+    <tr>
+      <td><code>name</code></td>
+      <td>VARCHAR(255)</td>
+      <td>Business display name</td>
+    </tr>
+    <tr>
+      <td><code>latitude</code></td>
+      <td>DOUBLE</td>
+      <td>WGS-84 latitude</td>
+    </tr>
+    <tr>
+      <td><code>longitude</code></td>
+      <td>DOUBLE</td>
+      <td>WGS-84 longitude</td>
+    </tr>
+    <tr>
+      <td><code>geohash</code></td>
+      <td>CHAR(8)</td>
+      <td>Pre-computed; indexed for prefix queries</td>
+    </tr>
+    <tr>
+      <td><code>category</code></td>
+      <td>VARCHAR(100)[]</td>
+      <td>Array: ["Japanese", "Sushi", "Seafood"]</td>
+    </tr>
+    <tr>
+      <td><code>price_range</code></td>
+      <td>ENUM(1-4)</td>
+      <td>$ to $$$$</td>
+    </tr>
+    <tr>
+      <td><code>avg_rating</code></td>
+      <td>DECIMAL(2,1)</td>
+      <td>Denormalized; updated async via Kafka</td>
+    </tr>
+    <tr>
+      <td><code>review_count</code></td>
+      <td>INT</td>
+      <td>Denormalized; updated async</td>
+    </tr>
+    <tr>
+      <td><code>hours_json</code></td>
+      <td>JSONB</td>
+      <td>Operating hours per day</td>
+    </tr>
+    <tr>
+      <td><code>owner_id</code></td>
+      <td>UUID (FK)</td>
+      <td>Verified business owner account</td>
+    </tr>
+    <tr>
+      <td><code>created_at</code></td>
+      <td>TIMESTAMP</td>
+      <td>Listing creation time</td>
+    </tr>
+  </table>
+
+  <h3>Reviews Table</h3>
+  <table>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td><code>review_id</code></td>
+      <td>UUID (PK)</td>
+      <td>Globally unique</td>
+    </tr>
+    <tr>
+      <td><code>business_id</code></td>
+      <td>UUID (FK)</td>
+      <td>References businesses table</td>
+    </tr>
+    <tr>
+      <td><code>user_id</code></td>
+      <td>UUID (FK)</td>
+      <td>Author of the review</td>
+    </tr>
+    <tr>
+      <td><code>rating</code></td>
+      <td>SMALLINT</td>
+      <td>1&ndash;5 stars</td>
+    </tr>
+    <tr>
+      <td><code>text</code></td>
+      <td>TEXT</td>
+      <td>Review body (max 5,000 chars)</td>
+    </tr>
+    <tr>
+      <td><code>useful_count</code></td>
+      <td>INT</td>
+      <td>"Useful" votes from other users</td>
+    </tr>
+    <tr>
+      <td><code>created_at</code></td>
+      <td>TIMESTAMP</td>
+      <td>Review submission time</td>
+    </tr>
+  </table>
+
+  <h3>Photos Table</h3>
+  <table>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td><code>photo_id</code></td>
+      <td>UUID (PK)</td>
+      <td>Globally unique</td>
+    </tr>
+    <tr>
+      <td><code>business_id</code></td>
+      <td>UUID (FK)</td>
+      <td>Associated business</td>
+    </tr>
+    <tr>
+      <td><code>user_id</code></td>
+      <td>UUID (FK)</td>
+      <td>Uploader</td>
+    </tr>
+    <tr>
+      <td><code>url</code></td>
+      <td>VARCHAR(512)</td>
+      <td>CDN URL (e.g., Ambry blob store)</td>
+    </tr>
+    <tr>
+      <td><code>caption</code></td>
+      <td>VARCHAR(255)</td>
+      <td>Optional user-provided caption</td>
+    </tr>
+    <tr>
+      <td><code>created_at</code></td>
+      <td>TIMESTAMP</td>
+      <td>Upload time</td>
+    </tr>
+  </table>
+
+  <h3>Users Table</h3>
+  <table>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td><code>user_id</code></td>
+      <td>UUID (PK)</td>
+      <td>Globally unique</td>
+    </tr>
+    <tr>
+      <td><code>username</code></td>
+      <td>VARCHAR(50)</td>
+      <td>Unique display name</td>
+    </tr>
+    <tr>
+      <td><code>email</code></td>
+      <td>VARCHAR(255)</td>
+      <td>Login credential</td>
+    </tr>
+    <tr>
+      <td><code>trust_score</code></td>
+      <td>DECIMAL(3,2)</td>
+      <td>0.00&ndash;1.00; used for review weight</td>
+    </tr>
+    <tr>
+      <td><code>review_count</code></td>
+      <td>INT</td>
+      <td>Total reviews written</td>
+    </tr>
+    <tr>
+      <td><code>created_at</code></td>
+      <td>TIMESTAMP</td>
+      <td>Account creation time</td>
+    </tr>
+  </table>
+
+  <div class="card highlight">
+    <strong>Storage Strategy:</strong>
+    <ul style="margin-top:8px; padding-left:20px;">
+      <li><strong>Businesses &amp; Users</strong> &rarr; Relational DB (MySQL / Espresso) with read replicas; strong consistency for ownership</li>
+      <li><strong>Reviews</strong> &rarr; Append-heavy workload; partition by <code>business_id</code> for locality. Eventual consistency OK.</li>
+      <li><strong>Photos</strong> &rarr; Metadata in DB; blobs in object store (S3 / Ambry) behind CDN</li>
+      <li><strong>Geospatial Index</strong> &rarr; Elasticsearch <code>geo_point</code> field or Redis sorted sets keyed by geohash</li>
+      <li><strong>Search Index</strong> &rarr; Elasticsearch / Galene inverted index over business documents</li>
+      <li><strong>Cache</strong> &rarr; Couchbase / Redis for hot business profiles and search result pages</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- SECTION 6: LinkedIn Mapping & Interview Questions -->
+<!-- ================================================================== -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>How LinkedIn Would Build It</h3>
+
+  <table>
+    <tr>
+      <th>Yelp Component</th>
+      <th>LinkedIn Equivalent</th>
+      <th>Details</th>
+    </tr>
+    <tr>
+      <td>Full-Text Search + Geo Indexing</td>
+      <td><span class="linkedin-tag">Galene</span></td>
+      <td>LinkedIn's custom search engine. Supports inverted indexes, geo_point fields, BM25 scoring, and faceted filtering. Would handle both text relevance and geospatial proximity in a single query.</td>
+    </tr>
+    <tr>
+      <td>Business &amp; User DB (relational)</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn's document-oriented DB with strong consistency, secondary indexes, and change capture. Business profiles, user accounts, and ownership records would live here.</td>
+    </tr>
+    <tr>
+      <td>Hot Data Cache</td>
+      <td><span class="linkedin-tag">Couchbase</span></td>
+      <td>Sub-millisecond KV lookups for hot business profiles, aggregated ratings, and recent search results. Invalidated via Kafka change events from Espresso.</td>
+    </tr>
+    <tr>
+      <td>Photo / Media Storage</td>
+      <td><span class="linkedin-tag">Ambry</span></td>
+      <td>LinkedIn's distributed blob store optimized for immutable media. Business photos and user avatars stored as blobs, served via CDN edge.</td>
+    </tr>
+    <tr>
+      <td>Event Streaming (review events, rating updates)</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>Review submissions produce Kafka events consumed by: (1) rating aggregator, (2) search index updater, (3) recommendation pipeline, (4) anti-spam detector.</td>
+    </tr>
+    <tr>
+      <td>API Layer &amp; Service Mesh</td>
+      <td><span class="linkedin-tag">Rest.li + D2</span></td>
+      <td>Rest.li provides the RESTful API framework; D2 handles service discovery and load balancing across Search, Business, Review, and Recommendation service instances.</td>
+    </tr>
+  </table>
+
+  <div class="walkthrough">
+    <h4>Data Flow at LinkedIn</h4>
+    <ol>
+      <li>Business owner creates listing via <span class="linkedin-tag">Rest.li</span> API &rarr; written to <span class="linkedin-tag">Espresso</span> &rarr; change-capture event to <span class="linkedin-tag">Kafka</span></li>
+      <li>Kafka consumer indexes the business in <span class="linkedin-tag">Galene</span> (text + geo_point fields) and warms <span class="linkedin-tag">Couchbase</span> cache</li>
+      <li>User searches "sushi near me" &rarr; <span class="linkedin-tag">D2</span> routes to Search Service &rarr; <span class="linkedin-tag">Galene</span> geo-filtered BM25 query</li>
+      <li>Top-K business IDs hydrated from <span class="linkedin-tag">Couchbase</span> (cache hit) or <span class="linkedin-tag">Espresso</span> (cache miss)</li>
+      <li>Photos served from <span class="linkedin-tag">Ambry</span> via CDN; review counts and ratings served from denormalized cache</li>
+    </ol>
+  </div>
+
+  <h3>Interview Questions</h3>
+
+  <div class="card highlight">
+    <h4>Q1: How do you handle the geohash boundary problem?</h4>
+    <p><strong>A:</strong> Use the <strong>9-cell neighbor approach</strong>. For a given precision level, compute the target geohash cell and its 8 adjacent neighbors. Query all 9 cells, then apply a precise <strong>Haversine distance filter</strong> on the candidates to get exact results within the requested radius. This is O(9 &times; k) where k is the average businesses per cell.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Q2: How would you handle a search radius that spans multiple geohash precision levels?</h4>
+    <p><strong>A:</strong> Use <strong>adaptive precision</strong>. For a 500 m radius, use precision 6 (~1.2 km cells). For 5 km, use precision 5 (~4.9 km cells). For 50 km, use precision 4 (~39 km cells). The Search Service selects precision dynamically based on the requested radius, then applies the 9-cell pattern at that level. For very large radii, cascade: query precision 4 cells, then refine with Haversine.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Q3: Why not use a QuadTree instead of Geohash?</h4>
+    <p><strong>A:</strong> QuadTrees are excellent for <strong>in-memory single-node</strong> spatial queries but are hard to distribute. They can't be sharded by prefix, don't map to a simple string key, and require the entire tree in memory. Geohash strings are <strong>trivially shardable</strong> (partition by first 2 characters = 1,024 shards), work with any sorted index (Redis, Cassandra, Elasticsearch), and support variable precision via truncation. For a distributed proximity search system, geohash wins on operational simplicity.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Q4: How do you keep the search index consistent with the database?</h4>
+    <p><strong>A:</strong> Use <strong>change data capture (CDC)</strong> via Kafka. Every write to the business DB (Espresso) emits a change event. A Kafka consumer updates the Galene search index asynchronously. The lag is typically &lt; 2 seconds. For critical fields (e.g., business closure), a <strong>synchronous dual-write</strong> to both DB and index can be used, with a reconciliation job to fix any drift.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Q5: How do you prevent fake reviews from gaming the ranking?</h4>
+    <p><strong>A:</strong> Multi-layered defense: (1) <strong>Review velocity detection</strong> &mdash; flag businesses receiving 10x their normal review rate. (2) <strong>Reviewer trust scoring</strong> &mdash; new accounts with zero history have lower weight. (3) <strong>NLP analysis</strong> &mdash; detect template reviews, sentiment inconsistency, and copy-paste patterns. (4) <strong>Behavioral signals</strong> &mdash; check-in verification, session duration, and geographic plausibility (reviewing a Tokyo restaurant from a US IP in 5 seconds is suspicious).</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Q6: How would you shard the business database?</h4>
+    <p><strong>A:</strong> Shard by <strong>geohash prefix</strong> (first 2&ndash;3 characters). This co-locates geographically nearby businesses on the same shard, making proximity queries hit fewer shards. For reviews, shard by <code>business_id</code> so all reviews for a business are on one shard. Cross-shard joins are avoided by denormalizing <code>avg_rating</code> and <code>review_count</code> onto the business row.</p>
+  </div>
+
+  <div class="card warn">
+    <h4>Q7: What happens when a popular area (e.g., Times Square) has a hot geohash shard?</h4>
+    <p><strong>A:</strong> Hot-shard mitigation: (1) <strong>Read replicas</strong> &mdash; most queries are reads; replicate hot shards 3&ndash;5x. (2) <strong>Caching</strong> &mdash; popular area search results are cached in Couchbase with short TTLs (30s&ndash;2min). (3) <strong>Sub-sharding</strong> &mdash; split a hot geohash prefix into finer-grained sub-shards (e.g., "dr5ru" &rarr; "dr5ru0" through "dr5ruz"). (4) <strong>Separate read path</strong> &mdash; serve search queries entirely from the Galene index, not the primary DB.</p>
+  </div>
+</div>
+
+</div><!-- /.container -->
+
+<footer>
+  <div class="container">
+    System Design Guide &bull; Design Yelp (Proximity Search) &bull; Geohash + BM25 + Distance Decay
+  </div>
+</footer>
+
+</body>
+</html>

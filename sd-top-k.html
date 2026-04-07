@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Spotify Top K Songs</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #1DB954;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a0f 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.green { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.green:hover { background: rgba(29,185,84,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Spotify Top K Songs</span></h1>
+    <p>Real-time and batch computation of the most-played songs across hundreds of millions of users &mdash; approximate counting, Lambda architecture, and multi-dimensional leaderboards at scale.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-top-k.html" class="green">Top K Songs (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale Estimation</a>
+      <ul class="sub">
+        <li><a href="#sec-1-1">Functional Requirements</a></li>
+        <li><a href="#sec-1-2">Scale Numbers</a></li>
+        <li><a href="#sec-1-3">API Design</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-2">Lambda Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Hot Path &mdash; Real-Time Stream Processing</a></li>
+        <li><a href="#sec-2-2">Cold Path &mdash; Batch Processing</a></li>
+        <li><a href="#sec-2-3">Serving Layer &amp; Merge Strategy</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Approximate Counting Algorithms</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Count-Min Sketch</a></li>
+        <li><a href="#sec-3-2">HeavyKeeper</a></li>
+        <li><a href="#sec-3-3">Space-Saving Algorithm</a></li>
+        <li><a href="#sec-3-4">Comparison Table</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Multi-Dimensional Top-K</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Dimension Breakdown</a></li>
+        <li><a href="#sec-4-2">Storage &amp; Partitioning</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Design Decisions &amp; Trade-Offs</a>
+      <ul class="sub">
+        <li><a href="#sec-5-1">Approximate vs Exact Counting</a></li>
+        <li><a href="#sec-5-2">Lambda vs Kappa Architecture</a></li>
+        <li><a href="#sec-5-3">Time-Decay Weighting</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a>
+      <ul class="sub">
+        <li><a href="#sec-6-1">LinkedIn Tech Stack Mapping</a></li>
+        <li><a href="#sec-6-2">Interview Questions</a></li>
+      </ul>
+    </li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: Overview -->
+<!-- ============================================================ -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>Overview &amp; Scale Estimation</h2>
+
+  <p>The <strong>Top K Songs</strong> problem asks us to build a system that continuously computes the most-played songs across a massive streaming platform. Unlike simple counters, we need <strong>real-time freshness</strong> (charts update within minutes), <strong>exact historical accuracy</strong> (daily/weekly official charts), and <strong>multi-dimensional slicing</strong> (by country, genre, playlist, and time window).</p>
+
+  <h3 id="sec-1-1">Functional Requirements</h3>
+  <div class="card highlight">
+    <ul style="padding-left: 20px;">
+      <li><strong>Real-time Top 50</strong> &mdash; Return top 50 songs globally and per-dimension, updated within 1&ndash;2 minutes of a play event.</li>
+      <li><strong>Historical Charts</strong> &mdash; Daily, weekly, and monthly official charts computed from exact play counts.</li>
+      <li><strong>Multi-Dimensional</strong> &mdash; Slice by Global, Country, City, Genre, Playlist, and arbitrary time periods.</li>
+      <li><strong>Deduplication</strong> &mdash; A user playing the same song on repeat should count only once per 30-second window (fraud prevention).</li>
+      <li><strong>API</strong> &mdash; Clients query <code>GET /top-k?dimension=country&amp;value=US&amp;k=50</code> and receive an ordered list.</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-1-2">Scale Numbers</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">500M</div>
+      <div class="label">Monthly Active Users</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">100M</div>
+      <div class="label">Songs in Catalog</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">1B+</div>
+      <div class="label">Play Events / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">Top 50</div>
+      <div class="label">Per Dimension</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~12K</div>
+      <div class="label">Play Events / Second (avg)</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~50K</div>
+      <div class="label">Peak Events / Second</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">200+</div>
+      <div class="label">Countries</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt; 2 min</div>
+      <div class="label">Real-Time Freshness</div>
+    </div>
+  </div>
+
+  <h3 id="sec-1-3">API Design</h3>
+  <div class="card">
+    <h4>Query Endpoint</h4>
+    <pre>GET /v1/charts/top-k
+  ?dimension=country        // global | country | city | genre | playlist
+  &amp;value=US                 // dimension value (omit for global)
+  &amp;k=50                     // number of results (max 100)
+  &amp;period=realtime          // realtime | daily | weekly | monthly
+  &amp;date=2025-04-06          // for historical charts
+
+Response:
+{
+  "dimension": "country",
+  "value": "US",
+  "k": 50,
+  "period": "realtime",
+  "updated_at": "2025-04-06T14:32:01Z",
+  "songs": [
+    { "rank": 1, "song_id": "s_abc123", "title": "...", "artist": "...", "play_count": 2847193 },
+    { "rank": 2, "song_id": "s_def456", "title": "...", "artist": "...", "play_count": 2691042 },
+    ...
+  ]
+}</pre>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: Lambda Architecture -->
+<!-- ============================================================ -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>Lambda Architecture</h2>
+
+  <p>We adopt a <strong>Lambda Architecture</strong> to get the best of both worlds: the <em>hot path</em> provides sub-minute freshness using approximate counting, while the <em>cold path</em> computes exact counts in batch. A <strong>serving layer</strong> merges both views to give users accurate, near-real-time results.</p>
+
+  <div class="diagram">
+    <img src="images/sd_topk_01_architecture.png" alt="Lambda Architecture for Top-K Songs">
+    <div class="caption">Figure 1 &mdash; Lambda Architecture: Hot path (stream) + Cold path (batch) merging into the Serving Layer</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Architecture Walkthrough</h4>
+    <ol>
+      <li><strong>Play Event Ingestion:</strong> Every song play generates an event containing <code>user_id</code>, <code>song_id</code>, <code>timestamp</code>, <code>country</code>, <code>city</code>, <code>genre_ids[]</code>, and <code>playlist_id</code>. Events are published to a <span class="linkedin-tag">Kafka</span> topic partitioned by <code>song_id</code> for ordering.</li>
+      <li><strong>Deduplication Gate:</strong> A stateful filter (keyed by <code>user_id + song_id</code>) drops duplicate plays within a 30-second tumbling window. This prevents repeat-play fraud from inflating counts.</li>
+      <li><strong>Hot Path (Real-Time):</strong> A <span class="linkedin-tag">Samza</span> stream processor consumes deduplicated events. For each dimension, it updates a <strong>Count-Min Sketch</strong> (approximate frequency) and a <strong>Min-Heap of size K</strong> (top-K tracker). Results are flushed to <span class="linkedin-tag">Redis</span> every 30 seconds.</li>
+      <li><strong>Cold Path (Batch):</strong> The same Kafka topic is also sinked to <span class="linkedin-tag">HDFS</span> via a Kafka Connect connector. A nightly <span class="linkedin-tag">Spark</span> batch job performs exact <code>GROUP BY song_id</code> aggregation, deduplicates, and writes official chart data to <span class="linkedin-tag">Venice</span> (LinkedIn&rsquo;s derived data store).</li>
+      <li><strong>Serving Layer:</strong> The API server reads from Redis for real-time queries and Venice for historical charts. For &ldquo;today so far&rdquo; queries, it merges last batch result + real-time delta.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-2-1">Hot Path &mdash; Real-Time Stream Processing</h3>
+
+  <div class="card success">
+    <h4>Stream Pipeline: Kafka &rarr; Samza &rarr; Redis</h4>
+    <p>The stream processor maintains <strong>in-memory data structures</strong> per partition:</p>
+    <ul style="padding-left: 20px; margin-top: 10px;">
+      <li><strong>Count-Min Sketch (CMS):</strong> A probabilistic data structure that estimates frequency of any song with bounded over-count error. Uses <code>d=5</code> hash functions and <code>w=10,000</code> buckets &mdash; only ~200 KB of memory per dimension.</li>
+      <li><strong>Min-Heap (size K=50):</strong> Tracks the current top-50. On each event, query the CMS for the song&rsquo;s estimated count; if it exceeds the heap minimum, replace and re-heapify. O(log K) per event.</li>
+      <li><strong>Flush Cycle:</strong> Every 30 seconds, serialize the top-50 list and write to Redis with a TTL of 5 minutes. Clients always see data &le; 30s stale.</li>
+    </ul>
+  </div>
+
+  <pre>// Pseudocode: Samza stream task for real-time Top-K
+class TopKStreamTask implements StreamTask {
+    CountMinSketch cms;       // d=5, w=10000
+    MinHeap&lt;SongCount&gt; heap;  // capacity = K = 50
+
+    void process(IncomingMessageEnvelope msg) {
+        PlayEvent e = deserialize(msg);
+        cms.add(e.songId);
+        long estimatedCount = cms.estimate(e.songId);
+
+        if (heap.size() &lt; K) {
+            heap.insert(new SongCount(e.songId, estimatedCount));
+        } else if (estimatedCount &gt; heap.peekMin().count) {
+            heap.replaceMin(new SongCount(e.songId, estimatedCount));
+        }
+    }
+
+    void onTimer() {  // every 30s
+        redis.set("topk:global:realtime", heap.toSortedList(), TTL=300s);
+    }
+}</pre>
+
+  <h3 id="sec-2-2">Cold Path &mdash; Batch Processing</h3>
+
+  <div class="card highlight">
+    <h4>Batch Pipeline: HDFS &rarr; Spark &rarr; Venice</h4>
+    <p>The batch layer runs once daily (or hourly for faster convergence) and computes <strong>exact</strong> play counts:</p>
+    <ul style="padding-left: 20px; margin-top: 10px;">
+      <li><strong>Input:</strong> Raw play events in Parquet format on HDFS, partitioned by date.</li>
+      <li><strong>Dedup:</strong> <code>SELECT DISTINCT user_id, song_id, date</code> to eliminate intra-day duplicates (a user playing the same song 100 times counts as 1 per day for official charts).</li>
+      <li><strong>Aggregation:</strong> <code>GROUP BY song_id, dimension</code> with exact <code>COUNT(*)</code>.</li>
+      <li><strong>Top-K Extraction:</strong> <code>ROW_NUMBER() OVER (PARTITION BY dimension ORDER BY count DESC) &le; 50</code></li>
+      <li><strong>Output:</strong> Results written to Venice as key-value pairs: <code>dimension:value:period &rarr; [ranked song list]</code>.</li>
+    </ul>
+  </div>
+
+  <pre>-- Spark SQL: Daily Top-K per country
+WITH deduped AS (
+    SELECT DISTINCT user_id, song_id, country, date
+    FROM play_events
+    WHERE date = '2025-04-06'
+),
+counts AS (
+    SELECT song_id, country, COUNT(*) AS play_count
+    FROM deduped
+    GROUP BY song_id, country
+),
+ranked AS (
+    SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY country ORDER BY play_count DESC
+    ) AS rank
+    FROM counts
+)
+SELECT * FROM ranked WHERE rank &lt;= 50;</pre>
+
+  <h3 id="sec-2-3">Serving Layer &amp; Merge Strategy</h3>
+
+  <div class="card warn">
+    <h4>Merging Real-Time + Batch</h4>
+    <p>For a query like &ldquo;Top 50 in the US right now,&rdquo; the serving layer performs:</p>
+    <ol style="padding-left: 20px; margin-top: 10px;">
+      <li>Fetch the last batch result from Venice (e.g., yesterday&rsquo;s exact counts).</li>
+      <li>Fetch the real-time delta from Redis (today&rsquo;s approximate counts since midnight).</li>
+      <li>Add the two: <code>merged_count = batch_count + realtime_delta</code>.</li>
+      <li>Re-sort and return the top 50.</li>
+    </ol>
+    <p style="margin-top: 12px;">This gives us <strong>exact historical accuracy</strong> with <strong>near-real-time freshness</strong>. The approximation error from the CMS only affects the &ldquo;today&rsquo;s delta&rdquo; portion, which is bounded by the CMS error guarantee: <code>&epsilon; &le; e/w &approx; 0.03%</code> over-count.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: Approximate Counting Algorithms -->
+<!-- ============================================================ -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>Approximate Counting Algorithms</h2>
+
+  <p>With 100M unique songs and 1B+ events/day, maintaining exact per-song counters in the hot path would require massive memory and cross-partition coordination. <strong>Approximate counting algorithms</strong> let us estimate frequencies with bounded error using orders-of-magnitude less memory.</p>
+
+  <h3 id="sec-3-1">Count-Min Sketch (CMS)</h3>
+
+  <div class="card highlight">
+    <h4>How It Works</h4>
+    <p>A Count-Min Sketch is a 2D array of counters with dimensions <code>d &times; w</code>, where <code>d</code> = number of independent hash functions and <code>w</code> = width (number of buckets per row).</p>
+
+    <pre>        Bucket 0    Bucket 1    Bucket 2    ...    Bucket w-1
+       +----------+----------+----------+-------+----------+
+h1(x)  |     3    |     0    |    12    |  ...  |     7    |
+       +----------+----------+----------+-------+----------+
+h2(x)  |     5    |     8    |     0    |  ...  |     2    |
+       +----------+----------+----------+-------+----------+
+h3(x)  |     1    |     0    |     9    |  ...  |     4    |
+       +----------+----------+----------+-------+----------+
+h4(x)  |     0    |    11    |     3    |  ...  |     6    |
+       +----------+----------+----------+-------+----------+
+h5(x)  |     7    |     2    |     0    |  ...  |     1    |
+       +----------+----------+----------+-------+----------+</pre>
+
+    <p style="margin-top: 12px;"><strong>Add(song_id):</strong> For each row <code>i</code>, compute <code>h_i(song_id) mod w</code> and increment that cell.</p>
+    <p><strong>Estimate(song_id):</strong> Return <code>min(counter[i][h_i(song_id)]) for i in 1..d</code>. The minimum across rows eliminates most collision noise.</p>
+    <p style="margin-top: 12px;"><strong>Guarantees:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li>Never under-counts (one-sided error &mdash; can only over-count).</li>
+      <li>Error bound: with probability <code>1 - &delta;</code>, the estimate is at most <code>&epsilon; &middot; N</code> above the true count, where <code>&epsilon; = e/w</code> and <code>&delta; = e^(-d)</code>.</li>
+      <li>Space: <code>O(d &times; w)</code> counters. With <code>d=5, w=10,000</code> and 4-byte counters = <strong>200 KB</strong>.</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-3-2">HeavyKeeper</h3>
+
+  <div class="card success">
+    <h4>Optimized for Heavy Hitters</h4>
+    <p><strong>HeavyKeeper</strong> combines a Count-Min Sketch with <em>fingerprint + decay</em> to focus accuracy on the most frequent items (exactly what we need for Top-K):</p>
+    <ul style="padding-left: 20px; margin-top: 10px;">
+      <li>Each cell stores <code>(fingerprint, counter)</code> instead of just a counter.</li>
+      <li>On collision (different item hashes to same cell), the existing counter is decayed with probability <code>b^(-counter)</code> (exponential decay), so low-frequency items are gradually evicted.</li>
+      <li>Heavy hitters survive because their high counters make decay exponentially unlikely.</li>
+      <li>Paired with a min-heap for top-K extraction &mdash; items that fall out of the sketch are also removed from the heap.</li>
+    </ul>
+    <p style="margin-top: 12px;"><strong>Advantage over CMS:</strong> Much higher accuracy for the top items (the ones we actually care about), at the cost of slightly worse accuracy for tail items (which we don&rsquo;t need).</p>
+  </div>
+
+  <h3 id="sec-3-3">Space-Saving Algorithm</h3>
+
+  <div class="card">
+    <h4>Deterministic Approximate Counting</h4>
+    <p>Space-Saving maintains a fixed-size map of <code>m</code> (item, count) pairs:</p>
+    <ol style="padding-left: 20px; margin-top: 10px;">
+      <li>If the item already exists in the map, increment its count.</li>
+      <li>If the item is new and the map is not full, insert it with count = 1.</li>
+      <li>If the item is new and the map is full, find the item with the <strong>minimum count</strong>, replace it with the new item, and set the new item&rsquo;s count to <code>min_count + 1</code>.</li>
+    </ol>
+    <p style="margin-top: 12px;"><strong>Guarantee:</strong> Any item with true frequency &gt; <code>N/m</code> is guaranteed to be in the map. Error per item is at most <code>N/m</code>.</p>
+    <p><strong>Drawback:</strong> Requires maintaining a sorted structure; harder to parallelize across partitions compared to CMS which is trivially mergeable.</p>
+  </div>
+
+  <h3 id="sec-3-4">Algorithm Comparison</h3>
+
+  <table>
+    <tr>
+      <th>Algorithm</th>
+      <th>Space</th>
+      <th>Error Type</th>
+      <th>Mergeable?</th>
+      <th>Best For</th>
+    </tr>
+    <tr>
+      <td><strong>Count-Min Sketch</strong></td>
+      <td>O(d &times; w) &mdash; ~200 KB</td>
+      <td>One-sided (over-count)</td>
+      <td>Yes (cell-wise add)</td>
+      <td>General frequency estimation</td>
+    </tr>
+    <tr>
+      <td><strong>HeavyKeeper</strong></td>
+      <td>O(d &times; w) &mdash; ~400 KB</td>
+      <td>One-sided, focused on top items</td>
+      <td>Partially (fingerprint conflicts)</td>
+      <td>Top-K heavy hitters specifically</td>
+    </tr>
+    <tr>
+      <td><strong>Space-Saving</strong></td>
+      <td>O(m) entries &mdash; ~few KB</td>
+      <td>Bounded two-sided</td>
+      <td>No (requires full merge)</td>
+      <td>Small K, single-node</td>
+    </tr>
+    <tr>
+      <td><strong>Count-Min Sketch + Min-Heap</strong></td>
+      <td>O(d&times;w + K) &mdash; ~200 KB</td>
+      <td>One-sided (over-count)</td>
+      <td>Yes</td>
+      <td>Distributed top-K (our choice)</td>
+    </tr>
+    <tr>
+      <td><strong>Exact HashMap</strong></td>
+      <td>O(n) &mdash; ~800 MB for 100M songs</td>
+      <td>None</td>
+      <td>Yes (merge maps)</td>
+      <td>Batch/cold path only</td>
+    </tr>
+  </table>
+
+  <div class="card warn">
+    <h4>Why CMS + Min-Heap for the Hot Path?</h4>
+    <p>We chose <strong>Count-Min Sketch + Min-Heap</strong> because: (1) CMS sketches are <strong>trivially mergeable</strong> &mdash; just add corresponding cells &mdash; making them ideal for distributed stream processing with multiple Samza partitions; (2) the one-sided error guarantee means we never miss a true top-K song (we might include a borderline song that doesn&rsquo;t belong, but we never exclude one that does); (3) memory footprint is ~200 KB per dimension, allowing us to track dozens of dimensions per task instance.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: Multi-Dimensional Top-K -->
+<!-- ============================================================ -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Multi-Dimensional Top-K</h2>
+
+  <p>Users don&rsquo;t just want &ldquo;global top 50&rdquo; &mdash; they want charts sliced by geography, genre, playlist context, and time. Each dimension requires its own set of counters.</p>
+
+  <h3 id="sec-4-1">Dimension Breakdown</h3>
+
+  <table>
+    <tr>
+      <th>Dimension</th>
+      <th>Cardinality</th>
+      <th>Counter Sets</th>
+      <th>Memory (CMS per set)</th>
+      <th>Total Memory</th>
+    </tr>
+    <tr>
+      <td><strong>Global</strong></td>
+      <td>1</td>
+      <td>1</td>
+      <td>200 KB</td>
+      <td>200 KB</td>
+    </tr>
+    <tr>
+      <td><strong>Country</strong></td>
+      <td>~200</td>
+      <td>200</td>
+      <td>200 KB</td>
+      <td>~40 MB</td>
+    </tr>
+    <tr>
+      <td><strong>City</strong></td>
+      <td>~5,000 (top cities)</td>
+      <td>5,000</td>
+      <td>100 KB (smaller w)</td>
+      <td>~500 MB</td>
+    </tr>
+    <tr>
+      <td><strong>Genre</strong></td>
+      <td>~50</td>
+      <td>50</td>
+      <td>200 KB</td>
+      <td>~10 MB</td>
+    </tr>
+    <tr>
+      <td><strong>Playlist</strong></td>
+      <td>~10,000 (curated)</td>
+      <td>10,000</td>
+      <td>50 KB (smaller w)</td>
+      <td>~500 MB</td>
+    </tr>
+    <tr>
+      <td><strong>Time Period</strong></td>
+      <td>3 (hourly/daily/weekly)</td>
+      <td>3 &times; other dims</td>
+      <td>Shared with above</td>
+      <td>~3&times; overhead</td>
+    </tr>
+  </table>
+
+  <div class="card highlight">
+    <h4>Fan-Out Pattern</h4>
+    <p>Each play event <strong>fans out</strong> to multiple counter sets. A single play of song <code>X</code> by a user in <em>New York, USA</em> on a <em>Pop</em> playlist updates:</p>
+    <ul style="padding-left: 20px; margin-top: 10px;">
+      <li><code>global</code> CMS &mdash; 1 update</li>
+      <li><code>country:US</code> CMS &mdash; 1 update</li>
+      <li><code>city:new_york</code> CMS &mdash; 1 update</li>
+      <li><code>genre:pop</code> CMS &mdash; 1 update (per genre tag)</li>
+      <li><code>playlist:p_xyz</code> CMS &mdash; 1 update</li>
+    </ul>
+    <p style="margin-top: 12px;">That&rsquo;s ~5 CMS updates per event. At 50K events/sec peak, that&rsquo;s 250K CMS increment operations/sec &mdash; trivially fast since each is just <code>d=5</code> array increments in memory.</p>
+  </div>
+
+  <h3 id="sec-4-2">Storage &amp; Partitioning</h3>
+
+  <div class="card">
+    <h4>Partitioning Strategy</h4>
+    <p>We partition the stream processing by <strong>dimension type</strong>:</p>
+    <ul style="padding-left: 20px; margin-top: 10px;">
+      <li><strong>Global + Country + Genre:</strong> Single Samza job (low cardinality, fits in one task&rsquo;s memory).</li>
+      <li><strong>City:</strong> Separate Samza job, partitioned by city hash. Each partition handles ~500 cities.</li>
+      <li><strong>Playlist:</strong> Separate Samza job, partitioned by playlist ID. Curated playlists only (editorial team manages the list).</li>
+    </ul>
+    <p style="margin-top: 12px;">Redis keys follow the pattern: <code>topk:{dimension}:{value}:{period}</code></p>
+    <pre>topk:global::realtime          → [song1, song2, ..., song50]
+topk:country:US:realtime       → [song1, song2, ..., song50]
+topk:city:new_york:realtime    → [song1, song2, ..., song50]
+topk:genre:pop:daily           → [song1, song2, ..., song50]</pre>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: Design Decisions & Trade-Offs -->
+<!-- ============================================================ -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>Design Decisions &amp; Trade-Offs</h2>
+
+  <h3 id="sec-5-1">Approximate vs Exact Counting</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Approximate (Hot Path)</h4>
+      <ul style="padding-left: 20px; margin-top: 8px;">
+        <li>200 KB memory per dimension</li>
+        <li>Sub-second latency per event</li>
+        <li>No coordination between partitions</li>
+        <li>Mergeable across parallel instances</li>
+        <li>&le; 0.03% over-count error</li>
+      </ul>
+    </div>
+    <div class="card danger">
+      <h4>Exact (Cold Path)</h4>
+      <ul style="padding-left: 20px; margin-top: 8px;">
+        <li>~800 MB for 100M song counters</li>
+        <li>Batch latency (hourly/daily)</li>
+        <li>Requires shuffle/reduce for aggregation</li>
+        <li>Guaranteed correct results</li>
+        <li>Required for official published charts</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <h4>Why Both?</h4>
+    <p>Approximate counting is perfect for &ldquo;what&rsquo;s trending right now?&rdquo; &mdash; users don&rsquo;t notice if the #47 song is actually #48. But for official weekly charts that determine royalty payouts, we need exact counts. The Lambda Architecture gives us both without compromise.</p>
+  </div>
+
+  <h3 id="sec-5-2">Lambda vs Kappa Architecture</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Lambda (Our Choice)</h4>
+      <ul style="padding-left: 20px; margin-top: 8px;">
+        <li>Separate code paths for batch &amp; stream</li>
+        <li>Batch corrects any stream approximation errors</li>
+        <li>Can use best tool for each path (Spark for batch, Samza for stream)</li>
+        <li>Tradeoff: two codebases to maintain</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Kappa (Alternative)</h4>
+      <ul style="padding-left: 20px; margin-top: 8px;">
+        <li>Single stream processing path for everything</li>
+        <li>Replay Kafka log for historical recomputation</li>
+        <li>Simpler architecture, one codebase</li>
+        <li>Tradeoff: harder to guarantee exact counts; Kafka retention limits historical reprocessing</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card warn">
+    <h4>Why Lambda Wins Here</h4>
+    <p>Top-K requires both approximate (fast) and exact (correct) results simultaneously. Kappa would need to maintain exact counts in the stream layer, which defeats the memory advantage of approximate algorithms. Lambda lets us use CMS in the hot path (200 KB) while Spark handles exact counts in batch (with disk-backed shuffles for 100M songs).</p>
+  </div>
+
+  <h3 id="sec-5-3">Time-Decay Weighting</h3>
+
+  <div class="card highlight">
+    <h4>Freshness vs Cumulative Popularity</h4>
+    <p>A naive top-K counts all plays equally, so an old hit with millions of historical plays dominates forever. Time-decay weighting ensures charts reflect <em>current</em> trends:</p>
+    <pre>weighted_count(song) = &sum; play_i &times; decay(now - timestamp_i)
+
+// Exponential decay with half-life of 4 hours:
+decay(age) = 2^(-age / half_life)
+
+// A play from:
+//   0 min ago  → weight 1.0
+//   4 hrs ago  → weight 0.5
+//   8 hrs ago  → weight 0.25
+//   24 hrs ago → weight 0.016</pre>
+    <p style="margin-top: 12px;"><strong>Implementation:</strong> Instead of storing raw counts in the CMS, store weighted counts. On each event, increment by <code>1.0</code>. Periodically (every hour), multiply all cells by the decay factor <code>2^(-1/half_life_hours)</code>. This is equivalent to exponential smoothing and prevents stale songs from lingering.</p>
+  </div>
+
+  <div class="card">
+    <h4>Windowed vs Decayed Counting</h4>
+    <table>
+      <tr>
+        <th>Approach</th>
+        <th>Pros</th>
+        <th>Cons</th>
+      </tr>
+      <tr>
+        <td><strong>Tumbling Windows</strong> (e.g., last 1 hour)</td>
+        <td>Simple; clear boundary; no drift</td>
+        <td>Abrupt changes at window boundaries; a song can &ldquo;fall off a cliff&rdquo;</td>
+      </tr>
+      <tr>
+        <td><strong>Sliding Windows</strong> (last 1 hour, updated every minute)</td>
+        <td>Smoother transitions</td>
+        <td>Expensive: must store per-minute counts and re-aggregate</td>
+      </tr>
+      <tr>
+        <td><strong>Exponential Decay</strong> (our choice)</td>
+        <td>Smooth; single counter per item; no window management</td>
+        <td>Slightly harder to reason about; half-life tuning required</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: LinkedIn Mapping & Interview Questions -->
+<!-- ============================================================ -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3 id="sec-6-1">LinkedIn Tech Stack Mapping</h3>
+
+  <table>
+    <tr>
+      <th>Component</th>
+      <th>LinkedIn Equivalent</th>
+      <th>Role in Top-K</th>
+    </tr>
+    <tr>
+      <td>Message Queue</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>Play event ingestion; partitioned by song_id; source of truth for both hot and cold paths</td>
+    </tr>
+    <tr>
+      <td>Stream Processor</td>
+      <td><span class="linkedin-tag">Samza</span></td>
+      <td>Real-time CMS + Min-Heap updates; stateful processing with RocksDB local store; exactly-once via Kafka offsets</td>
+    </tr>
+    <tr>
+      <td>Batch Processor</td>
+      <td><span class="linkedin-tag">Spark</span></td>
+      <td>Nightly/hourly exact aggregation; GROUP BY with disk-backed shuffle; outputs to Venice</td>
+    </tr>
+    <tr>
+      <td>Derived Data Store</td>
+      <td><span class="linkedin-tag">Venice</span></td>
+      <td>Batch-computed exact charts; versioned key-value store; low-latency reads for serving layer</td>
+    </tr>
+    <tr>
+      <td>Real-Time Cache</td>
+      <td><span class="linkedin-tag">Couchbase</span></td>
+      <td>Replaces Redis in LinkedIn stack; stores real-time top-K lists; TTL-based expiry; sub-ms reads</td>
+    </tr>
+    <tr>
+      <td>ML &amp; Personalization</td>
+      <td><span class="linkedin-tag">Pro-ML</span></td>
+      <td>Personalized chart blending (mix global popularity with user taste); feature serving for ranking models</td>
+    </tr>
+  </table>
+
+  <div class="card success">
+    <h4>LinkedIn-Specific Considerations</h4>
+    <ul style="padding-left: 20px;">
+      <li><strong>Samza Changelog Streams:</strong> CMS state is checkpointed to a compacted Kafka topic, enabling task migration and rebalancing without losing sketch data.</li>
+      <li><strong>Venice Derived Data:</strong> Batch results are pushed to Venice using the Venice Push Job framework, supporting versioned snapshots and instant swapover between daily chart versions.</li>
+      <li><strong>Couchbase vs Redis:</strong> LinkedIn uses Couchbase for most caching needs. It supports TTL, CAS operations, and cross-datacenter replication &mdash; all important for multi-region chart consistency.</li>
+      <li><strong>Pro-ML Feature Store:</strong> Play counts and chart positions are also exported as features for recommendation models, closing the feedback loop between popularity and discovery.</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-6-2">Common Interview Questions</h3>
+
+  <div class="card">
+    <h4>Q1: How do you handle a new viral song that shoots up in 10 minutes?</h4>
+    <p>The hot path (Samza + CMS) detects it within 30 seconds. The CMS count grows rapidly, pushing the song into the Min-Heap. Redis is updated on the next flush cycle (30s). Total detection latency: &lt; 1 minute. The batch path will confirm the exact count in the next run.</p>
+  </div>
+
+  <div class="card">
+    <h4>Q2: What if a CMS collision causes a non-popular song to appear in Top 50?</h4>
+    <p>This is the false-positive risk of CMS (it over-counts, never under-counts). Mitigation: (1) Use <code>d=5</code> hash functions, which makes collision across all 5 rows astronomically unlikely for songs below 0.03% of total plays; (2) The batch path corrects any such errors within hours; (3) HeavyKeeper can replace CMS if collision rate is unacceptable for the hot path.</p>
+  </div>
+
+  <div class="card">
+    <h4>Q3: How do you scale to 200 countries &times; 5,000 cities?</h4>
+    <p>Each dimension set is a separate CMS (~200 KB). For 200 countries = 40 MB; for 5,000 cities with reduced sketch width = 500 MB. This fits in a single Samza container (2&ndash;4 GB heap). For more dimensions, shard by dimension type across separate Samza jobs with their own Kafka consumer groups.</p>
+  </div>
+
+  <div class="card">
+    <h4>Q4: Why not just use a distributed counter (e.g., Redis ZINCRBY)?</h4>
+    <p>At 50K events/sec peak, Redis ZINCRBY with 100M members in a sorted set would create enormous write amplification (O(log N) per update where N=100M). The CMS approach does O(d) = O(5) in-memory operations per event with no network I/O until the 30-second flush. Redis is only used for the final top-50 list, not per-event counting.</p>
+  </div>
+
+  <div class="card">
+    <h4>Q5: How do you prevent bot/fraud plays from inflating charts?</h4>
+    <p>Three layers: (1) <strong>Dedup gate</strong> &mdash; same user + same song within 30 seconds is dropped; (2) <strong>Rate limiting</strong> &mdash; if a user generates &gt; 100 play events/hour, flag and throttle; (3) <strong>Offline ML model</strong> &mdash; batch job identifies anomalous play patterns (e.g., 1000 accounts in the same IP range playing the same song) and removes fraudulent plays before official chart computation.</p>
+  </div>
+
+  <div class="card">
+    <h4>Q6: How do you handle multi-region deployment?</h4>
+    <p>Each datacenter runs its own hot path (Samza + local CMS). Sketches from different datacenters are <strong>merged</strong> (CMS addition is commutative and associative) at the serving layer, or a single global Kafka cluster is used with regional consumers. For the cold path, all events are replicated to a single HDFS cluster for unified batch processing.</p>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  <p>System Design Guide &mdash; Top K Songs &bull; Built for Interview Prep</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Pastebin</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #4CAF50;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a0a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.green { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.green:hover { background: rgba(76,175,80,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Pastebin</span></h1>
+    <p>A deep dive into designing a scalable text-sharing service &mdash; content deduplication, blob storage, caching, expiration, and syntax highlighting.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-pastebin.html" class="green">Design Pastebin (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Requirements</a>
+      <ul class="sub">
+        <li><a href="#sec-1-func">Functional Requirements</a></li>
+        <li><a href="#sec-1-nonfunc">Non-Functional Requirements</a></li>
+        <li><a href="#sec-1-arch">Architecture Overview</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-2">Data Model &amp; Storage Strategy</a>
+      <ul class="sub">
+        <li><a href="#sec-2-sep">Metadata vs Content Separation</a></li>
+        <li><a href="#sec-2-dedup">Content Deduplication</a></li>
+        <li><a href="#sec-2-tables">Data Model Tables</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">API Design</a>
+      <ul class="sub">
+        <li><a href="#sec-3-create">Create Paste</a></li>
+        <li><a href="#sec-3-read">Read Paste</a></li>
+        <li><a href="#sec-3-delete">Delete Paste</a></li>
+        <li><a href="#sec-3-raw">Get Raw Content</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Key Design Decisions</a>
+      <ul class="sub">
+        <li><a href="#sec-4-dedup">Content Deduplication</a></li>
+        <li><a href="#sec-4-expiry">Paste Expiration</a></li>
+        <li><a href="#sec-4-syntax">Syntax Highlighting</a></li>
+        <li><a href="#sec-4-rate">Rate Limiting</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Scaling &amp; Performance</a></li>
+    <li><a href="#sec-6">Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: Overview & Requirements -->
+<!-- ============================================================ -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 01</div>
+  <h2>Overview &amp; Requirements</h2>
+
+  <p>Pastebin is a text-sharing service that lets users upload snippets of text (code, logs, config) and share them via a unique URL. Think of it as a simple, write-once, read-many content store with optional expiration and syntax highlighting.</p>
+
+  <h3>Scale Estimates</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">10M</div>
+      <div class="label">Pastes Created / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">100M</div>
+      <div class="label">Paste Reads / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">10 KB</div>
+      <div class="label">Average Paste Size</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">10 MB</div>
+      <div class="label">Max Paste Size</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">10:1</div>
+      <div class="label">Read : Write Ratio</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~100 TB</div>
+      <div class="label">Storage / Year (raw)</div>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <strong>Back-of-Envelope:</strong> 10M pastes/day &times; 10 KB avg = 100 GB/day of new content. Over a year that&rsquo;s ~36.5 TB of raw content. With metadata overhead and replication, plan for ~100 TB/year. Read QPS: 100M / 86400 &approx; <strong>1,150 reads/sec</strong>. Write QPS: 10M / 86400 &approx; <strong>115 writes/sec</strong>.
+  </div>
+
+  <h3 id="sec-1-func">Functional Requirements</h3>
+  <div class="card success">
+    <ul style="padding-left: 20px;">
+      <li><strong>Create Paste</strong> &mdash; Upload text content with optional title, language, expiration, and visibility setting</li>
+      <li><strong>Read Paste</strong> &mdash; Retrieve paste content by unique short URL/ID</li>
+      <li><strong>Syntax Highlighting</strong> &mdash; Render pastes with language-specific highlighting</li>
+      <li><strong>Expiration</strong> &mdash; Pastes auto-delete after configurable TTL (10 min, 1 hour, 1 day, 1 week, 1 month, never)</li>
+      <li><strong>Visibility</strong> &mdash; Public (listed), unlisted (link-only), or private (owner-only)</li>
+      <li><strong>Raw View</strong> &mdash; Serve plain-text content without HTML rendering</li>
+      <li><strong>Delete Paste</strong> &mdash; Owner can delete their own pastes</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-1-nonfunc">Non-Functional Requirements</h3>
+  <div class="card warn">
+    <ul style="padding-left: 20px;">
+      <li><strong>Low Latency</strong> &mdash; p99 read latency &lt; 200ms; write latency &lt; 500ms</li>
+      <li><strong>High Availability</strong> &mdash; 99.9% uptime; reads must continue even if write path degrades</li>
+      <li><strong>Data Durability</strong> &mdash; Zero data loss for non-expired pastes; replicated across AZs</li>
+      <li><strong>Consistency</strong> &mdash; Eventual consistency acceptable (paste visible within seconds of creation)</li>
+      <li><strong>Abuse Prevention</strong> &mdash; Rate limiting, spam detection, content size caps</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-1-arch">Architecture Overview</h3>
+  <div class="diagram">
+    <img src="images/sd_pastebin_01_architecture.png" alt="Pastebin High-Level Architecture">
+    <div class="caption">Figure 1 &mdash; High-level architecture of a Pastebin-style service</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Architecture Walkthrough</h4>
+    <ol>
+      <li><strong>Client</strong> &mdash; Browser or API consumer sends create/read requests through a load balancer.</li>
+      <li><strong>Load Balancer</strong> &mdash; Distributes traffic across API server instances; handles TLS termination and rate limiting at the edge.</li>
+      <li><strong>API Servers</strong> &mdash; Stateless application tier that validates input, generates unique paste IDs, and orchestrates reads/writes.</li>
+      <li><strong>Key Generation Service (KGS)</strong> &mdash; Pre-generates unique short keys (Base62-encoded) to avoid collisions. Keys are stored in a two-table scheme: <code>unused_keys</code> and <code>used_keys</code>.</li>
+      <li><strong>Metadata DB</strong> &mdash; Stores paste metadata (title, language, expiration, visibility, owner, timestamps). Structured, indexed, and queryable.</li>
+      <li><strong>Content Store (Blob Storage)</strong> &mdash; Stores the actual paste content as immutable blobs keyed by content hash (SHA-256). Enables deduplication.</li>
+      <li><strong>Cache (Redis/Memcached)</strong> &mdash; Caches hot paste metadata and content to absorb the 10:1 read-heavy workload.</li>
+      <li><strong>CDN</strong> &mdash; Serves raw paste content and syntax-highlighted HTML for popular pastes at the edge.</li>
+      <li><strong>Cleanup Service</strong> &mdash; Background worker that scans for expired pastes and deletes them from both metadata DB and content store (if no other paste references the same content hash).</li>
+    </ol>
+  </div>
+
+  <h4>LinkedIn Tech Mapping</h4>
+  <table>
+    <tr>
+      <th>Component</th>
+      <th>LinkedIn Equivalent</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td>Load Balancer</td>
+      <td><span class="linkedin-tag">Indis (LB)</span></td>
+      <td>LinkedIn&rsquo;s software LB with TLS offload and L7 routing</td>
+    </tr>
+    <tr>
+      <td>API Servers</td>
+      <td><span class="linkedin-tag">Rest.li</span></td>
+      <td>Stateless REST framework with built-in validation</td>
+    </tr>
+    <tr>
+      <td>Key Generation Service</td>
+      <td><span class="linkedin-tag">d2 + UUID</span></td>
+      <td>Distributed ID generation using D2 service discovery</td>
+    </tr>
+    <tr>
+      <td>Metadata DB</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn&rsquo;s document store; schematized, indexed, horizontally partitioned</td>
+    </tr>
+    <tr>
+      <td>Content Store</td>
+      <td><span class="linkedin-tag">Ambry</span></td>
+      <td>LinkedIn&rsquo;s immutable blob store for large objects</td>
+    </tr>
+    <tr>
+      <td>Cache</td>
+      <td><span class="linkedin-tag">Couchbase</span></td>
+      <td>Distributed caching layer used across LinkedIn&rsquo;s services</td>
+    </tr>
+    <tr>
+      <td>CDN</td>
+      <td><span class="linkedin-tag">LinkedIn CDN</span></td>
+      <td>Multi-POP edge network for static content</td>
+    </tr>
+    <tr>
+      <td>Cleanup Service</td>
+      <td><span class="linkedin-tag">Azkaban / Gobblin</span></td>
+      <td>Scheduled job frameworks for background data management</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: Data Model & Storage Strategy -->
+<!-- ============================================================ -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 02</div>
+  <h2>Data Model &amp; Storage Strategy</h2>
+
+  <h3 id="sec-2-sep">Why Separate Metadata from Content?</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Separation Benefits</h4>
+      <ul style="padding-left: 20px;">
+        <li><strong>Independent scaling</strong> &mdash; Metadata is tiny (~200 bytes), content is large (up to 10 MB). Different storage engines optimize for each.</li>
+        <li><strong>Content deduplication</strong> &mdash; Multiple pastes with identical content reference the same blob via SHA-256 hash.</li>
+        <li><strong>Cache efficiency</strong> &mdash; Metadata fits entirely in cache; content cached separately by popularity.</li>
+        <li><strong>Faster queries</strong> &mdash; Listing, searching, and filtering operate on small metadata records only.</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h4>Tradeoffs</h4>
+      <ul style="padding-left: 20px;">
+        <li><strong>Two-phase writes</strong> &mdash; Must write content first, then metadata. Requires idempotency and error handling.</li>
+        <li><strong>Referential integrity</strong> &mdash; Orphaned blobs possible if metadata write fails; cleanup service handles this.</li>
+        <li><strong>Extra hop on read</strong> &mdash; Read metadata to get content hash, then fetch content. Mitigated by caching.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="sec-2-dedup">Content Deduplication via SHA-256</h3>
+
+  <div class="card highlight">
+    <p>Before storing content, compute <code>SHA-256(content)</code>. Use the hash as the blob key. If the hash already exists in the content store, skip the write and point the new paste metadata at the existing blob. This saves significant storage for commonly pasted snippets (e.g., &ldquo;Hello World&rdquo; programs, default configs).</p>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Dedup Write Flow</h4>
+    <ol>
+      <li>Client submits paste content to API server.</li>
+      <li>API server computes <code>content_hash = SHA-256(content)</code>.</li>
+      <li>Check content store: does <code>content_hash</code> already exist?</li>
+      <li><strong>If yes:</strong> skip content write, increment reference count.</li>
+      <li><strong>If no:</strong> write content blob with key = <code>content_hash</code>, set ref_count = 1.</li>
+      <li>Generate unique paste_id from KGS. Write metadata record pointing to <code>content_hash</code>.</li>
+      <li>Return paste URL to client.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-2-tables">Data Model Tables</h3>
+
+  <h4>Paste Metadata Table</h4>
+  <table>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td><code>paste_id</code></td>
+      <td>VARCHAR(8)</td>
+      <td>Primary key. Base62-encoded unique ID from KGS</td>
+    </tr>
+    <tr>
+      <td><code>content_hash</code></td>
+      <td>CHAR(64)</td>
+      <td>SHA-256 hash pointing to content blob</td>
+    </tr>
+    <tr>
+      <td><code>title</code></td>
+      <td>VARCHAR(255)</td>
+      <td>Optional user-supplied title</td>
+    </tr>
+    <tr>
+      <td><code>language</code></td>
+      <td>VARCHAR(30)</td>
+      <td>Syntax highlighting language (python, java, etc.)</td>
+    </tr>
+    <tr>
+      <td><code>visibility</code></td>
+      <td>ENUM</td>
+      <td>public | unlisted | private</td>
+    </tr>
+    <tr>
+      <td><code>owner_id</code></td>
+      <td>BIGINT</td>
+      <td>FK to user; NULL for anonymous pastes</td>
+    </tr>
+    <tr>
+      <td><code>content_size</code></td>
+      <td>INT</td>
+      <td>Size in bytes for display and quota enforcement</td>
+    </tr>
+    <tr>
+      <td><code>created_at</code></td>
+      <td>TIMESTAMP</td>
+      <td>Creation time (UTC)</td>
+    </tr>
+    <tr>
+      <td><code>expires_at</code></td>
+      <td>TIMESTAMP</td>
+      <td>NULL for never-expire; otherwise absolute expiry time</td>
+    </tr>
+  </table>
+
+  <h4>Content Blob Table (Blob Store)</h4>
+  <table>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td><code>content_hash</code></td>
+      <td>CHAR(64)</td>
+      <td>Primary key. SHA-256 of content</td>
+    </tr>
+    <tr>
+      <td><code>content</code></td>
+      <td>BLOB</td>
+      <td>Raw paste content (up to 10 MB)</td>
+    </tr>
+    <tr>
+      <td><code>ref_count</code></td>
+      <td>INT</td>
+      <td>Number of paste metadata records referencing this blob</td>
+    </tr>
+    <tr>
+      <td><code>created_at</code></td>
+      <td>TIMESTAMP</td>
+      <td>When blob was first stored</td>
+    </tr>
+  </table>
+
+  <h4>User Table</h4>
+  <table>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td><code>user_id</code></td>
+      <td>BIGINT</td>
+      <td>Primary key</td>
+    </tr>
+    <tr>
+      <td><code>username</code></td>
+      <td>VARCHAR(50)</td>
+      <td>Unique username</td>
+    </tr>
+    <tr>
+      <td><code>api_key</code></td>
+      <td>VARCHAR(64)</td>
+      <td>API authentication key</td>
+    </tr>
+    <tr>
+      <td><code>daily_quota</code></td>
+      <td>INT</td>
+      <td>Max pastes per day (rate limiting)</td>
+    </tr>
+    <tr>
+      <td><code>created_at</code></td>
+      <td>TIMESTAMP</td>
+      <td>Account creation time</td>
+    </tr>
+  </table>
+
+  <div class="diagram">
+    <img src="images/sd_pastebin_02_data_model.png" alt="Pastebin Data Model">
+    <div class="caption">Figure 2 &mdash; Data model relationships: Paste Metadata &rarr; Content Blob (via content_hash), Paste Metadata &rarr; User (via owner_id)</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Data Model Walkthrough</h4>
+    <ol>
+      <li><strong>Paste Metadata</strong> is the primary record. Each paste gets a unique <code>paste_id</code> from KGS and stores a pointer (<code>content_hash</code>) to the actual content.</li>
+      <li><strong>Content Blob</strong> is keyed by SHA-256 hash. Multiple paste metadata records can point to the same blob &mdash; this is how deduplication works.</li>
+      <li><strong>ref_count</strong> tracks how many pastes reference a blob. When it reaches zero (all referencing pastes deleted or expired), the cleanup service garbage-collects the blob.</li>
+      <li><strong>User Table</strong> is optional &mdash; anonymous pastes set <code>owner_id = NULL</code>. Registered users get API keys and daily quotas.</li>
+      <li><strong>Expiration</strong> is stored as an absolute timestamp. The cleanup service queries <code>WHERE expires_at &lt; NOW()</code> in batches.</li>
+    </ol>
+  </div>
+
+  <div class="card highlight">
+    <strong>LinkedIn Mapping:</strong> Metadata lives in <span class="linkedin-tag">Espresso</span> (document store with secondary indexes for listing by owner, expiration scans). Content blobs live in <span class="linkedin-tag">Ambry</span> (immutable blob store optimized for large objects, with built-in replication and content-addressed storage).
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: API Design -->
+<!-- ============================================================ -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 03</div>
+  <h2>API Design</h2>
+
+  <h3 id="sec-3-create">Create Paste &mdash; <code>POST /api/v1/pastes</code></h3>
+
+  <h4>Request</h4>
+  <pre>{
+  "content": "def hello():\n    print('Hello, World!')",
+  "title": "My Python Script",
+  "language": "python",
+  "expiration": "1d",
+  "visibility": "unlisted"
+}</pre>
+
+  <div class="card highlight">
+    <strong>Parameters:</strong>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li><code>content</code> (required) &mdash; Raw text content, max 10 MB</li>
+      <li><code>title</code> (optional) &mdash; Human-readable title, max 255 chars</li>
+      <li><code>language</code> (optional) &mdash; Language for syntax highlighting (auto-detected if omitted)</li>
+      <li><code>expiration</code> (optional) &mdash; One of: <code>10m</code>, <code>1h</code>, <code>1d</code>, <code>1w</code>, <code>1m</code>, <code>never</code>. Default: <code>never</code></li>
+      <li><code>visibility</code> (optional) &mdash; <code>public</code>, <code>unlisted</code>, or <code>private</code>. Default: <code>unlisted</code></li>
+    </ul>
+  </div>
+
+  <h4>Response &mdash; <code>201 Created</code></h4>
+  <pre>{
+  "paste_id": "aB3xK9z2",
+  "url": "https://paste.example.com/aB3xK9z2",
+  "raw_url": "https://paste.example.com/raw/aB3xK9z2",
+  "title": "My Python Script",
+  "language": "python",
+  "visibility": "unlisted",
+  "expires_at": "2025-04-08T14:30:00Z",
+  "created_at": "2025-04-07T14:30:00Z",
+  "content_size": 42
+}</pre>
+
+  <h3 id="sec-3-read">Read Paste &mdash; <code>GET /api/v1/pastes/{paste_id}</code></h3>
+
+  <h4>Response &mdash; <code>200 OK</code></h4>
+  <pre>{
+  "paste_id": "aB3xK9z2",
+  "title": "My Python Script",
+  "language": "python",
+  "content": "def hello():\n    print('Hello, World!')",
+  "visibility": "unlisted",
+  "created_at": "2025-04-07T14:30:00Z",
+  "expires_at": "2025-04-08T14:30:00Z",
+  "content_size": 42,
+  "view_count": 137
+}</pre>
+
+  <div class="card warn">
+    <strong>Access Control:</strong> If the paste is <code>private</code>, return <code>403 Forbidden</code> unless the requester is the owner. If the paste has expired, return <code>404 Not Found</code> with a message indicating the paste has expired.
+  </div>
+
+  <h3 id="sec-3-delete">Delete Paste &mdash; <code>DELETE /api/v1/pastes/{paste_id}</code></h3>
+
+  <h4>Response &mdash; <code>204 No Content</code></h4>
+  <pre>HTTP/1.1 204 No Content</pre>
+
+  <div class="card highlight">
+    <strong>Delete Flow:</strong> Verify ownership via API key or session token. Decrement <code>ref_count</code> on the content blob. Soft-delete the metadata record. If <code>ref_count</code> reaches zero, the cleanup service will garbage-collect the blob.
+  </div>
+
+  <h3 id="sec-3-raw">Get Raw Content &mdash; <code>GET /api/v1/pastes/{paste_id}/raw</code></h3>
+
+  <h4>Response &mdash; <code>200 OK</code></h4>
+  <pre>Content-Type: text/plain; charset=utf-8
+
+def hello():
+    print('Hello, World!')</pre>
+
+  <div class="card success">
+    <strong>CDN-Friendly:</strong> Raw content responses include <code>Cache-Control: public, max-age=3600</code> headers. Popular pastes are served directly from CDN edge nodes without hitting the origin.
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: Key Design Decisions -->
+<!-- ============================================================ -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 04</div>
+  <h2>Key Design Decisions</h2>
+
+  <h3 id="sec-4-dedup">Content Deduplication</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Pros</h4>
+      <ul style="padding-left: 20px;">
+        <li>Significant storage savings &mdash; common snippets stored once</li>
+        <li>Content-addressed storage aligns with blob store best practices</li>
+        <li>SHA-256 collision probability is astronomically low (~10<sup>-60</sup>)</li>
+        <li>Faster writes when content already exists (skip blob write)</li>
+      </ul>
+    </div>
+    <div class="card danger">
+      <h4>Cons</h4>
+      <ul style="padding-left: 20px;">
+        <li>Requires ref_count management and garbage collection</li>
+        <li>Hash computation adds CPU cost on every write</li>
+        <li>Concurrent dedup writes need atomic check-and-set</li>
+        <li>Deletion is more complex (decrement ref, not direct delete)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="sec-4-expiry">Paste Expiration</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Lazy Deletion (Chosen)</h4>
+      <ul style="padding-left: 20px;">
+        <li>On read: check <code>expires_at</code>; return 404 if expired</li>
+        <li>Background cleanup service purges in batches every 5 minutes</li>
+        <li>Simple, no TTL support needed at storage layer</li>
+        <li>Cleanup service is eventually consistent &mdash; acceptable for this use case</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h4>Active Deletion (Alternative)</h4>
+      <ul style="padding-left: 20px;">
+        <li>Use storage-level TTL (e.g., Cassandra TTL, Redis EXPIREAT)</li>
+        <li>Automatic, no cleanup service needed</li>
+        <li>Harder to implement dedup (can&rsquo;t set TTL on shared blobs)</li>
+        <li>Less control over deletion timing and batch sizes</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="sec-4-syntax">Syntax Highlighting</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Client-Side (Chosen for Default)</h4>
+      <ul style="padding-left: 20px;">
+        <li>Use highlight.js or Prism.js in the browser</li>
+        <li>Zero server CPU cost for highlighting</li>
+        <li>Supports 200+ languages without server changes</li>
+        <li>Slightly slower first render on large pastes</li>
+      </ul>
+    </div>
+    <div class="card highlight">
+      <h4>Server-Side (Chosen for Popular Pastes)</h4>
+      <ul style="padding-left: 20px;">
+        <li>Pre-render HTML for pastes with &gt; N views</li>
+        <li>Cache highlighted HTML in CDN</li>
+        <li>Instant render for popular pastes</li>
+        <li>Higher server cost, but only for hot content</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="sec-4-rate">Rate Limiting</h3>
+
+  <div class="card danger">
+    <h4>Multi-Layer Rate Limiting</h4>
+    <table>
+      <tr>
+        <th>Layer</th>
+        <th>Strategy</th>
+        <th>Limit</th>
+      </tr>
+      <tr>
+        <td>Edge / LB</td>
+        <td>IP-based token bucket</td>
+        <td>60 creates/min per IP</td>
+      </tr>
+      <tr>
+        <td>API Key</td>
+        <td>Sliding window counter</td>
+        <td>500 creates/day per API key</td>
+      </tr>
+      <tr>
+        <td>Anonymous</td>
+        <td>IP + fingerprint</td>
+        <td>10 creates/hour, max 50 KB each</td>
+      </tr>
+      <tr>
+        <td>Content</td>
+        <td>Size cap</td>
+        <td>10 MB max per paste</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: Scaling & Performance -->
+<!-- ============================================================ -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 05</div>
+  <h2>Scaling &amp; Performance</h2>
+
+  <h3>Read Path Optimization</h3>
+
+  <div class="card success">
+    <h4>Three-Tier Caching</h4>
+    <ol style="padding-left: 20px;">
+      <li><strong>CDN Edge</strong> &mdash; Cache raw content and pre-rendered HTML for popular pastes. TTL = 1 hour. Absorbs 60-70% of all reads.</li>
+      <li><strong>Redis / Memcached</strong> &mdash; Cache paste metadata and hot content blobs. LRU eviction. Absorbs 25-30% of remaining reads.</li>
+      <li><strong>Read Replicas</strong> &mdash; Metadata DB read replicas in each datacenter for cache misses. Only 5-10% of reads hit the primary.</li>
+    </ol>
+  </div>
+
+  <h3>Write Path Optimization</h3>
+
+  <div class="card highlight">
+    <ul style="padding-left: 20px;">
+      <li><strong>Content-first write</strong> &mdash; Write blob to content store before metadata. If metadata write fails, orphaned blob is cleaned up.</li>
+      <li><strong>Async indexing</strong> &mdash; Syntax highlighting pre-render and search indexing happen asynchronously via message queue.</li>
+      <li><strong>KGS key pre-generation</strong> &mdash; Keys are pre-generated in bulk and cached. API servers pull from a local pool, refilling from KGS in background.</li>
+    </ul>
+  </div>
+
+  <h3>Blob Storage Sharding</h3>
+
+  <div class="card warn">
+    <p>Content blobs are sharded by the first 2 characters of the SHA-256 hash, distributing across 256 shards (16 &times; 16). Each shard is replicated 3&times; across availability zones. This provides uniform distribution (SHA-256 output is uniformly random) and avoids hot-shard problems.</p>
+  </div>
+
+  <h3>LinkedIn Tech Mapping</h3>
+  <table>
+    <tr>
+      <th>Scaling Strategy</th>
+      <th>LinkedIn Technology</th>
+      <th>How It Applies</th>
+    </tr>
+    <tr>
+      <td>CDN for static content</td>
+      <td><span class="linkedin-tag">LinkedIn CDN</span></td>
+      <td>Edge caching for raw paste content and highlighted HTML</td>
+    </tr>
+    <tr>
+      <td>Distributed cache</td>
+      <td><span class="linkedin-tag">Couchbase</span></td>
+      <td>Hot paste metadata and content caching with LRU eviction</td>
+    </tr>
+    <tr>
+      <td>Read replicas</td>
+      <td><span class="linkedin-tag">Espresso Replicas</span></td>
+      <td>Metadata read replicas in each datacenter for low-latency reads</td>
+    </tr>
+    <tr>
+      <td>Blob sharding</td>
+      <td><span class="linkedin-tag">Ambry Partitions</span></td>
+      <td>Content-addressed blob store with hash-based partitioning and 3&times; replication</td>
+    </tr>
+    <tr>
+      <td>Async processing</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>Event stream for async syntax highlighting, search indexing, and analytics</td>
+    </tr>
+    <tr>
+      <td>Rate limiting</td>
+      <td><span class="linkedin-tag">Concord</span></td>
+      <td>Distributed rate limiting service at the edge</td>
+    </tr>
+    <tr>
+      <td>Service discovery</td>
+      <td><span class="linkedin-tag">D2</span></td>
+      <td>Dynamic service discovery and load balancing between API servers and storage</td>
+    </tr>
+    <tr>
+      <td>Background jobs</td>
+      <td><span class="linkedin-tag">Gobblin / Azkaban</span></td>
+      <td>Scheduled cleanup of expired pastes and orphaned blobs</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: Interview Questions -->
+<!-- ============================================================ -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 06</div>
+  <h2>Interview Questions</h2>
+
+  <div class="card highlight">
+    <h4>Q: How do you handle very large pastes (e.g., 10 MB)?</h4>
+    <p><strong>A:</strong> Large pastes are uploaded via chunked transfer encoding. The API server streams content directly to the blob store without buffering the full body in memory. On the read path, large pastes are served with <code>Content-Length</code> and <code>Accept-Ranges</code> headers to enable partial downloads. The CDN caches them at the edge, so repeat reads don&rsquo;t hit origin. For syntax highlighting, large pastes use client-side rendering with virtual scrolling (only highlight visible lines) to avoid freezing the browser.</p>
+  </div>
+
+  <div class="card warn">
+    <h4>Q: How does paste expiration work at scale?</h4>
+    <p><strong>A:</strong> Expiration uses a two-layer approach. <strong>Read-time check:</strong> every read compares <code>expires_at</code> against the current time; expired pastes return 404 immediately. <strong>Background cleanup:</strong> a scheduled job runs every 5 minutes, querying <code>WHERE expires_at &lt; NOW() LIMIT 1000</code> in batches. It soft-deletes metadata, decrements blob ref_counts, and garbage-collects blobs with ref_count = 0. The batch size and frequency are tunable. At 10M pastes/day with average 1-day TTL, the cleanup service processes ~7,000 expirations/minute, well within a single worker&rsquo;s capacity. Multiple workers can shard by paste_id range for parallelism.</p>
+  </div>
+
+  <div class="card danger">
+    <h4>Q: How do you prevent abuse (spam, malware, illegal content)?</h4>
+    <p><strong>A:</strong> Multiple layers: (1) <strong>Rate limiting</strong> at edge, API key, and IP level (see Section 4). (2) <strong>Content scanning</strong> &mdash; async pipeline checks pastes against known malware hashes and blocklists. (3) <strong>Size limits</strong> &mdash; 10 MB cap per paste, 50 KB for anonymous users. (4) <strong>CAPTCHA</strong> for anonymous users creating more than 3 pastes/hour. (5) <strong>Reporting mechanism</strong> &mdash; users can flag pastes for review. (6) <strong>Account reputation</strong> &mdash; new accounts start with lower quotas. Flagged content is hidden immediately and reviewed within 24 hours.</p>
+  </div>
+
+  <div class="card success">
+    <h4>Q: How does content deduplication interact with expiration and deletion?</h4>
+    <p><strong>A:</strong> Each content blob maintains a <code>ref_count</code> tracking how many paste metadata records reference it. When a paste expires or is deleted, its metadata is removed and the blob&rsquo;s ref_count is atomically decremented. The blob is only garbage-collected when ref_count reaches zero. This means if User A creates paste &ldquo;Hello World&rdquo; (expires in 1 hour) and User B creates the same paste (never expires), the content blob persists because User B&rsquo;s reference keeps ref_count &gt; 0. The atomic decrement uses <code>UPDATE SET ref_count = ref_count - 1 WHERE content_hash = ? AND ref_count &gt; 0</code> to prevent underflow. A periodic consistency checker scans for blobs with ref_count = 0 and no referencing metadata as a safety net.</p>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <p>System Design Series &mdash; Design Pastebin &bull; Built for interview preparation with LinkedIn tech mapping</p>
+</footer>
+
+</body>
+</html>

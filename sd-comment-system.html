@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Comment System</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #E91E63;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a0a1a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.red { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.red:hover { background: rgba(233,30,99,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>Comment System</span></h1>
+    <p>A deep dive into building a scalable, threaded comment system &mdash; threading models, real-time delivery, spam moderation, cursor pagination, and data modeling at scale.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-comment-system.html" class="red">Comment System (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#overview">Overview &amp; Scale Estimation</a></li>
+    <li><a href="#architecture">Architecture &amp; Data Model</a>
+      <ul class="sub">
+        <li><a href="#data-model">Comments Table Schema</a></li>
+        <li><a href="#arch-diagram">Architecture Diagram &amp; Walkthrough</a></li>
+      </ul>
+    </li>
+    <li><a href="#threading">Threading Approaches</a>
+      <ul class="sub">
+        <li><a href="#adjacency">Adjacency List</a></li>
+        <li><a href="#materialized">Materialized Path</a></li>
+        <li><a href="#nested">Nested Sets</a></li>
+        <li><a href="#recommendation">Recommendation</a></li>
+      </ul>
+    </li>
+    <li><a href="#pagination">Sorting &amp; Pagination</a></li>
+    <li><a href="#moderation">Moderation Pipeline</a></li>
+    <li><a href="#linkedin">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ===== SECTION 1: Overview ===== -->
+<div class="section" id="overview">
+  <div class="section-num">Section 01</div>
+  <h2>Overview &amp; Scale Estimation</h2>
+
+  <p>A comment system powers user interactions across posts, videos, articles, news feeds, and product listings. Users can post top-level comments, reply in threads, like/dislike, and see real-time updates. The system must handle massive read-heavy traffic with low-latency rendering of threaded comment trees.</p>
+
+  <h3>Functional Requirements</h3>
+  <div class="card highlight">
+    <ul>
+      <li><strong>Create comments</strong> on any entity (post, video, article, product)</li>
+      <li><strong>Threaded replies</strong> &mdash; nested conversations with configurable max depth</li>
+      <li><strong>Like / react</strong> to comments</li>
+      <li><strong>Sort</strong> by Top, Newest, or Oldest</li>
+      <li><strong>Real-time</strong> &mdash; new comments appear without page refresh</li>
+      <li><strong>Moderation</strong> &mdash; spam detection, flagging, admin review</li>
+      <li><strong>Pagination</strong> &mdash; efficient loading of large comment threads</li>
+    </ul>
+  </div>
+
+  <h3>Scale Estimation</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">500M</div>
+      <div class="label">Comment reads / day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">10M</div>
+      <div class="label">Comment writes / day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">50:1</div>
+      <div class="label">Read-to-write ratio</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~115</div>
+      <div class="label">Writes / second</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~5,800</div>
+      <div class="label">Reads / second</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt; 200ms</div>
+      <div class="label">p99 read latency target</div>
+    </div>
+  </div>
+
+  <div class="card warn">
+    <strong>Key Insight:</strong> The 50:1 read-to-write ratio makes aggressive caching essential. Most comment threads are read thousands of times but only written to occasionally. Hot entities (viral posts) can see 100,000+ reads per second on a single thread.
+  </div>
+</div>
+
+<!-- ===== SECTION 2: Architecture & Data Model ===== -->
+<div class="section" id="architecture">
+  <div class="section-num">Section 02</div>
+  <h2>Architecture &amp; Data Model</h2>
+
+  <p>The system is built around a <strong>Comment Service</strong> that coordinates reads and writes, backed by a partitioned database for persistence, a distributed cache for hot threads, and an event bus for asynchronous fanout.</p>
+
+  <h3>Core Components</h3>
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Comment Service</h4>
+      <p>Stateless REST/gRPC service that handles CRUD operations, builds comment trees, and enforces business rules (max depth, rate limiting, content validation).</p>
+    </div>
+    <div class="card highlight">
+      <h4>Redis Cache</h4>
+      <p>Caches serialized comment trees per entity. Invalidated on writes. Sorted sets for paginated top-level comment lists. TTL-based eviction for cold threads.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Espresso DB (Primary Store)</h4>
+      <p>Partitioned by <code>entity_id</code> so all comments for one entity live on the same shard. Supports secondary indexes on <code>parent_id</code> and <code>user_id</code>.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Kafka (Event Bus)</h4>
+      <p>Publishes <code>comment.created</code>, <code>comment.liked</code>, <code>comment.flagged</code> events. Consumers update counters, trigger moderation, push real-time notifications.</p>
+    </div>
+  </div>
+
+  <h3 id="data-model">Data Model: Comments Table</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Column</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>BIGINT (PK)</td><td>Snowflake-style globally unique comment ID</td></tr>
+      <tr><td><code>entity_type</code></td><td>ENUM</td><td>POST, VIDEO, ARTICLE, PRODUCT</td></tr>
+      <tr><td><code>entity_id</code></td><td>BIGINT</td><td>ID of the parent entity (partition key)</td></tr>
+      <tr><td><code>parent_id</code></td><td>BIGINT (nullable)</td><td>NULL for top-level, points to parent comment for replies</td></tr>
+      <tr><td><code>user_id</code></td><td>BIGINT</td><td>Author of the comment</td></tr>
+      <tr><td><code>content</code></td><td>TEXT</td><td>Comment body (max 2000 chars)</td></tr>
+      <tr><td><code>like_count</code></td><td>INT</td><td>Denormalized like counter</td></tr>
+      <tr><td><code>reply_count</code></td><td>INT</td><td>Denormalized direct reply counter</td></tr>
+      <tr><td><code>depth</code></td><td>TINYINT</td><td>Nesting level (0 = top-level, max 3)</td></tr>
+      <tr><td><code>status</code></td><td>ENUM</td><td>ACTIVE, DELETED, FLAGGED, SPAM</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Creation time (used for sort + cursor)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="card success">
+    <strong>Partitioning Strategy:</strong> Partition by <code>entity_id</code>. All comments for a single post/video co-locate on the same shard, making tree reconstruction a single-shard query. The <code>entity_type</code> + <code>entity_id</code> composite is the logical partition key.
+  </div>
+
+  <h3 id="arch-diagram">Architecture Diagram</h3>
+  <div class="diagram">
+    <img src="images/sd_comment_01_architecture.png" alt="Comment System Architecture">
+    <div class="caption">Figure 1 &mdash; Comment System high-level architecture: write path, read path, and async event processing.</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Write Path Walkthrough</h4>
+    <ol>
+      <li><strong>Client</strong> sends <code>POST /comments</code> with entity_id, content, and optional parent_id.</li>
+      <li><strong>Comment Service</strong> validates input (depth check, rate limit, content length), generates a Snowflake ID, computes <code>depth</code> from parent.</li>
+      <li><strong>Espresso DB</strong> &mdash; comment row is inserted; <code>reply_count</code> on parent is incremented atomically.</li>
+      <li><strong>Cache Invalidation</strong> &mdash; the cached comment tree for this entity_id is invalidated in Redis.</li>
+      <li><strong>Kafka Event</strong> &mdash; a <code>comment.created</code> event is published with full comment payload.</li>
+      <li><strong>Downstream Consumers</strong> &mdash; notification service alerts the entity owner and parent comment author; moderation pipeline scores the comment for spam.</li>
+    </ol>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Read Path Walkthrough</h4>
+    <ol>
+      <li><strong>Client</strong> requests <code>GET /comments?entity_id=X&sort=top&cursor=abc</code></li>
+      <li><strong>Comment Service</strong> checks Redis for a cached page. On <strong>cache hit</strong>, returns immediately (&lt; 5ms).</li>
+      <li>On <strong>cache miss</strong>, queries Espresso for top-level comments (<code>parent_id IS NULL</code>) sorted by the requested order, with cursor-based pagination.</li>
+      <li>For each top-level comment, fetches up to N replies (fan-out limited to <code>depth &le; 3</code>). Tree is assembled in-memory.</li>
+      <li>Result is cached in Redis with a TTL (30s for hot entities, 5min for cold) and returned to client.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ===== SECTION 3: Threading Approaches ===== -->
+<div class="section" id="threading">
+  <div class="section-num">Section 03</div>
+  <h2>Threading Approaches</h2>
+
+  <p>The core challenge of a comment system is representing and querying tree-structured data efficiently. There are three classical approaches, each with distinct trade-offs.</p>
+
+  <h3 id="adjacency">Adjacency List</h3>
+  <div class="card highlight">
+    <p>Each comment stores a <code>parent_id</code> pointing to its parent. Top-level comments have <code>parent_id = NULL</code>. The tree is reconstructed by the application via recursive queries or in-memory assembly.</p>
+    <pre>
+-- Fetch top-level comments
+SELECT * FROM comments
+WHERE entity_id = ? AND parent_id IS NULL
+ORDER BY created_at DESC LIMIT 20;
+
+-- Fetch replies for a comment
+SELECT * FROM comments
+WHERE parent_id = ? ORDER BY created_at ASC;</pre>
+  </div>
+
+  <h3 id="materialized">Materialized Path</h3>
+  <div class="card highlight">
+    <p>Each comment stores its full ancestry as a path string, e.g., <code>/root_id/parent_id/self_id</code>. Subtree queries become prefix matches.</p>
+    <pre>
+-- Schema addition
+path VARCHAR(500)  -- e.g., "/100/205/310"
+
+-- Fetch all descendants of comment 205
+SELECT * FROM comments
+WHERE entity_id = ? AND path LIKE '/100/205/%'
+ORDER BY path, created_at;</pre>
+  </div>
+
+  <h3 id="nested">Nested Sets</h3>
+  <div class="card highlight">
+    <p>Each node stores <code>lft</code> and <code>rgt</code> values. A node's descendants have <code>lft</code> between the parent's <code>lft</code> and <code>rgt</code>. Reads are fast but writes require renumbering.</p>
+    <pre>
+-- Schema additions
+lft INT, rgt INT
+
+-- Fetch all descendants of a comment
+SELECT * FROM comments
+WHERE entity_id = ? AND lft > parent.lft AND rgt < parent.rgt
+ORDER BY lft;</pre>
+  </div>
+
+  <h3>Comparison</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Criteria</th>
+        <th>Adjacency List</th>
+        <th>Materialized Path</th>
+        <th>Nested Sets</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Write complexity</strong></td>
+        <td style="color: var(--accent2);">O(1) &mdash; single insert</td>
+        <td style="color: var(--accent2);">O(1) &mdash; concat path</td>
+        <td style="color: var(--red);">O(n) &mdash; renumber siblings</td>
+      </tr>
+      <tr>
+        <td><strong>Read subtree</strong></td>
+        <td style="color: var(--accent4);">Recursive / multi-query</td>
+        <td style="color: var(--accent2);">Single LIKE prefix query</td>
+        <td style="color: var(--accent2);">Single range query</td>
+      </tr>
+      <tr>
+        <td><strong>Move subtree</strong></td>
+        <td style="color: var(--accent2);">Update one parent_id</td>
+        <td style="color: var(--accent4);">Update all descendant paths</td>
+        <td style="color: var(--red);">Full renumbering</td>
+      </tr>
+      <tr>
+        <td><strong>Depth limit</strong></td>
+        <td>Unlimited (but cap in practice)</td>
+        <td>Limited by path column size</td>
+        <td>Unlimited</td>
+      </tr>
+      <tr>
+        <td><strong>Index friendliness</strong></td>
+        <td style="color: var(--accent2);">Standard B-tree index</td>
+        <td style="color: var(--accent4);">LIKE prefix &mdash; partial index use</td>
+        <td style="color: var(--accent2);">Range scan on (lft, rgt)</td>
+      </tr>
+      <tr>
+        <td><strong>Concurrency</strong></td>
+        <td style="color: var(--accent2);">No contention</td>
+        <td style="color: var(--accent2);">No contention</td>
+        <td style="color: var(--red);">Lock contention on renumber</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 id="recommendation">Recommendation</h3>
+  <div class="card success">
+    <h4>Adjacency List + Denormalized Counts</h4>
+    <p>For a high-write, real-time comment system, <strong>Adjacency List</strong> is the best choice:</p>
+    <ul>
+      <li><strong>O(1) writes</strong> with no locking or renumbering &mdash; critical at 115 writes/sec.</li>
+      <li><strong>Denormalized <code>reply_count</code></strong> and <code>like_count</code> avoid expensive aggregation queries on reads.</li>
+      <li><strong>Depth capped at 3</strong> means tree reconstruction never requires deep recursion &mdash; at most 4 queries (one per level) or a single query with application-side grouping.</li>
+      <li><strong>Cache the assembled tree</strong> in Redis. The 50:1 read ratio means most reads hit cache, making the multi-query reconstruction cost negligible.</li>
+    </ul>
+    <p>Materialized Path is a strong alternative if you need subtree queries without depth limits, but the path column becomes a liability at scale (wide rows, partial index usage).</p>
+  </div>
+</div>
+
+<!-- ===== SECTION 4: Sorting & Pagination ===== -->
+<div class="section" id="pagination">
+  <div class="section-num">Section 04</div>
+  <h2>Sorting &amp; Pagination</h2>
+
+  <h3>Sort Modes</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Mode</th>
+        <th>ORDER BY</th>
+        <th>Use Case</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Top</strong></td>
+        <td><code>like_count DESC, created_at DESC</code></td>
+        <td>Default &mdash; surfaces the most-liked comments first</td>
+      </tr>
+      <tr>
+        <td><strong>Newest</strong></td>
+        <td><code>created_at DESC</code></td>
+        <td>Real-time discussions, live events</td>
+      </tr>
+      <tr>
+        <td><strong>Oldest</strong></td>
+        <td><code>created_at ASC</code></td>
+        <td>Reading threads chronologically</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Cursor-Based Pagination (Not Offset)</h3>
+  <div class="card highlight">
+    <h4>Why Not Offset?</h4>
+    <p>Offset-based pagination (<code>LIMIT 20 OFFSET 100</code>) breaks in real-time comment feeds:</p>
+    <ul>
+      <li><strong>Drift</strong> &mdash; if 5 new comments are inserted while a user paginates, <code>OFFSET 20</code> skips 5 comments the user hasn't seen and shows 5 duplicates.</li>
+      <li><strong>Performance</strong> &mdash; the database must scan and discard all <code>OFFSET</code> rows. At <code>OFFSET 10000</code> this is a full scan.</li>
+      <li><strong>Inconsistency</strong> &mdash; concurrent deletes can cause pages to have fewer items than expected.</li>
+    </ul>
+  </div>
+
+  <div class="card success">
+    <h4>Cursor-Based Approach</h4>
+    <p>The cursor encodes the last seen sort key, making each page request a simple range query with no skipping:</p>
+    <pre>
+-- Newest sort: cursor = last_seen_created_at
+SELECT * FROM comments
+WHERE entity_id = ?
+  AND parent_id IS NULL
+  AND created_at < :cursor_created_at
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- Top sort: cursor = (last_like_count, last_created_at)
+SELECT * FROM comments
+WHERE entity_id = ?
+  AND parent_id IS NULL
+  AND (like_count, created_at) < (:cursor_likes, :cursor_ts)
+ORDER BY like_count DESC, created_at DESC
+LIMIT 20;</pre>
+    <p>The API returns a <code>next_cursor</code> token (base64-encoded sort values) that the client passes on the next request.</p>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Offset Pagination</h4>
+      <ul>
+        <li>Simple to implement</li>
+        <li>Supports "jump to page N"</li>
+        <li style="color: var(--red);">Duplicates/skips on concurrent writes</li>
+        <li style="color: var(--red);">O(offset) DB scan cost</li>
+        <li style="color: var(--red);">Breaks in real-time feeds</li>
+      </ul>
+    </div>
+    <div class="card highlight">
+      <h4>Cursor Pagination</h4>
+      <ul>
+        <li style="color: var(--accent2);">Stable under concurrent writes</li>
+        <li style="color: var(--accent2);">O(1) seek via index</li>
+        <li style="color: var(--accent2);">Consistent real-time experience</li>
+        <li>Cannot jump to arbitrary page</li>
+        <li>Slightly more complex API contract</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card warn">
+    <strong>Interview Tip:</strong> Always mention cursor-based pagination in any system with real-time writes. It shows you understand the consistency vs. convenience trade-off. Mention that the cursor should be <strong>opaque</strong> to the client (base64-encoded) so the server can change the underlying sort strategy without breaking clients.
+  </div>
+</div>
+
+<!-- ===== SECTION 5: Moderation ===== -->
+<div class="section" id="moderation">
+  <div class="section-num">Section 05</div>
+  <h2>Moderation Pipeline</h2>
+
+  <p>At 10M comments/day, manual moderation is impossible. The system uses a multi-stage pipeline combining ML scoring, community flagging, and human review for edge cases.</p>
+
+  <h3>Pipeline Architecture</h3>
+  <div class="walkthrough">
+    <h4>Moderation Flow</h4>
+    <ol>
+      <li><strong>Inline Pre-Screen (synchronous)</strong> &mdash; on comment submission, a lightweight regex + blocklist filter catches obvious spam (URLs, repeated characters, known slurs). Runs in &lt; 10ms; rejects immediately if confidence &gt; 0.95.</li>
+      <li><strong>Kafka Event</strong> &mdash; <code>comment.created</code> event published to the <code>moderation</code> topic.</li>
+      <li><strong>ML Spam Classifier (async)</strong> &mdash; a Samza/Flink consumer runs the comment through a trained model that scores for spam, toxicity, and manipulation. Features include user history, comment text embeddings, entity context, and temporal patterns.</li>
+      <li><strong>Auto-Action</strong> &mdash; if ML confidence &gt; 0.9, the comment status is updated to <code>SPAM</code> automatically. If between 0.5&ndash;0.9, status set to <code>FLAGGED</code> for human review.</li>
+      <li><strong>Community Flagging</strong> &mdash; users can report comments. After N flags (threshold varies by entity size), comment is moved to <code>FLAGGED</code> and added to the admin review queue.</li>
+      <li><strong>Admin Review Queue</strong> &mdash; human reviewers see flagged comments with ML scores, user history, and context. They approve, delete, or escalate. Decisions feed back into ML training data.</li>
+    </ol>
+  </div>
+
+  <h3>Kafka Event Schema</h3>
+  <pre>
+{
+  "event_type": "comment.created",
+  "comment_id": 8830012345,
+  "entity_type": "POST",
+  "entity_id": 771002,
+  "user_id": 44210,
+  "content": "Check out this amazing deal...",
+  "depth": 0,
+  "timestamp": "2026-04-07T14:30:00Z",
+  "metadata": {
+    "user_account_age_days": 2,
+    "user_prior_spam_count": 0,
+    "ip_country": "US"
+  }
+}</pre>
+
+  <h3>Moderation Events</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>Producer</th>
+        <th>Consumers</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>comment.created</code></td>
+        <td>Comment Service</td>
+        <td>ML Classifier, Notification Service, Counter Service</td>
+      </tr>
+      <tr>
+        <td><code>comment.flagged</code></td>
+        <td>ML Classifier / Flag API</td>
+        <td>Admin Queue, Analytics</td>
+      </tr>
+      <tr>
+        <td><code>comment.moderated</code></td>
+        <td>Admin Review</td>
+        <td>Comment Service (status update), ML Training Pipeline</td>
+      </tr>
+      <tr>
+        <td><code>comment.liked</code></td>
+        <td>Like Service</td>
+        <td>Counter Service, Notification Service</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card danger">
+    <strong>Edge Case &mdash; Spam Bursts:</strong> A botnet can submit thousands of comments in seconds. Mitigations: per-user rate limiting (e.g., 5 comments/minute), CAPTCHA after threshold, IP-based throttling via a token bucket at the API gateway, and a Kafka consumer that detects burst patterns and bulk-flags.
+  </div>
+</div>
+
+<!-- ===== SECTION 6: LinkedIn Mapping & Interview Questions ===== -->
+<div class="section" id="linkedin">
+  <div class="section-num">Section 06</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>LinkedIn Technology Mapping</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Generic</th>
+        <th>LinkedIn Equivalent</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Primary Database</td>
+        <td>MySQL / PostgreSQL (sharded)</td>
+        <td><span class="linkedin-tag">Espresso</span> &mdash; LinkedIn's horizontally partitioned document store, partitioned by entity_id</td>
+      </tr>
+      <tr>
+        <td>Cache Layer</td>
+        <td>Redis / Memcached</td>
+        <td><span class="linkedin-tag">Couchbase</span> &mdash; distributed cache for hot comment trees with TTL-based eviction</td>
+      </tr>
+      <tr>
+        <td>Event Bus</td>
+        <td>Kafka</td>
+        <td><span class="linkedin-tag">Kafka</span> &mdash; LinkedIn-created, used for all async event delivery (comment.created, moderation events)</td>
+      </tr>
+      <tr>
+        <td>ML Moderation</td>
+        <td>Custom ML pipeline</td>
+        <td><span class="linkedin-tag">Pro-ML</span> &mdash; LinkedIn's ML platform for training and serving spam/toxicity models</td>
+      </tr>
+      <tr>
+        <td>Stream Processing</td>
+        <td>Flink / Spark Streaming</td>
+        <td><span class="linkedin-tag">Samza</span> &mdash; near-real-time stream processing for moderation scoring, counter updates, and notification fanout</td>
+      </tr>
+      <tr>
+        <td>API Gateway</td>
+        <td>Kong / Envoy</td>
+        <td><span class="linkedin-tag">Rest.li</span> &mdash; LinkedIn's REST framework with built-in rate limiting and auth</td>
+      </tr>
+      <tr>
+        <td>Notification Service</td>
+        <td>Push / WebSocket</td>
+        <td><span class="linkedin-tag">Real-time Infra</span> &mdash; LinkedIn's notification delivery platform for real-time comment updates</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card highlight">
+    <h4>Why Espresso for Comments?</h4>
+    <p>Espresso supports <strong>document-level partitioning</strong> by entity_id, keeping all comments for a post co-located. It provides:</p>
+    <ul>
+      <li>Automatic horizontal scaling with partition rebalancing</li>
+      <li>Secondary indexes for <code>parent_id</code> and <code>user_id</code> queries</li>
+      <li>Change-capture streams that integrate natively with Kafka</li>
+      <li>Strong consistency within a partition &mdash; important for counter increments</li>
+    </ul>
+  </div>
+
+  <h3>Common Interview Questions</h3>
+  <div class="card warn">
+    <h4>Design &amp; Architecture</h4>
+    <ol>
+      <li><strong>"How would you handle a viral post with 1M comments?"</strong> &mdash; Discuss hot partition mitigation: separate cache layer (Couchbase/Redis), pre-computed top-N comment snapshots, read replicas, and rate-limited writes with a queue.</li>
+      <li><strong>"How do you ensure real-time comment updates?"</strong> &mdash; WebSocket/SSE connections for active viewers. Kafka consumer pushes new comments to a presence-aware notification service. Fallback: polling every 5s.</li>
+      <li><strong>"Why not store the entire comment tree as a single document?"</strong> &mdash; Document size limits, write contention on the root document, inability to paginate within the tree, and no partial updates.</li>
+    </ol>
+  </div>
+
+  <div class="card warn">
+    <h4>Data Model &amp; Scaling</h4>
+    <ol start="4">
+      <li><strong>"How would you handle like counts without race conditions?"</strong> &mdash; Atomic increment in database (<code>UPDATE comments SET like_count = like_count + 1 WHERE id = ?</code>), idempotent like tracking in a separate <code>comment_likes</code> table with (user_id, comment_id) unique key.</li>
+      <li><strong>"What happens when a user deletes a comment with replies?"</strong> &mdash; Soft delete: set status to <code>DELETED</code>, show as "[deleted]" in UI while preserving reply tree structure. Hard delete only when all descendants are also deleted.</li>
+      <li><strong>"How do you partition comments across databases?"</strong> &mdash; By entity_id ensures all comments for one entity are co-located. Cross-entity queries (e.g., "all comments by user X") use a secondary index or a separate user-comments table.</li>
+    </ol>
+  </div>
+
+  <div class="card warn">
+    <h4>Moderation &amp; Edge Cases</h4>
+    <ol start="7">
+      <li><strong>"How do you handle edit history?"</strong> &mdash; Store edits in an append-only <code>comment_edits</code> table. Show "edited" badge in UI. Moderation re-scores on edit.</li>
+      <li><strong>"What about internationalization and emoji?"</strong> &mdash; UTF-8 storage, content-length limits in characters not bytes, and language-specific ML models for moderation.</li>
+      <li><strong>"How does cursor pagination work when like_count changes?"</strong> &mdash; The cursor encodes the values at read time. A comment's position can shift between pages, but no duplicates or gaps occur within a single pagination session.</li>
+      <li><strong>"How would you add a 'pin comment' feature?"</strong> &mdash; Add a <code>pinned</code> boolean and <code>pinned_at</code> timestamp. Pinned comments are fetched separately and prepended to results before pagination begins.</li>
+    </ol>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="container">
+    Design Comment System &mdash; System Design Interview Guide &bull; Built for learning &amp; interview prep
+  </div>
+</footer>
+
+</body>
+</html>

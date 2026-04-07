@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design TicketMaster</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #026CDF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a2e 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.blue { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.blue:hover { background: rgba(2,108,223,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>TicketMaster</span></h1>
+    <p>A complete deep dive into the architecture of a large-scale event ticketing platform &mdash; seat reservation, virtual waiting rooms, double-booking prevention, and flash-sale resilience.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">URL Shortener</a>
+      <a href="sd-ticketmaster.html" class="blue">Design TicketMaster (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale</a></li>
+    <li><a href="#sec-2">High-Level Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Core Services</a></li>
+        <li><a href="#sec-2-2">Booking Flow Walkthrough</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Seat Reservation &amp; Double-Booking Prevention</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Optimistic Locking</a></li>
+        <li><a href="#sec-3-2">Temporary Hold with Redis TTL</a></li>
+        <li><a href="#sec-3-3">Auto-Release on Expiry</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Virtual Waiting Room</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Queue &amp; Position Assignment</a></li>
+        <li><a href="#sec-4-2">Batch Admission &amp; Thundering Herd Prevention</a></li>
+        <li><a href="#sec-4-3">Fairness Guarantees</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Data Model</a></li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: Overview -->
+<!-- ============================================================ -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 01</div>
+  <h2>Overview &amp; Scale</h2>
+
+  <p>TicketMaster is the world's largest event ticketing platform, handling everything from small local venues to stadium concerts with 80,000+ seats. The core challenge: selling a <strong>finite, non-fungible inventory</strong> (every seat is unique) under extreme burst traffic while guaranteeing <strong>zero overbooking</strong>.</p>
+
+  <div class="card highlight">
+    <strong>Key Constraints:</strong> Unlike e-commerce where you can restock, a concert seat sold twice means two people show up to the same chair. There is no recovery &mdash; overbooking is an absolute hard failure.
+  </div>
+
+  <h3>Scale Numbers</h3>
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">500M</div>
+      <div class="label">Tickets sold / year</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">100K</div>
+      <div class="label">Concurrent users per event</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">0</div>
+      <div class="label">Overbooking tolerance</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">~30K</div>
+      <div class="label">Events live at any time</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt;5s</div>
+      <div class="label">Checkout latency target</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">10M+</div>
+      <div class="label">Peak requests in first minute (flash sale)</div>
+    </div>
+  </div>
+
+  <h3>Functional Requirements</h3>
+  <div class="card">
+    <ul style="padding-left: 20px;">
+      <li>Users can <strong>browse events</strong> by category, location, date, and artist</li>
+      <li>Users can <strong>view a seat map</strong> and select specific seats or best-available</li>
+      <li>Selected seats are <strong>temporarily held</strong> while the user completes checkout</li>
+      <li>Payment processing with <strong>atomic seat assignment</strong> &mdash; seat is yours only after payment succeeds</li>
+      <li>Users receive <strong>confirmation &amp; e-tickets</strong> via email/push notification</li>
+      <li>Sellers can <strong>create events</strong>, define venue layouts, set pricing tiers</li>
+    </ul>
+  </div>
+
+  <h3>Non-Functional Requirements</h3>
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>Consistency over Availability</h4>
+      <p>We choose <strong>strong consistency</strong> for the booking path. A brief period of unavailability is acceptable; selling the same seat twice is not. This is the opposite trade-off from most social media systems.</p>
+    </div>
+    <div class="card warn">
+      <h4>Read-Heavy, Write-Spiky</h4>
+      <p>Event browsing and seat-map views are 100:1 reads-to-writes normally, but during a flash sale the write ratio spikes dramatically. The system must handle both gracefully.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: Architecture -->
+<!-- ============================================================ -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 02</div>
+  <h2>High-Level Architecture</h2>
+
+  <div class="diagram">
+    <img src="images/sd_ticketmaster_01_architecture.png" alt="TicketMaster High-Level Architecture">
+    <div class="caption">Fig 1 &mdash; High-level architecture showing core services and data flow</div>
+  </div>
+
+  <h3 id="sec-2-1">Core Services</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Service</th>
+        <th>Responsibility</th>
+        <th>Key Characteristics</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Event Service</strong></td>
+        <td>CRUD for events, venues, pricing tiers, artist metadata</td>
+        <td>Read-heavy, highly cacheable, eventual consistency OK</td>
+      </tr>
+      <tr>
+        <td><strong>Inventory Service</strong></td>
+        <td>Owns the seat map and real-time availability for every event</td>
+        <td>Source of truth for seat status; strong consistency required</td>
+      </tr>
+      <tr>
+        <td><strong>Booking Service</strong></td>
+        <td>Orchestrates the reservation &rarr; payment &rarr; confirmation flow</td>
+        <td>Saga pattern; coordinates Inventory + Payment; idempotent</td>
+      </tr>
+      <tr>
+        <td><strong>Search Service</strong></td>
+        <td>Full-text search, filtering, geo-proximity, autocomplete</td>
+        <td>Inverted index (Elasticsearch/Galene); async index updates</td>
+      </tr>
+      <tr>
+        <td><strong>Notification Service</strong></td>
+        <td>Email confirmations, push alerts, SMS for reminders</td>
+        <td>Async via message queue; at-least-once delivery</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 id="sec-2-2">Booking Flow Walkthrough</h3>
+  <div class="walkthrough">
+    <h4>End-to-End Booking Flow</h4>
+    <ol>
+      <li><strong>User searches</strong> for an event &rarr; <span class="linkedin-tag">Search Service</span> returns matching events from the inverted index</li>
+      <li><strong>User selects event</strong> &rarr; <span class="linkedin-tag">Event Service</span> returns event details; <span class="linkedin-tag">Inventory Service</span> returns the seat map with real-time availability</li>
+      <li><strong>User picks seats</strong> &rarr; <span class="linkedin-tag">Booking Service</span> calls <span class="linkedin-tag">Inventory Service</span> to place a <strong>temporary hold</strong> (Redis TTL 5&ndash;10 min). Optimistic lock check ensures no double-booking</li>
+      <li><strong>User enters payment</strong> &rarr; <span class="linkedin-tag">Booking Service</span> initiates payment via a third-party gateway. If payment fails, the hold is released immediately</li>
+      <li><strong>Payment confirmed</strong> &rarr; <span class="linkedin-tag">Booking Service</span> atomically updates the seat status from <code>HELD</code> to <code>BOOKED</code> with the user's booking ID</li>
+      <li><strong>Confirmation</strong> &rarr; <span class="linkedin-tag">Notification Service</span> sends e-ticket via email &amp; push notification. A Kafka event is published for downstream analytics</li>
+      <li><strong>Hold expires (no payment)</strong> &rarr; Redis TTL fires, a callback releases the seat back to <code>AVAILABLE</code> automatically</li>
+    </ol>
+  </div>
+
+  <div class="card warn">
+    <strong>Why a Saga, not a 2PC?</strong> Distributed two-phase commit is too slow and fragile for a user-facing checkout flow. Instead, the Booking Service uses a <strong>saga with compensating transactions</strong>: if payment fails after seats are held, the compensating action releases the hold. Each step is idempotent so retries are safe.
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: Seat Reservation -->
+<!-- ============================================================ -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 03</div>
+  <h2>Seat Reservation &amp; Double-Booking Prevention</h2>
+
+  <p>This is the most critical part of the system. Two users must never successfully book the same seat. We use a combination of <strong>optimistic locking</strong> in the database and <strong>temporary holds</strong> in Redis to achieve this.</p>
+
+  <h3 id="sec-3-1">Optimistic Locking with Version Field</h3>
+
+  <div class="card highlight">
+    <p>Every seat row has a <code>version</code> column. When a service reads a seat, it notes the version. When it writes, it includes the version in a <code>WHERE</code> clause. If another transaction modified the row in between, the version won't match and the <code>UPDATE</code> affects zero rows &mdash; the application detects this and retries or rejects.</p>
+  </div>
+
+  <h4>Atomic UPDATE Pattern</h4>
+  <pre>
+UPDATE seats
+SET    status    = 'HELD',
+       held_by   = :user_id,
+       held_at   = NOW(),
+       version   = version + 1
+WHERE  seat_id   = :seat_id
+  AND  event_id  = :event_id
+  AND  status    = 'AVAILABLE'
+  AND  version   = :expected_version;
+
+-- If affected_rows == 0 → someone else got it first
+-- If affected_rows == 1 → hold acquired successfully</pre>
+
+  <div class="walkthrough">
+    <h4>Why Optimistic over Pessimistic Locking?</h4>
+    <ol>
+      <li><strong>No lock contention:</strong> Pessimistic locks (SELECT FOR UPDATE) hold row-level locks, causing connection pool exhaustion under 100K concurrent users</li>
+      <li><strong>Retry-friendly:</strong> The losing user simply sees "seat taken" and picks another &mdash; no deadlock scenarios</li>
+      <li><strong>High throughput:</strong> Most seat selections target different seats, so conflicts are rare. Optimistic locking shines when collision rate is low</li>
+      <li><strong>Deterministic winner:</strong> The first transaction to commit wins &mdash; simple and fair</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-3-2">Temporary Hold with Redis TTL</h3>
+
+  <p>After the optimistic lock succeeds, we don't mark the seat as <code>BOOKED</code> immediately &mdash; the user still needs to enter payment. Instead, we create a <strong>temporary hold</strong> with a Redis key that expires after 5&ndash;10 minutes.</p>
+
+  <pre>
+-- Redis commands for temporary hold
+SET  seat_hold:{event_id}:{seat_id}  {user_id}  EX 600   NX
+
+-- EX 600  → expires in 10 minutes (600 seconds)
+-- NX      → only set if key does NOT exist (prevents race condition)
+
+-- Check: if SET returns OK → hold acquired
+--         if SET returns nil → seat already held by another user</pre>
+
+  <div class="card success">
+    <strong>Defense in Depth:</strong> Both the database <code>version</code> check and the Redis <code>NX</code> flag prevent double-booking. Even if one layer has a bug, the other catches it. The database is the ultimate source of truth; Redis is a fast coordination layer.
+  </div>
+
+  <h3 id="sec-3-3">Auto-Release on Expiry</h3>
+
+  <div class="card">
+    <p>When the Redis TTL expires (user abandoned checkout), a release mechanism kicks in:</p>
+    <ul style="padding-left: 20px; margin-top: 12px;">
+      <li><strong>Option A &mdash; Keyspace Notifications:</strong> Redis publishes an expiry event on <code>__keyevent@0__:expired</code>. A consumer service listens, verifies the seat is still <code>HELD</code> (not <code>BOOKED</code>), and sets it back to <code>AVAILABLE</code>.</li>
+      <li><strong>Option B &mdash; Polling Sweep:</strong> A background worker scans for seats where <code>status = 'HELD'</code> and <code>held_at &lt; NOW() - INTERVAL 10 MINUTE</code>. Simpler but slightly delayed.</li>
+      <li><strong>Option C &mdash; Hybrid:</strong> Use keyspace notifications as primary, with the polling sweep as a safety net to catch any missed expirations.</li>
+    </ul>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Hold Too Short (e.g., 2 min)</h4>
+      <p>Users lose seats mid-checkout. Increases abandoned cart rate and frustrates users entering payment details on slow connections.</p>
+    </div>
+    <div class="card warn">
+      <h4>Hold Too Long (e.g., 30 min)</h4>
+      <p>Scalpers hold seats without buying, reducing effective inventory. Popular events appear sold out while seats are locked by idle sessions.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: Virtual Waiting Room -->
+<!-- ============================================================ -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 04</div>
+  <h2>Virtual Waiting Room</h2>
+
+  <p>When Taylor Swift tickets go on sale, 10 million users hit the buy button simultaneously. Without a waiting room, the system either crashes or randomly rejects users with 503 errors. A <strong>virtual waiting room</strong> absorbs the spike and meters users into the booking flow at a sustainable rate.</p>
+
+  <div class="card danger">
+    <strong>The Thundering Herd Problem:</strong> If all 10M users are allowed to hit the Inventory Service at once, even a well-provisioned backend collapses. Database connections exhaust, lock contention skyrockets, and latency spirals to timeouts &mdash; nobody gets a ticket.
+  </div>
+
+  <h3 id="sec-4-1">Queue &amp; Position Assignment</h3>
+
+  <div class="walkthrough">
+    <h4>How the Waiting Room Works</h4>
+    <ol>
+      <li><strong>User clicks "Buy Tickets"</strong> &rarr; instead of hitting the booking API directly, the request goes to the <strong>Waiting Room Service</strong></li>
+      <li><strong>Position assigned:</strong> The service assigns a queue position using <code>INCR waitingroom:{event_id}:counter</code> in Redis. This is atomic and handles millions of concurrent increments</li>
+      <li><strong>User sees position:</strong> The client polls or receives a WebSocket update showing "You are #34,521 in line. Estimated wait: 8 minutes"</li>
+      <li><strong>Batch admission:</strong> A scheduler releases users in batches (e.g., 500 users every 10 seconds) based on current system capacity</li>
+      <li><strong>Token issued:</strong> When it's the user's turn, they receive a signed <strong>admission token</strong> (JWT with expiry). The booking API only accepts requests with a valid token</li>
+      <li><strong>Token expires:</strong> If the user doesn't start checkout within 2 minutes of receiving the token, it expires and the slot is recycled to the next person in queue</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-4-2">Batch Admission &amp; Thundering Herd Prevention</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Technique</th>
+        <th>How It Helps</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Rate-limited admission</strong></td>
+        <td>Release N users per interval, keeping backend load predictable. N is dynamically adjusted based on p99 latency of the booking service</td>
+      </tr>
+      <tr>
+        <td><strong>Jittered polling</strong></td>
+        <td>Clients poll for queue position with randomized intervals (base + jitter) to avoid synchronized request waves</td>
+      </tr>
+      <tr>
+        <td><strong>CDN-served waiting page</strong></td>
+        <td>The waiting room page is static HTML served from CDN. Only the position update is a lightweight API call, reducing origin load by 99%</td>
+      </tr>
+      <tr>
+        <td><strong>Connection pooling</strong></td>
+        <td>WebSocket connections for position updates are multiplexed through a gateway, not directly to backend services</td>
+      </tr>
+      <tr>
+        <td><strong>Backpressure signal</strong></td>
+        <td>If the booking service reports high latency, the admission scheduler slows down the release rate automatically</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 id="sec-4-3">Fairness Guarantees</h3>
+
+  <div class="card success">
+    <strong>FIFO ordering:</strong> The Redis <code>INCR</code> counter guarantees strict ordering &mdash; the user who clicked first gets the lowest number and enters first. No favoritism, no randomness.
+  </div>
+
+  <div class="card highlight">
+    <p><strong>Anti-bot measures:</strong> Before entering the queue, users must pass a CAPTCHA or proof-of-work challenge. The waiting room also enforces:</p>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li>One queue position per authenticated user (deduplicated by user ID)</li>
+      <li>IP-based rate limiting to prevent automated queue flooding</li>
+      <li>Device fingerprinting to detect headless browsers</li>
+      <li>Admission tokens are bound to the user's session &mdash; non-transferable</li>
+    </ul>
+  </div>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <h4>With Waiting Room</h4>
+      <p>Controlled throughput, fair ordering, stable backend. Users get a clear expectation of wait time. System sells all tickets without crashing.</p>
+    </div>
+    <div class="card danger">
+      <h4>Without Waiting Room</h4>
+      <p>Random 503 errors, database meltdown, retry storms, unfair advantage to automated scripts, potential complete outage with zero tickets sold.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: Data Model -->
+<!-- ============================================================ -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 05</div>
+  <h2>Data Model</h2>
+
+  <p>The data model centers around five core tables. The <code>seats</code> table is the hottest table in the system &mdash; it must support high-concurrency reads (seat map rendering) and atomic writes (booking).</p>
+
+  <h3>Events Table</h3>
+  <table>
+    <thead>
+      <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>event_id</code></td><td>UUID (PK)</td><td>Unique event identifier</td></tr>
+      <tr><td><code>name</code></td><td>VARCHAR(255)</td><td>Event title</td></tr>
+      <tr><td><code>venue_id</code></td><td>UUID (FK)</td><td>References the venue</td></tr>
+      <tr><td><code>artist</code></td><td>VARCHAR(255)</td><td>Performing artist or team</td></tr>
+      <tr><td><code>category</code></td><td>ENUM</td><td>Concert, Sports, Theater, etc.</td></tr>
+      <tr><td><code>event_date</code></td><td>TIMESTAMP</td><td>When the event occurs</td></tr>
+      <tr><td><code>sale_start</code></td><td>TIMESTAMP</td><td>When ticket sales open (triggers waiting room)</td></tr>
+      <tr><td><code>total_seats</code></td><td>INT</td><td>Total capacity for this event</td></tr>
+      <tr><td><code>status</code></td><td>ENUM</td><td>DRAFT, ON_SALE, SOLD_OUT, CANCELLED</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Record creation time</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Venues Table</h3>
+  <table>
+    <thead>
+      <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>venue_id</code></td><td>UUID (PK)</td><td>Unique venue identifier</td></tr>
+      <tr><td><code>name</code></td><td>VARCHAR(255)</td><td>Venue name (e.g., "Madison Square Garden")</td></tr>
+      <tr><td><code>city</code></td><td>VARCHAR(100)</td><td>City for geo-search</td></tr>
+      <tr><td><code>state</code></td><td>VARCHAR(50)</td><td>State / region</td></tr>
+      <tr><td><code>capacity</code></td><td>INT</td><td>Maximum seating capacity</td></tr>
+      <tr><td><code>seat_map_json</code></td><td>JSON</td><td>Venue layout: sections, rows, seat positions</td></tr>
+      <tr><td><code>lat</code></td><td>DECIMAL(9,6)</td><td>Latitude for proximity search</td></tr>
+      <tr><td><code>lng</code></td><td>DECIMAL(9,6)</td><td>Longitude for proximity search</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Seats Table (Hot Path)</h3>
+  <div class="card danger">
+    <p>This is the most contended table. It's sharded by <code>event_id</code> so all seats for one event live on the same shard, enabling efficient seat-map queries and transactional updates within a single shard.</p>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>seat_id</code></td><td>UUID (PK)</td><td>Unique seat identifier</td></tr>
+      <tr><td><code>event_id</code></td><td>UUID (FK, shard key)</td><td>Which event this seat belongs to</td></tr>
+      <tr><td><code>section</code></td><td>VARCHAR(20)</td><td>Section label (e.g., "A", "Floor", "VIP")</td></tr>
+      <tr><td><code>row</code></td><td>VARCHAR(10)</td><td>Row within section</td></tr>
+      <tr><td><code>seat_number</code></td><td>INT</td><td>Seat number within row</td></tr>
+      <tr><td><code>price_cents</code></td><td>BIGINT</td><td>Price in cents to avoid floating point</td></tr>
+      <tr><td><code>status</code></td><td>ENUM</td><td>AVAILABLE, HELD, BOOKED, BLOCKED</td></tr>
+      <tr><td><code>held_by</code></td><td>UUID</td><td>User ID holding this seat (NULL if available)</td></tr>
+      <tr><td><code>held_at</code></td><td>TIMESTAMP</td><td>When the hold was placed</td></tr>
+      <tr><td><code>version</code></td><td>INT</td><td>Optimistic lock version counter</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Bookings Table</h3>
+  <table>
+    <thead>
+      <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>booking_id</code></td><td>UUID (PK)</td><td>Unique booking identifier</td></tr>
+      <tr><td><code>user_id</code></td><td>UUID (FK)</td><td>Who made the booking</td></tr>
+      <tr><td><code>event_id</code></td><td>UUID (FK)</td><td>Which event</td></tr>
+      <tr><td><code>seat_ids</code></td><td>UUID[]</td><td>Array of booked seat IDs</td></tr>
+      <tr><td><code>total_cents</code></td><td>BIGINT</td><td>Total charge in cents</td></tr>
+      <tr><td><code>status</code></td><td>ENUM</td><td>PENDING, CONFIRMED, CANCELLED, REFUNDED</td></tr>
+      <tr><td><code>payment_id</code></td><td>UUID (FK)</td><td>References the payment record</td></tr>
+      <tr><td><code>idempotency_key</code></td><td>UUID</td><td>Prevents duplicate bookings on retry</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Booking initiation time</td></tr>
+      <tr><td><code>confirmed_at</code></td><td>TIMESTAMP</td><td>When payment was confirmed</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Payments Table</h3>
+  <table>
+    <thead>
+      <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>payment_id</code></td><td>UUID (PK)</td><td>Unique payment identifier</td></tr>
+      <tr><td><code>booking_id</code></td><td>UUID (FK)</td><td>Associated booking</td></tr>
+      <tr><td><code>amount_cents</code></td><td>BIGINT</td><td>Charged amount in cents</td></tr>
+      <tr><td><code>currency</code></td><td>VARCHAR(3)</td><td>ISO currency code (USD, EUR, etc.)</td></tr>
+      <tr><td><code>provider</code></td><td>ENUM</td><td>STRIPE, PAYPAL, APPLE_PAY</td></tr>
+      <tr><td><code>provider_txn_id</code></td><td>VARCHAR(255)</td><td>External transaction reference</td></tr>
+      <tr><td><code>status</code></td><td>ENUM</td><td>INITIATED, SUCCESS, FAILED, REFUNDED</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Payment initiation time</td></tr>
+      <tr><td><code>completed_at</code></td><td>TIMESTAMP</td><td>When the provider confirmed</td></tr>
+    </tbody>
+  </table>
+
+  <div class="walkthrough">
+    <h4>Sharding Strategy</h4>
+    <ol>
+      <li><strong>Seats table:</strong> Sharded by <code>event_id</code>. All seats for a single event are co-located, enabling single-shard transactions for multi-seat bookings</li>
+      <li><strong>Bookings table:</strong> Sharded by <code>user_id</code> for efficient "my bookings" queries. Cross-shard joins with seats are avoided by denormalizing event/seat info into the booking record</li>
+      <li><strong>Events table:</strong> Small enough to replicate across all shards or serve from a single primary with read replicas</li>
+      <li><strong>Hot event isolation:</strong> Extremely popular events (e.g., Taylor Swift) can be assigned to dedicated database instances to prevent noisy-neighbor effects</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: LinkedIn Mapping & Interview Questions -->
+<!-- ============================================================ -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 06</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3>LinkedIn Technology Mapping</h3>
+  <p>How you'd build TicketMaster with LinkedIn's infrastructure:</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>TicketMaster Component</th>
+        <th>LinkedIn Tech</th>
+        <th>Why</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Seats / Bookings DB</td>
+        <td><span class="linkedin-tag">Espresso</span></td>
+        <td>LinkedIn's distributed document store with strong consistency, online rebalancing, and secondary indexes. Shard by event_id for seats, user_id for bookings. Supports conditional updates (optimistic locking).</td>
+      </tr>
+      <tr>
+        <td>Event Search</td>
+        <td><span class="linkedin-tag">Galene</span></td>
+        <td>LinkedIn's search engine built on Lucene. Powers typeahead, faceted filtering by category/location/date, and geo-proximity ranking for nearby events.</td>
+      </tr>
+      <tr>
+        <td>Temporary Hold / Queue</td>
+        <td><span class="linkedin-tag">Couchbase</span></td>
+        <td>Used as a distributed cache with TTL support. Replaces Redis for seat holds and waiting room counters. Sub-millisecond reads, built-in expiry, cross-datacenter replication.</td>
+      </tr>
+      <tr>
+        <td>Event Bus / Async</td>
+        <td><span class="linkedin-tag">Kafka</span></td>
+        <td>All booking events, payment confirmations, and analytics events flow through Kafka topics. Guarantees ordering within a partition (partition by event_id for seat operations).</td>
+      </tr>
+      <tr>
+        <td>API Layer</td>
+        <td><span class="linkedin-tag">Rest.li</span></td>
+        <td>LinkedIn's REST framework for building resource-oriented APIs. Provides automatic schema evolution, backward compatibility, and batch/finder query patterns.</td>
+      </tr>
+      <tr>
+        <td>Notification Service</td>
+        <td><span class="linkedin-tag">Kafka</span> + Email/Push infra</td>
+        <td>Kafka consumer processes confirmation events and dispatches to LinkedIn's email and push notification infrastructure with at-least-once delivery semantics.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Interview Deep-Dive Questions</h3>
+
+  <div class="card highlight">
+    <h4>Q1: How do you prevent overbooking without pessimistic locks?</h4>
+    <p><strong>Answer:</strong> Optimistic locking with a <code>version</code> column. The <code>UPDATE</code> includes <code>WHERE version = :expected</code>. If the row was modified by another transaction, the update affects zero rows and the application retries or rejects. Combined with Redis <code>SET ... NX</code> for the hold phase, you get two independent guards against double-booking. The database is the final arbiter &mdash; even if Redis has a split-brain, the DB rejects the duplicate.</p>
+  </div>
+
+  <div class="card warn">
+    <h4>Q2: How do you handle flash sales where 10M users want 50K seats?</h4>
+    <p><strong>Answer:</strong> Virtual waiting room with a FIFO queue. Users get a position number via atomic <code>INCR</code>. A scheduler admits users in batches calibrated to backend capacity (e.g., 500/10s). The waiting page is served from CDN, so 10M users hitting "refresh" costs almost nothing at the origin. Admission tokens (JWTs with short TTL) ensure only admitted users can call the booking API. Backpressure from the booking service dynamically throttles admission rate.</p>
+  </div>
+
+  <div class="card success">
+    <h4>Q3: How do you render a real-time seat map for 80K seats?</h4>
+    <p><strong>Answer:</strong> The seat map is a <strong>pre-rendered SVG/canvas</strong> with the venue layout baked in (sections, rows, positions). Only the <em>status overlay</em> (available/held/booked) is dynamic. This status is fetched as a compact bitfield or compressed JSON &mdash; 80K seats &times; 2 bits = 20KB. For real-time updates during a flash sale, use <strong>Server-Sent Events (SSE)</strong> to push delta updates (seat X changed from AVAILABLE to HELD) rather than polling the full map. Stale reads are acceptable for the map &mdash; the hold attempt is the consistency boundary.</p>
+  </div>
+
+  <div class="card highlight">
+    <h4>Q4: What happens if payment takes 30 seconds but the hold is 10 minutes?</h4>
+    <p><strong>Answer:</strong> The hold timer is generous (5&ndash;10 min) to accommodate slow payment flows. If the user abandons, the TTL auto-releases. If payment succeeds, the seat transitions atomically from <code>HELD</code> to <code>BOOKED</code>. If payment fails, the Booking Service immediately releases the hold (compensating transaction in the saga). The idempotency key on the booking prevents duplicate charges on retries.</p>
+  </div>
+
+  <div class="card danger">
+    <h4>Q5: How do you prevent scalper bots from buying all tickets?</h4>
+    <p><strong>Answer:</strong> Multi-layer defense: (1) CAPTCHA/proof-of-work before entering the waiting room, (2) one queue position per authenticated user ID, (3) IP rate limiting and device fingerprinting, (4) admission tokens bound to user session (non-transferable), (5) purchase limits per user per event (e.g., max 4 tickets), (6) post-purchase velocity checks &mdash; if a user buys tickets across 50 events in a day, flag for review.</p>
+  </div>
+
+  <div class="card">
+    <h4>Q6: How would you handle a partial failure during multi-seat booking?</h4>
+    <p><strong>Answer:</strong> If a user selects 4 seats, all 4 must be held atomically. Since seats are sharded by <code>event_id</code>, all seats for one event are on the same shard, enabling a single-shard transaction. If any seat fails the optimistic lock check, the entire batch is rejected &mdash; no partial holds. This is an <strong>all-or-nothing</strong> operation at the database level. The user is shown which seats were taken and can reselect.</p>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="container">
+    Design TicketMaster &mdash; System Design Interview Guide &bull; Built for LinkedIn interview preparation
+  </div>
+</footer>
+
+</body>
+</html>

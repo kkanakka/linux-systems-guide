@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design LeetCode (Online Judge)</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #FF5722;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a0a0a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.red { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.red:hover { background: rgba(255,87,34,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>LeetCode</span></h1>
+    <p>A complete deep dive into the architecture of an online judge platform &mdash; sandboxed code execution, contest systems, judge worker pools, and real-time leaderboards.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="system-design.html">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube</a>
+      <a href="sd-url-shortener.html">Design URL Shortener</a>
+      <a href="sd-leetcode.html" class="red">Design LeetCode (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Overview &amp; Scale</a></li>
+    <li><a href="#sec-2">High-Level Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Core Services</a></li>
+        <li><a href="#sec-2-2">Submission Flow Walkthrough</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">Code Execution Sandbox</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Container Isolation</a></li>
+        <li><a href="#sec-3-2">Resource Limits &amp; Security</a></li>
+        <li><a href="#sec-3-3">Multi-Language Support</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Contest System</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Real-Time Leaderboard</a></li>
+        <li><a href="#sec-4-2">Concurrent Submissions</a></li>
+        <li><a href="#sec-4-3">Ranking Algorithm</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Data Model</a></li>
+    <li><a href="#sec-6">LinkedIn Mapping &amp; Interview Questions</a>
+      <ul class="sub">
+        <li><a href="#sec-6-1">Technology Mapping</a></li>
+        <li><a href="#sec-6-2">Common Interview Questions</a></li>
+      </ul>
+    </li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: Overview -->
+<!-- ============================================================ -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 01</div>
+  <h2>Overview &amp; Scale</h2>
+
+  <p>LeetCode is an online coding platform where engineers practice algorithmic problems, participate in weekly contests, and prepare for technical interviews. The system must accept code in dozens of programming languages, execute it securely against hidden test cases, and return verdicts within seconds.</p>
+
+  <div class="scale-box">
+    <div class="scale-item">
+      <div class="number">100K+</div>
+      <div class="label">Submissions / Day</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">50+</div>
+      <div class="label">Languages Supported</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">&lt; 5s</div>
+      <div class="label">Target Judge Time</div>
+    </div>
+    <div class="scale-item">
+      <div class="number">3,000+</div>
+      <div class="label">Problems Available</div>
+    </div>
+  </div>
+
+  <div class="card highlight">
+    <h4>Core Requirements</h4>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li><strong>Functional:</strong> Submit code &rarr; compile &rarr; run against test cases &rarr; return verdict (Accepted, Wrong Answer, TLE, MLE, Runtime Error, Compilation Error)</li>
+      <li><strong>Non-Functional:</strong> Secure sandboxed execution, horizontal scalability of workers, low-latency results, fair contest judging</li>
+      <li><strong>Availability:</strong> 99.9% uptime &mdash; submissions must never be silently lost</li>
+      <li><strong>Consistency:</strong> Identical code + test case = identical verdict every time</li>
+    </ul>
+  </div>
+
+  <h3>Verdict Types</h3>
+  <table>
+    <tr><th>Verdict</th><th>Abbreviation</th><th>Meaning</th></tr>
+    <tr><td style="color:var(--accent2);">Accepted</td><td>AC</td><td>All test cases passed within limits</td></tr>
+    <tr><td style="color:var(--red);">Wrong Answer</td><td>WA</td><td>Output does not match expected output</td></tr>
+    <tr><td style="color:var(--yt-red);">Time Limit Exceeded</td><td>TLE</td><td>Execution exceeded the time constraint</td></tr>
+    <tr><td style="color:var(--accent4);">Memory Limit Exceeded</td><td>MLE</td><td>Process used more memory than allowed</td></tr>
+    <tr><td style="color:var(--accent3);">Runtime Error</td><td>RE</td><td>Segfault, division by zero, stack overflow, etc.</td></tr>
+    <tr><td style="color:var(--text-muted);">Compilation Error</td><td>CE</td><td>Code failed to compile</td></tr>
+  </table>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: Architecture -->
+<!-- ============================================================ -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 02</div>
+  <h2>High-Level Architecture</h2>
+
+  <h3 id="sec-2-1">Core Services</h3>
+
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <h4>Problem Service</h4>
+      <p>Manages the problem catalog &mdash; descriptions, difficulty tags, hints, editorial solutions, and test cases. Serves problem pages with Markdown rendering and supports CRUD for problem setters.</p>
+    </div>
+    <div class="card highlight">
+      <h4>Submission Service</h4>
+      <p>Receives user code submissions, validates them, persists to the database, and enqueues them for judging. Tracks submission status and streams verdict updates to the client via WebSocket.</p>
+    </div>
+    <div class="card warn">
+      <h4>Judge Worker Pool</h4>
+      <p>A horizontally scalable pool of workers that dequeue submissions, spin up sandboxed containers, compile and execute code against test cases, and report verdicts back. The most compute-intensive component.</p>
+    </div>
+    <div class="card success">
+      <h4>User Service</h4>
+      <p>Authentication, profiles, submission history, streak tracking, premium subscriptions, and progress analytics. Maintains solved-problem bitmaps for O(1) lookups.</p>
+    </div>
+    <div class="card">
+      <h4>Contest Service</h4>
+      <p>Manages contest lifecycle &mdash; registration, problem reveal at start time, real-time leaderboard computation, and final ranking with penalty calculation.</p>
+    </div>
+    <div class="card danger">
+      <h4>API Gateway</h4>
+      <p>Rate limiting, authentication, request routing, and anti-cheat throttling. Limits submission frequency to prevent abuse (e.g., max 10 submissions/minute per user).</p>
+    </div>
+  </div>
+
+  <h3 id="sec-2-2">Architecture Diagram</h3>
+
+  <div class="diagram">
+    <img src="images/sd_leetcode_01_architecture.png" alt="LeetCode Architecture Diagram">
+    <div class="caption">Figure 1 &mdash; High-level architecture of the LeetCode online judge system</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Submission Flow &mdash; 6 Steps</h4>
+    <ol>
+      <li><strong>Submit:</strong> User writes code in the browser IDE and clicks "Submit". The client sends the source code, language, and problem ID to the API Gateway.</li>
+      <li><strong>Validate &amp; Persist:</strong> The Submission Service validates the request (language supported, code size &lt; 64KB, rate limit not exceeded), generates a submission ID, persists it with status <code>QUEUED</code>, and publishes it to the submission queue.</li>
+      <li><strong>Dequeue &amp; Prepare:</strong> A Judge Worker picks the submission from the queue, fetches test cases from the Problem Service, and prepares the sandbox environment (pulls the language-specific Docker image if not cached).</li>
+      <li><strong>Compile &amp; Execute:</strong> Inside the sandbox container, the worker compiles the code (if applicable), then runs it against each test case sequentially. stdin is piped in, stdout is captured, and resource usage is monitored by cgroups.</li>
+      <li><strong>Judge &amp; Verdict:</strong> The worker compares actual output against expected output for each test case. It determines the final verdict (AC, WA, TLE, MLE, RE, CE) along with runtime and memory statistics.</li>
+      <li><strong>Report Back:</strong> The worker updates the submission record in the database, publishes the verdict to a notification topic, and the Submission Service pushes the result to the user's browser via WebSocket.</li>
+    </ol>
+  </div>
+
+  <div class="card warn">
+    <h4>Why a Queue?</h4>
+    <p>The submission queue (Kafka / SQS) decouples ingestion from execution. During contest spikes, thousands of submissions arrive within seconds. The queue absorbs the burst while workers process at a steady rate, preventing overload and ensuring no submission is lost.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: Code Execution Sandbox -->
+<!-- ============================================================ -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 03</div>
+  <h2>Code Execution Sandbox</h2>
+
+  <p>Executing arbitrary user code is the most security-critical component. Each submission runs in a disposable, isolated container with strict resource constraints.</p>
+
+  <h3 id="sec-3-1">Container Isolation</h3>
+
+  <div class="card danger">
+    <h4>Isolation Strategy: Docker + seccomp + cgroups</h4>
+    <p>Each submission gets its own short-lived Docker container. The container is created from a pre-built language-specific image, runs the code, and is destroyed immediately after. No state persists between submissions.</p>
+    <ul style="padding-left: 20px; margin-top: 10px;">
+      <li><strong>Namespace isolation:</strong> PID, network, mount, and user namespaces are all separated</li>
+      <li><strong>seccomp profile:</strong> Blocks dangerous syscalls (fork bombs, socket creation, file system writes outside /tmp)</li>
+      <li><strong>Read-only rootfs:</strong> Container filesystem is mounted read-only; only <code>/tmp</code> is writable</li>
+      <li><strong>No network access:</strong> Network namespace is completely empty &mdash; no loopback, no external connectivity</li>
+      <li><strong>Non-root user:</strong> Code executes as an unprivileged user inside the container</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-3-2">Resource Limits</h3>
+
+  <table>
+    <tr><th>Resource</th><th>Limit</th><th>Enforcement</th></tr>
+    <tr><td>CPU</td><td>2 cores</td><td>cgroup <code>cpu.cfs_quota_us</code> / <code>cpu.cfs_period_us</code></td></tr>
+    <tr><td>Memory</td><td>256 MB</td><td>cgroup <code>memory.limit_in_bytes</code> &mdash; OOM killer terminates on breach</td></tr>
+    <tr><td>Wall-Clock Time</td><td>5 seconds</td><td>External watchdog timer kills container after timeout</td></tr>
+    <tr><td>Disk</td><td>50 MB</td><td>tmpfs mount with <code>size=50m</code> on <code>/tmp</code></td></tr>
+    <tr><td>Network</td><td>None</td><td>Empty network namespace &mdash; no interfaces created</td></tr>
+    <tr><td>Processes</td><td>64</td><td>cgroup <code>pids.max</code> prevents fork bombs</td></tr>
+    <tr><td>Open Files</td><td>256</td><td><code>RLIMIT_NOFILE</code> set via setrlimit</td></tr>
+  </table>
+
+  <div class="walkthrough">
+    <h4>Sandbox Lifecycle</h4>
+    <ol>
+      <li><strong>Image Pull (cached):</strong> Language images (e.g., <code>judge-python:3.11</code>, <code>judge-cpp:gcc12</code>) are pre-pulled on every worker node. Warm cache ensures &lt;100ms container creation.</li>
+      <li><strong>Container Create:</strong> Docker API creates the container with all cgroup limits, seccomp profile, read-only rootfs, and empty network namespace.</li>
+      <li><strong>Copy Code:</strong> Source code and input files are bind-mounted into <code>/submission</code> (read-only).</li>
+      <li><strong>Compile:</strong> For compiled languages, run the compiler inside the container. If compilation fails, return CE verdict immediately.</li>
+      <li><strong>Execute Per Test Case:</strong> For each test case, pipe stdin, capture stdout/stderr, measure wall time and peak memory via cgroup stats.</li>
+      <li><strong>Teardown:</strong> Container is forcefully removed. All resources are reclaimed.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-3-3">Multi-Language Support</h3>
+
+  <div class="card highlight">
+    <h4>Language Image Matrix</h4>
+    <p>Each supported language has a dedicated Docker image with the compiler/runtime pre-installed. Images are versioned and pinned for reproducibility.</p>
+  </div>
+
+  <table>
+    <tr><th>Language</th><th>Image Base</th><th>Compile Command</th><th>Run Command</th></tr>
+    <tr><td>C++</td><td>gcc:12-slim</td><td><code>g++ -O2 -std=c++17 -o sol sol.cpp</code></td><td><code>./sol</code></td></tr>
+    <tr><td>Python 3</td><td>python:3.11-slim</td><td>N/A (interpreted)</td><td><code>python3 sol.py</code></td></tr>
+    <tr><td>Java</td><td>openjdk:17-slim</td><td><code>javac Solution.java</code></td><td><code>java -Xmx256m Solution</code></td></tr>
+    <tr><td>Go</td><td>golang:1.21-alpine</td><td><code>go build -o sol sol.go</code></td><td><code>./sol</code></td></tr>
+    <tr><td>Rust</td><td>rust:1.73-slim</td><td><code>rustc -O sol.rs -o sol</code></td><td><code>./sol</code></td></tr>
+    <tr><td>JavaScript</td><td>node:20-slim</td><td>N/A (interpreted)</td><td><code>node sol.js</code></td></tr>
+  </table>
+
+  <div class="card warn">
+    <h4>Time Limit Multipliers</h4>
+    <p>Interpreted languages are inherently slower. The judge applies per-language multipliers to the base time limit: C/C++ = 1x, Java = 2x, Python = 5x, JavaScript = 3x. This ensures fair comparison of algorithmic complexity across languages.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: Contest System -->
+<!-- ============================================================ -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 04</div>
+  <h2>Contest System</h2>
+
+  <p>Weekly contests see 20,000+ concurrent participants submitting code simultaneously. The contest system must handle burst traffic, maintain a real-time leaderboard, and ensure fair ranking.</p>
+
+  <h3 id="sec-4-1">Real-Time Leaderboard</h3>
+
+  <div class="card success">
+    <h4>Redis Sorted Sets</h4>
+    <p>The leaderboard is powered by Redis sorted sets (<code>ZADD</code> / <code>ZREVRANGE</code>). Each participant's score is stored as a composite value encoding both solved count and penalty time, enabling O(log N) updates and O(log N + K) range queries.</p>
+    <pre>
+Score = (problems_solved * 1,000,000) - total_penalty_minutes
+
+ZADD contest:weekly-350 &lt;score&gt; &lt;user_id&gt;
+ZREVRANGE contest:weekly-350 0 49 WITHSCORES   -- top 50</pre>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Leaderboard Update Flow</h4>
+    <ol>
+      <li>User submits solution &rarr; judge returns <strong>Accepted</strong> verdict</li>
+      <li>Contest Service calculates new score: <code>solved_count * 1M - (finish_time + penalty * wrong_attempts)</code></li>
+      <li>Atomic <code>ZADD</code> updates the sorted set</li>
+      <li>Leaderboard UI polls every 5 seconds or receives SSE push for top-100 changes</li>
+      <li>User's rank is computed via <code>ZREVRANK</code> &mdash; O(log N)</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-4-2">Concurrent Submissions</h3>
+
+  <div class="card highlight">
+    <h4>Handling Contest Spikes</h4>
+    <p>During contests, submission rate spikes 10&ndash;50x above baseline. The system handles this through:</p>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li><strong>Priority Queue:</strong> Contest submissions get higher priority than practice submissions in the judge queue</li>
+      <li><strong>Auto-scaling Workers:</strong> K8s HPA scales judge worker pods based on queue depth metrics</li>
+      <li><strong>Warm Pool:</strong> Pre-provisioned worker pods are kept warm 10 minutes before contest start</li>
+      <li><strong>Deduplication:</strong> Identical code resubmitted within 30 seconds is rejected at the API Gateway</li>
+    </ul>
+  </div>
+
+  <h3 id="sec-4-3">Ranking Algorithm</h3>
+
+  <table>
+    <tr><th>Factor</th><th>Weight</th><th>Description</th></tr>
+    <tr><td>Problems Solved</td><td>Primary</td><td>More solved = higher rank (always dominant factor)</td></tr>
+    <tr><td>Finish Time</td><td>Secondary</td><td>Time from contest start to last AC submission</td></tr>
+    <tr><td>Wrong Attempt Penalty</td><td>+5 min each</td><td>Each wrong submission on a solved problem adds 5 minutes penalty</td></tr>
+    <tr><td>Unsolved Penalties</td><td>None</td><td>Wrong attempts on unsolved problems carry no penalty</td></tr>
+  </table>
+
+  <div class="card">
+    <h4>Rating System (Elo-like)</h4>
+    <p>After each contest, user ratings are updated using a system similar to Codeforces' Elo variant. Expected rank is computed from current rating, and the delta is proportional to <code>(expected_rank - actual_rank)</code>. New users have higher volatility (larger rating changes) that decreases over time.</p>
+    <pre>
+new_rating = old_rating + K * (expected_rank - actual_rank) / N
+K = base_factor * volatility_multiplier
+volatility = max(0.5, 1.0 - contests_participated * 0.02)</pre>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: Data Model -->
+<!-- ============================================================ -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 05</div>
+  <h2>Data Model</h2>
+
+  <h3>problems</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>id</code></td><td>BIGINT PK</td><td>Auto-increment problem ID</td></tr>
+    <tr><td><code>title</code></td><td>VARCHAR(255)</td><td>e.g., "Two Sum"</td></tr>
+    <tr><td><code>slug</code></td><td>VARCHAR(255) UNIQUE</td><td>URL-safe slug: "two-sum"</td></tr>
+    <tr><td><code>difficulty</code></td><td>ENUM(Easy, Medium, Hard)</td><td>Difficulty classification</td></tr>
+    <tr><td><code>description_md</code></td><td>TEXT</td><td>Problem statement in Markdown</td></tr>
+    <tr><td><code>constraints</code></td><td>TEXT</td><td>Input constraints (e.g., 1 &le; n &le; 10<sup>5</sup>)</td></tr>
+    <tr><td><code>time_limit_ms</code></td><td>INT</td><td>Base time limit (before language multiplier)</td></tr>
+    <tr><td><code>memory_limit_mb</code></td><td>INT</td><td>Memory limit in MB</td></tr>
+    <tr><td><code>tags</code></td><td>JSON</td><td>["array", "hash-table", "two-pointers"]</td></tr>
+    <tr><td><code>is_premium</code></td><td>BOOLEAN</td><td>Locked behind subscription</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Creation time</td></tr>
+  </table>
+
+  <h3>test_cases</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>id</code></td><td>BIGINT PK</td><td>Auto-increment</td></tr>
+    <tr><td><code>problem_id</code></td><td>BIGINT FK</td><td>References problems.id</td></tr>
+    <tr><td><code>input</code></td><td>TEXT</td><td>Test input (may be large for stress tests)</td></tr>
+    <tr><td><code>expected_output</code></td><td>TEXT</td><td>Expected stdout</td></tr>
+    <tr><td><code>is_sample</code></td><td>BOOLEAN</td><td>Shown to user as example (true) or hidden (false)</td></tr>
+    <tr><td><code>ordinal</code></td><td>INT</td><td>Execution order; small cases first for early termination</td></tr>
+  </table>
+
+  <h3>submissions</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>id</code></td><td>BIGINT PK</td><td>Snowflake-style globally unique ID</td></tr>
+    <tr><td><code>user_id</code></td><td>BIGINT FK</td><td>References users.id</td></tr>
+    <tr><td><code>problem_id</code></td><td>BIGINT FK</td><td>References problems.id</td></tr>
+    <tr><td><code>language</code></td><td>VARCHAR(32)</td><td>e.g., "python3", "cpp", "java"</td></tr>
+    <tr><td><code>source_code</code></td><td>TEXT</td><td>Submitted source code (&lt; 64KB)</td></tr>
+    <tr><td><code>status</code></td><td>ENUM</td><td>QUEUED, JUDGING, AC, WA, TLE, MLE, RE, CE</td></tr>
+    <tr><td><code>runtime_ms</code></td><td>INT</td><td>Execution time of accepted solution</td></tr>
+    <tr><td><code>memory_kb</code></td><td>INT</td><td>Peak memory usage</td></tr>
+    <tr><td><code>contest_id</code></td><td>BIGINT FK NULL</td><td>Non-null if submitted during a contest</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Submission timestamp</td></tr>
+  </table>
+
+  <h3>users</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>id</code></td><td>BIGINT PK</td><td>Auto-increment</td></tr>
+    <tr><td><code>username</code></td><td>VARCHAR(64) UNIQUE</td><td>Display name</td></tr>
+    <tr><td><code>email</code></td><td>VARCHAR(255) UNIQUE</td><td>Login credential</td></tr>
+    <tr><td><code>rating</code></td><td>INT DEFAULT 1500</td><td>Contest Elo rating</td></tr>
+    <tr><td><code>solved_count</code></td><td>INT</td><td>Total problems solved</td></tr>
+    <tr><td><code>streak_days</code></td><td>INT</td><td>Current daily submission streak</td></tr>
+    <tr><td><code>is_premium</code></td><td>BOOLEAN</td><td>Premium subscription status</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>Registration time</td></tr>
+  </table>
+
+  <h3>contests</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+    <tr><td><code>id</code></td><td>BIGINT PK</td><td>Auto-increment</td></tr>
+    <tr><td><code>title</code></td><td>VARCHAR(255)</td><td>e.g., "Weekly Contest 350"</td></tr>
+    <tr><td><code>start_time</code></td><td>TIMESTAMP</td><td>Contest begins (problems revealed)</td></tr>
+    <tr><td><code>duration_minutes</code></td><td>INT</td><td>Typically 90 minutes</td></tr>
+    <tr><td><code>problem_ids</code></td><td>JSON</td><td>Ordered list of 4 problem IDs</td></tr>
+    <tr><td><code>status</code></td><td>ENUM</td><td>UPCOMING, ACTIVE, FINISHED</td></tr>
+    <tr><td><code>participants</code></td><td>INT</td><td>Registered participant count</td></tr>
+  </table>
+
+  <div class="card highlight">
+    <h4>Indexing Strategy</h4>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li><code>submissions</code>: Composite index on <code>(user_id, problem_id, created_at DESC)</code> for "my submissions" queries</li>
+      <li><code>submissions</code>: Index on <code>(problem_id, status, runtime_ms)</code> for percentile ranking ("faster than X%")</li>
+      <li><code>submissions</code>: Index on <code>(contest_id, user_id)</code> for contest submission lookups</li>
+      <li><code>problems</code>: Full-text index on <code>title</code> + <code>description_md</code> for search</li>
+      <li><code>test_cases</code>: Index on <code>(problem_id, ordinal)</code> for ordered retrieval</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: LinkedIn Mapping & Interview Questions -->
+<!-- ============================================================ -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 06</div>
+  <h2>LinkedIn Mapping &amp; Interview Questions</h2>
+
+  <h3 id="sec-6-1">Technology Mapping</h3>
+
+  <p>How each LeetCode component maps to LinkedIn's infrastructure stack:</p>
+
+  <table>
+    <tr><th>LeetCode Component</th><th>LinkedIn Equivalent</th><th>Why</th></tr>
+    <tr>
+      <td>Problem/User/Submission DB</td>
+      <td><span class="linkedin-tag">Espresso</span></td>
+      <td>LinkedIn's distributed document store. Handles user profiles, content, and transactional data with strong consistency and secondary indexes.</td>
+    </tr>
+    <tr>
+      <td>Submission Queue</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>LinkedIn created Kafka. Durable message queue decouples submission ingestion from judge execution. Handles burst traffic with at-least-once delivery guarantees.</td>
+    </tr>
+    <tr>
+      <td>Judge Worker Pool</td>
+      <td><span class="linkedin-tag">K8s / Nimbus</span></td>
+      <td>LinkedIn's Kubernetes platform (Nimbus) orchestrates containerized workloads. Judge workers run as K8s pods with HPA auto-scaling based on queue depth.</td>
+    </tr>
+    <tr>
+      <td>Leaderboard Cache</td>
+      <td><span class="linkedin-tag">Couchbase</span></td>
+      <td>LinkedIn uses Couchbase as a distributed cache layer. Replaces Redis sorted sets for leaderboard with Couchbase's in-memory performance and multi-datacenter replication.</td>
+    </tr>
+    <tr>
+      <td>API Gateway / REST APIs</td>
+      <td><span class="linkedin-tag">Rest.li</span></td>
+      <td>LinkedIn's REST framework for building scalable APIs. Provides schema validation, backward compatibility, and automated documentation.</td>
+    </tr>
+    <tr>
+      <td>Verdict Notifications</td>
+      <td><span class="linkedin-tag">Kafka</span></td>
+      <td>Verdict events published to Kafka topics; consumed by notification service to push real-time updates via WebSocket/SSE.</td>
+    </tr>
+    <tr>
+      <td>Code Execution Sandbox</td>
+      <td><span class="linkedin-tag">K8s / Nimbus</span></td>
+      <td>Nimbus pods with strict resource quotas, network policies (no egress), and ephemeral containers mirror the sandbox isolation model.</td>
+    </tr>
+  </table>
+
+  <div class="card success">
+    <h4>Architecture at LinkedIn Scale</h4>
+    <pre>
+User Browser
+    &darr;
+Rest.li API Gateway (rate limiting, auth)
+    &darr;
+Espresso (persist submission)
+    &darr;
+Kafka (submission-events topic)
+    &darr;
+Nimbus Judge Workers (K8s pods, auto-scaled)
+    &darr;
+Espresso (update verdict) &rarr; Kafka (verdict-events)
+    &darr;
+Couchbase (leaderboard cache) &rarr; SSE push to client</pre>
+  </div>
+
+  <h3 id="sec-6-2">Common Interview Questions</h3>
+
+  <div class="card danger">
+    <h4>Q1: How do you sandbox user code securely?</h4>
+    <p><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li>Containers provide process-level isolation via Linux namespaces (PID, network, mount, user)</li>
+      <li>seccomp profiles whitelist safe syscalls &mdash; block <code>fork</code> (beyond limit), <code>socket</code>, <code>mount</code>, <code>ptrace</code></li>
+      <li>cgroups enforce hard CPU, memory, and PID limits &mdash; kernel OOM killer handles breaches</li>
+      <li>No network access eliminates data exfiltration and calling external services</li>
+      <li>Read-only rootfs prevents persistent modifications to the execution environment</li>
+      <li>For defense-in-depth: run workers on dedicated node pools isolated from production services</li>
+    </ul>
+  </div>
+
+  <div class="card danger">
+    <h4>Q2: How do you scale the judge worker pool?</h4>
+    <p><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li><strong>Horizontal Pod Autoscaler (HPA):</strong> Scale on Kafka consumer lag or queue depth metric</li>
+      <li><strong>Pre-warm before contests:</strong> Scheduled scale-up 10 min before contest start based on registration count</li>
+      <li><strong>Priority classes:</strong> Contest submissions get <code>PriorityClass: contest-critical</code>; practice gets <code>best-effort</code></li>
+      <li><strong>Node auto-scaling:</strong> Cluster autoscaler adds nodes when pod scheduling fails due to resource pressure</li>
+      <li><strong>Worker efficiency:</strong> Each worker processes submissions serially but multiple workers run in parallel. Workers reuse warm containers for the same language.</li>
+      <li><strong>Capacity planning:</strong> 100K submissions/day &divide; 86400s &asymp; 1.2 sub/s average, but contest peaks hit 100+ sub/s for 5&ndash;10 minutes</li>
+    </ul>
+  </div>
+
+  <div class="card danger">
+    <h4>Q3: How do you handle Time Limit Exceeded (TLE)?</h4>
+    <p><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li><strong>External watchdog:</strong> A timer process outside the container kills it via <code>docker kill</code> after the time limit</li>
+      <li><strong>Why not alarm():</strong> User code could catch/ignore SIGALRM; external enforcement is mandatory</li>
+      <li><strong>Wall time vs CPU time:</strong> Measure wall-clock time (not CPU time) because sleep-based evasion should still be caught</li>
+      <li><strong>Per-language multipliers:</strong> Python gets 5x the base limit vs C++ to account for interpreter overhead</li>
+      <li><strong>Graceful degradation:</strong> On timeout, capture partial output for debugging, mark as TLE, teardown container</li>
+      <li><strong>Container cleanup:</strong> Set <code>--stop-timeout=1</code> so Docker sends SIGKILL 1 second after SIGTERM</li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <h4>Q4: How do you ensure verdict consistency?</h4>
+    <p><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li>Pinned compiler/runtime versions in Docker images (never use <code>:latest</code>)</li>
+      <li>Deterministic resource limits via cgroups (same CPU quota on every worker)</li>
+      <li>Workers run on homogeneous hardware (same CPU model) to avoid timing variance</li>
+      <li>For borderline TLE cases: re-judge on a fresh worker and take the better result</li>
+      <li>Floating-point comparison uses epsilon tolerance (<code>|a - b| < 1e-6</code>)</li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <h4>Q5: How would you design the "Run Code" (test run) vs "Submit" feature?</h4>
+    <p><strong>Key points:</strong></p>
+    <ul style="padding-left: 20px; margin-top: 8px;">
+      <li><strong>Run Code:</strong> Executes against only sample test cases (2&ndash;3 cases); user sees actual vs expected output; lower priority in queue</li>
+      <li><strong>Submit:</strong> Executes against all test cases (including hidden); user sees only verdict and stats; higher priority</li>
+      <li>Both share the same sandbox infrastructure but different queue priorities</li>
+      <li>Run Code results are not persisted long-term; Submit results are stored permanently</li>
+      <li>Rate limit Run Code more aggressively (e.g., 20/min) to prevent it from starving Submit operations</li>
+    </ul>
+  </div>
+</div>
+
+</div><!-- /.container -->
+
+<footer>
+  <p>System Design &mdash; Design LeetCode (Online Judge) &bull; Interview Preparation Guide</p>
+  <p style="margin-top: 8px;">
+    <a href="index.html" style="color:var(--accent); text-decoration:none;">Home</a> &bull;
+    <a href="system-design.html" style="color:var(--accent); text-decoration:none;">Design Uber</a> &bull;
+    <a href="youtube-system-design.html" style="color:var(--accent); text-decoration:none;">Design YouTube</a> &bull;
+    <a href="sd-url-shortener.html" style="color:var(--accent); text-decoration:none;">Design URL Shortener</a>
+  </p>
+</footer>
+
+</body>
+</html>
