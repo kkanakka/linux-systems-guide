@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design Uber</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1628 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--accent); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--accent), var(--accent3));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; margin: 30px 0 12px; color: var(--accent2);
+    border-left: 3px solid var(--accent2); padding-left: 12px;
+  }
+  .section h4 { font-size: 1.15em; margin: 20px 0 8px; color: var(--accent3); }
+  .section p { margin: 12px 0; color: var(--text); }
+  .section ul, .section ol { margin: 12px 0 12px 24px; }
+  .section li { margin: 6px 0; }
+
+  .diagram-box {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; margin: 24px 0; text-align: center;
+  }
+  .diagram-box img {
+    max-width: 100%; border-radius: 8px; border: 1px solid var(--border);
+  }
+  .diagram-box .caption {
+    margin-top: 12px; font-size: 0.9em; color: var(--text-muted); font-style: italic;
+  }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px; overflow-x: auto; margin: 16px 0;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.9em; line-height: 1.6; position: relative;
+  }
+  pre .lang-label {
+    position: absolute; top: 8px; right: 12px;
+    font-size: 0.75em; color: var(--text-muted);
+    background: var(--surface); padding: 2px 8px; border-radius: 4px;
+  }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.9em;
+  }
+  :not(pre) > code {
+    background: var(--surface); padding: 2px 6px; border-radius: 4px;
+    color: var(--accent); border: 1px solid var(--border);
+  }
+
+  .info-box {
+    border-radius: 8px; padding: 16px 20px; margin: 16px 0; border-left: 4px solid;
+  }
+  .info-box.note { background: rgba(88,166,255,0.1); border-left-color: var(--accent); }
+  .info-box.warning { background: rgba(240,136,62,0.1); border-left-color: var(--accent4); }
+  .info-box.danger { background: rgba(248,81,73,0.1); border-left-color: var(--red); }
+  .info-box.success { background: rgba(63,185,80,0.1); border-left-color: var(--accent2); }
+  .info-box.linkedin { background: rgba(0,119,181,0.1); border-left-color: #0077b5; }
+  .info-box strong { display: block; margin-bottom: 4px; }
+
+  .kv-table {
+    width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.95em;
+  }
+  .kv-table th, .kv-table td {
+    border: 1px solid var(--border); padding: 10px 16px; text-align: left;
+  }
+  .kv-table th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  .kv-table td { background: var(--card); }
+  .kv-table tr:hover td { background: var(--surface); }
+
+  .compare-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0;
+  }
+  .compare-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;
+  }
+  .compare-card h4 { margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+  .three-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 20px 0;
+  }
+
+  .api-block {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px; margin: 16px 0;
+  }
+  .api-method {
+    display: inline-block; padding: 3px 10px; border-radius: 4px; font-weight: 700;
+    font-size: 0.85em; margin-right: 10px; font-family: monospace;
+  }
+  .api-method.get { background: #1a3a2a; color: #3fb950; }
+  .api-method.post { background: #3a2a1a; color: #f0883e; }
+  .api-method.put { background: #1a2a3a; color: #58a6ff; }
+  .api-method.delete { background: #3a1a1a; color: #f85149; }
+  .api-path { font-family: monospace; font-size: 1em; color: var(--text); }
+  .api-desc { color: var(--text-muted); font-size: 0.9em; margin-top: 8px; }
+
+  .scale-box {
+    background: var(--surface); border: 1px solid var(--accent4); border-radius: 8px;
+    padding: 20px; margin: 16px 0;
+  }
+  .scale-box h4 { color: var(--accent4); margin-bottom: 12px; }
+  .scale-metric {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+  }
+  .scale-metric:last-child { border-bottom: none; }
+  .scale-label { color: var(--text-muted); }
+  .scale-value { font-weight: 700; color: var(--accent2); font-family: monospace; }
+
+  .back-top { text-align: right; margin: 30px 0 0; }
+  .back-top a { color: var(--text-muted); text-decoration: none; font-size: 0.85em; }
+  .back-top a:hover { color: var(--accent); }
+
+  footer {
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 40px 0; margin-top: 80px; text-align: center;
+    color: var(--text-muted); font-size: 0.9em;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 2em; }
+    .compare-grid, .three-grid { grid-template-columns: 1fr; }
+    .container { padding: 0 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>System <span>Design</span></h1>
+    <p>Step-by-step system design walkthroughs with LinkedIn technology mappings, architecture diagrams, and interview deep dives.</p>
+    <div class="badge">Design Uber &mdash; Ride-Hailing at Scale</div>
+    <div class="nav-links">
+      <a href="index.html">&larr; Chapter 6: Processes</a>
+      <a href="chapter2.html" class="purple">Chapter 2: Fundamentals</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ======================== TOC ======================== -->
+<div class="toc" id="toc">
+  <h2>Table of Contents &mdash; Design Uber</h2>
+  <ol>
+    <li><a href="#sec-0">Overview &amp; Problem Statement</a></li>
+    <li><a href="#sec-1">Requirements &amp; Scale</a>
+      <ul class="sub">
+        <li>Functional Requirements (Verbs)</li>
+        <li>Non-Functional Requirements (Adjectives)</li>
+        <li>Scale Numbers</li>
+      </ul>
+    </li>
+    <li><a href="#sec-2">Data Model</a>
+      <ul class="sub">
+        <li>Trip, DriverLocation, Driver entities</li>
+        <li>LinkedIn storage mapping: Espresso vs Venice vs Ambry</li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">API Endpoints</a></li>
+    <li><a href="#sec-4">FR1: Ride Pricing</a>
+      <ul class="sub">
+        <li>Routing Service &amp; fare computation</li>
+        <li>Surge pricing with Samza + Venice</li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">FR2: Find &amp; Match a Driver</a>
+      <ul class="sub">
+        <li>Geospatial index (geohash)</li>
+        <li>Offer/accept protocol</li>
+        <li>Double-dispatch prevention (OCC)</li>
+      </ul>
+    </li>
+    <li><a href="#sec-6">FR3: Real-Time Driver Tracking</a>
+      <ul class="sub">
+        <li>WebSocket connection architecture</li>
+        <li>Location ingestion: hot path vs cold path</li>
+        <li>Location relay to rider</li>
+      </ul>
+    </li>
+    <li><a href="#sec-7">FR4: Trip Lifecycle Management</a>
+      <ul class="sub">
+        <li>State machine &amp; transitions</li>
+        <li>Outbox pattern for reliable events</li>
+        <li>Idempotent side effects</li>
+      </ul>
+    </li>
+    <li><a href="#sec-8">Deep Dive: Scaling 500K Writes/sec</a></li>
+    <li><a href="#sec-9">Deep Dive: LinkedIn Technology Mapping</a>
+      <ul class="sub">
+        <li>Espresso vs Venice vs Ambry decision tree</li>
+        <li>Kafka + Samza + Brooklin pipeline</li>
+      </ul>
+    </li>
+    <li><a href="#sec-10">Complete Architecture</a></li>
+    <li><a href="#sec-11">Interview Questions &amp; What They Test</a></li>
+  </ol>
+</div>
+
+<!-- ==================== SECTION 0: OVERVIEW ==================== -->
+<div class="section" id="sec-0">
+  <div class="section-num">Overview</div>
+  <h2>Design Uber: Ride-Hailing at Scale</h2>
+
+  <p>Uber is a ride-hailing service where a <strong>rider</strong> requests a ride, the system estimates the fare, finds nearby available <strong>drivers</strong>, and matches one to the rider. During the trip, the system tracks the driver's real-time location and streams updates to the rider's map. The trip moves through a lifecycle of states&mdash;searching, matched, in progress, completed&mdash;with each transition triggering side effects like notifications, fare metering, and payment.</p>
+
+  <h3>Core Challenges</h3>
+  <ul>
+    <li><strong>Millions of drivers</strong> sending persistent GPS coordinates every few seconds</li>
+    <li><strong>Sub-second geospatial searches</strong> to find the nearest driver</li>
+    <li><strong>Unique driver assignment</strong> (no double-dispatch)&mdash;a driver must never be assigned to two rides simultaneously</li>
+    <li><strong>Durable, consistent trip records</strong> across the full ride lifecycle</li>
+  </ul>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_01_architecture.png" alt="Uber High-Level Architecture">
+    <div class="caption">Figure 1: High-level architecture of the Uber system showing core services, data stores, and the hot/cold path split for location ingestion.</div>
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 1: REQUIREMENTS ==================== -->
+<div class="section" id="sec-1">
+  <div class="section-num">Step 1</div>
+  <h2>Requirements &amp; Scale</h2>
+
+  <h3>Functional Requirements (Extract Verbs)</h3>
+  <p>Each verb in the problem statement maps to a core operation that drives the architecture:</p>
+
+  <table class="kv-table">
+    <tr><th>Verb from Problem</th><th>Operation Type</th><th>Functional Requirement</th></tr>
+    <tr>
+      <td>"estimates the fare", "calculates the route"</td>
+      <td><code>COMPUTE</code></td>
+      <td><strong>Ride Pricing:</strong> Rider enters pickup + destination. System returns estimated fare and ETA before confirmation.</td>
+    </tr>
+    <tr>
+      <td>"finds nearby drivers", "matches one to the rider"</td>
+      <td><code>SEARCH + ASSIGN</code></td>
+      <td><strong>Find &amp; Match:</strong> After confirmation, find nearby available drivers, rank them, assign one through an offer/accept flow.</td>
+    </tr>
+    <tr>
+      <td>"tracks the driver's location", "streams updates"</td>
+      <td><code>INGEST + PUSH</code></td>
+      <td><strong>Real-Time Tracking:</strong> Online drivers continuously report GPS. During active trips, the rider sees the driver's live position.</td>
+    </tr>
+    <tr>
+      <td>"moves through a lifecycle of states" with side effects</td>
+      <td><code>STATE MACHINE</code></td>
+      <td><strong>Trip Lifecycle:</strong> Manage trip through states with each transition triggering notifications, metering, payment.</td>
+    </tr>
+  </table>
+
+  <div class="info-box note">
+    <strong>Design Approach</strong>
+    Each verb maps to a functional requirement. Each requirement builds on the previous, progressively adding components to the architecture.
+  </div>
+
+  <h3>Non-Functional Requirements (Extract Adjectives)</h3>
+  <p>Adjectives and descriptive phrases from the problem statement become quality constraints:</p>
+
+  <table class="kv-table">
+    <tr><th>Adjective/Phrase</th><th>NFR</th><th>Design Implication</th></tr>
+    <tr>
+      <td>"real-time" location tracking</td>
+      <td><strong>Low Latency</strong></td>
+      <td>Sub-second geospatial lookup; end-to-end ride matching within 5 seconds. Persistent WebSocket connections for real-time push.</td>
+    </tr>
+    <tr>
+      <td>"millions of drivers" sending GPS "every few seconds"</td>
+      <td><strong>High Throughput</strong></td>
+      <td>Ingest ~500K location writes/sec at peak. In-memory geospatial index; no durable DB on the hot path.</td>
+    </tr>
+    <tr>
+      <td>"unique" driver assignment (no double-dispatch)</td>
+      <td><strong>Strong Consistency</strong></td>
+      <td>Strict consistency on driver assignment via optimistic concurrency control. Under partitions, reject rather than risk double-assignment.</td>
+    </tr>
+    <tr>
+      <td>"persistent" and "durable" trip records</td>
+      <td><strong>Durability</strong></td>
+      <td>Trip data and fare records must survive failures. State transitions must be atomic (outbox pattern).</td>
+    </tr>
+    <tr>
+      <td>"consistent" trip lifecycle</td>
+      <td><strong>Reliable Side Effects</strong></td>
+      <td>Side effects triggered at-least-once with idempotency/deduplication for effectively-once outcomes.</td>
+    </tr>
+  </table>
+
+  <h3>Scale Numbers</h3>
+  <div class="scale-box">
+    <h4>Envelope Estimation</h4>
+    <div class="scale-metric"><span class="scale-label">Daily Active Riders</span><span class="scale-value">~50 million</span></div>
+    <div class="scale-metric"><span class="scale-label">Registered Drivers</span><span class="scale-value">~5 million</span></div>
+    <div class="scale-metric"><span class="scale-label">Online Drivers (peak)</span><span class="scale-value">~2 million</span></div>
+    <div class="scale-metric"><span class="scale-label">Trips Per Day</span><span class="scale-value">~20 million</span></div>
+    <div class="scale-metric"><span class="scale-label">GPS Update Frequency</span><span class="scale-value">Every ~4 seconds</span></div>
+    <div class="scale-metric"><span class="scale-label">Location Writes/sec (peak)</span><span class="scale-value">2M / 4s &asymp; 500,000/sec</span></div>
+    <div class="scale-metric"><span class="scale-label">Ride Matching Latency Target</span><span class="scale-value">&lt; 5 seconds end-to-end</span></div>
+    <div class="scale-metric"><span class="scale-label">Location Tracking Update Latency</span><span class="scale-value">&lt; few seconds</span></div>
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 2: DATA MODEL ==================== -->
+<div class="section" id="sec-2">
+  <div class="section-num">Step 2</div>
+  <h2>Data Model</h2>
+
+  <p>The data model is derived from extracting <strong>nouns</strong> in the problem statement:</p>
+  <ul>
+    <li>"rider" and "driver" &rarr; <strong>Trip</strong> entity linking both via <code>rider_id</code> and <code>driver_id</code></li>
+    <li>"fare" and "estimate" &rarr; Trip fields for <code>estimated_fare</code> and <code>actual_fare</code></li>
+    <li>"GPS coordinates" and "location" &rarr; <strong>DriverLocation</strong> entity for real-time tracking</li>
+    <li>"trip lifecycle" and "states" &rarr; <code>Trip.status</code> field as the state machine</li>
+    <li>"unique assignment" &rarr; <code>Driver.version</code> field for optimistic concurrency control</li>
+  </ul>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_02_data_model.png" alt="Data Model Diagram">
+    <div class="caption">Figure 2: Entity-relationship diagram. Trip and Driver have a many-to-one relationship. Trip and DriverLocation have one-to-many (trip route = sequence of GPS snapshots).</div>
+  </div>
+
+  <h3>Trip Entity</h3>
+  <p>Core entity tracking a ride from request to completion. Each trip moves through states (SEARCHING, MATCHED, ARRIVED, IN_PROGRESS, COMPLETED, CANCELLED).</p>
+  <table class="kv-table">
+    <tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
+    <tr><td><code>trip_id</code></td><td>UUID (PK)</td><td>Globally unique trip identifier</td></tr>
+    <tr><td><code>rider_id</code></td><td>UUID (FK)</td><td>Who requested the ride</td></tr>
+    <tr><td><code>driver_id</code></td><td>UUID (FK, nullable)</td><td>Assigned driver (null during SEARCHING)</td></tr>
+    <tr><td><code>status</code></td><td>ENUM</td><td>Current state in the trip lifecycle</td></tr>
+    <tr><td><code>pickup_lat/lng</code></td><td>DOUBLE</td><td>Pickup location coordinates</td></tr>
+    <tr><td><code>dest_lat/lng</code></td><td>DOUBLE</td><td>Destination coordinates</td></tr>
+    <tr><td><code>estimated_fare</code></td><td>DECIMAL</td><td>Pre-ride estimate (from Routing Service)</td></tr>
+    <tr><td><code>actual_fare</code></td><td>DECIMAL</td><td>Final metered fare (after COMPLETED)</td></tr>
+    <tr><td><code>surge_multiplier</code></td><td>FLOAT</td><td>Surge pricing factor at request time</td></tr>
+    <tr><td><code>version</code></td><td>INT</td><td>Optimistic locking for state transitions</td></tr>
+  </table>
+
+  <h3>DriverLocation Entity</h3>
+  <p>Real-time GPS position updated every ~4 seconds. Stored in-memory for matching, persisted asynchronously for history.</p>
+  <table class="kv-table">
+    <tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
+    <tr><td><code>driver_id</code></td><td>UUID (PK)</td><td>Which driver</td></tr>
+    <tr><td><code>lat, lng</code></td><td>DOUBLE</td><td>Current GPS coordinates</td></tr>
+    <tr><td><code>heading</code></td><td>FLOAT</td><td>Direction of travel (0-360 degrees)</td></tr>
+    <tr><td><code>speed</code></td><td>FLOAT</td><td>Current speed (for dead reckoning)</td></tr>
+    <tr><td><code>timestamp</code></td><td>LONG</td><td>When this reading was taken</td></tr>
+    <tr><td><code>geohash</code></td><td>STRING</td><td>Pre-computed geohash for spatial indexing</td></tr>
+    <tr><td><code>trip_id</code></td><td>UUID (nullable)</td><td>Active trip (to associate GPS with route)</td></tr>
+  </table>
+
+  <h3>Driver Entity</h3>
+  <table class="kv-table">
+    <tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
+    <tr><td><code>driver_id</code></td><td>UUID (PK)</td><td>Unique driver identifier</td></tr>
+    <tr><td><code>name, vehicle_info</code></td><td>STRING</td><td>Profile info shown to rider</td></tr>
+    <tr><td><code>status</code></td><td>ENUM</td><td>AVAILABLE, EN_ROUTE, ON_TRIP, OFFLINE</td></tr>
+    <tr><td><code>current_geohash</code></td><td>STRING</td><td>For fast geographic lookup</td></tr>
+    <tr><td><code>version</code></td><td>INT</td><td><strong>Optimistic concurrency control</strong> for double-dispatch prevention</td></tr>
+    <tr><td><code>rating</code></td><td>FLOAT</td><td>Average driver rating</td></tr>
+  </table>
+
+  <h3>Storage Ownership</h3>
+  <div class="info-box linkedin">
+    <strong>LinkedIn Technology Mapping</strong>
+    <ul style="margin-top:8px;">
+      <li><strong>Trip DB &rarr; Espresso:</strong> Strong consistency required for state transitions. Espresso supports conditional updates (CAS) needed for the version-based optimistic locking.</li>
+      <li><strong>Driver DB &rarr; Espresso:</strong> Same reasoning&mdash;driver status changes need atomicity and version checks.</li>
+      <li><strong>Geospatial Index &rarr; In-memory (Couchbase/Redis):</strong> Hot path needs sub-millisecond writes. No durability required&mdash;drivers re-report within seconds.</li>
+      <li><strong>Historical Locations &rarr; Time-Series DB:</strong> Cold path&mdash;persisted asynchronously via Kafka for trip history, analytics, dispute resolution.</li>
+      <li><strong>Surge Pricing Map &rarr; Venice:</strong> Pre-computed, read-heavy derived data. Updated incrementally via Samza stream processing.</li>
+    </ul>
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 3: API ENDPOINTS ==================== -->
+<div class="section" id="sec-3">
+  <div class="section-num">Step 3</div>
+  <h2>API Endpoints</h2>
+
+  <p>We derive API endpoints directly from the functional requirements (verbs identified earlier). Most real-time communication happens over WebSocket, but the API defines the REST surface for ride operations.</p>
+
+  <div class="api-block">
+    <span class="api-method get">GET</span>
+    <span class="api-path">/rides/estimate?pickup_lat={lat}&amp;pickup_lng={lng}&amp;dest_lat={lat}&amp;dest_lng={lng}</span>
+    <p class="api-desc">Get fare estimate and ETA before requesting. Returns estimated fare, distance, duration, and surge multiplier.</p>
+    <pre>{
+  "estimated_fare": { "amount": 24.50, "currency": "USD" },
+  "estimated_duration_min": 23,
+  "estimated_distance_km": 12.4,
+  "surge_multiplier": 1.0
+}</pre>
+  </div>
+
+  <div class="api-block">
+    <span class="api-method post">POST</span>
+    <span class="api-path">/rides</span>
+    <p class="api-desc">Confirm and request a ride. Triggers driver matching. Returns ride ID for tracking.</p>
+    <pre>Request: { "pickup_lat": 37.77, "pickup_lng": -122.41,
+           "dest_lat": 37.62, "dest_lng": -122.38,
+           "payment_method_id": "pm_123" }
+Response: { "ride_id": "trip_456", "status": "SEARCHING",
+            "estimated_fare": 24.50 }</pre>
+  </div>
+
+  <div class="api-block">
+    <span class="api-method get">GET</span>
+    <span class="api-path">/rides/{id}</span>
+    <p class="api-desc">Get ride status, driver info, and ETA. Used for initial load; live updates come via WebSocket.</p>
+  </div>
+
+  <div class="api-block">
+    <span class="api-method post">POST</span>
+    <span class="api-path">/rides/{id}/cancel</span>
+    <p class="api-desc">Cancel a ride. Cancellation rules depend on current state (free during SEARCHING, fee after MATCHED).</p>
+  </div>
+
+  <div class="api-block">
+    <span class="api-method put">PUT</span>
+    <span class="api-path">/drivers/{id}/location</span>
+    <p class="api-desc">Update driver GPS coordinates. Sent every ~4 seconds as a WebSocket message; this REST endpoint serves as an HTTP fallback.</p>
+    <pre>{ "lat": 37.785, "lng": -122.409,
+  "heading": 45.0, "speed": 13.4,
+  "timestamp": 1717000000 }</pre>
+  </div>
+
+  <div class="api-block">
+    <span class="api-method post">POST</span>
+    <span class="api-path">/rides/{id}/offer/accept</span>
+    <p class="api-desc">Driver accepts a ride offer. Transitions ride to MATCHED and driver to <code>EN_ROUTE</code>.</p>
+  </div>
+
+  <div class="api-block">
+    <span class="api-method post">POST</span>
+    <span class="api-path">/rides/{id}/offer/decline</span>
+    <p class="api-desc">Driver declines a ride offer. System tries next candidate driver.</p>
+  </div>
+
+  <div class="api-block">
+    <span class="api-method post">POST</span>
+    <span class="api-path">/rides/{id}/rating</span>
+    <p class="api-desc">Rate the ride after completion. Both rider and driver can rate.</p>
+  </div>
+
+  <div class="info-box linkedin">
+    <strong>LinkedIn: Rest.li + D2</strong>
+    All REST endpoints would be built as <strong>Rest.li</strong> resources with <strong>D2</strong> (Dynamic Discovery) for client-side service discovery and load balancing. D2 enables zero-config service mesh routing between microservices.
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 4: RIDE PRICING ==================== -->
+<div class="section" id="sec-4">
+  <div class="section-num">FR1</div>
+  <h2>Ride Pricing</h2>
+
+  <p>A rider opens the app, types "SFO Airport" as the destination, and sees "$24.50, ~23 min." This estimate appears before they commit to the ride.</p>
+
+  <h3>The Problem</h3>
+  <p>Fare depends on the actual <em>driving route</em>, not straight-line distance. A 10km straight line might be 15km of road with turns, highway ramps, and one-way streets. Straight-line pricing would consistently undercharge for complex routes and overcharge for highway trips.</p>
+
+  <h3>Step 1: Route Calculation via Routing Service</h3>
+  <p>The Ride Service sends pickup and destination coordinates to a <strong>Routing Service</strong>. The Routing Service models the road network as a <em>weighted graph</em>: intersections are nodes, road segments are edges, weights are expected travel times. A shortest-path algorithm (Dijkstra or A* variant) finds the fastest route and returns distance + estimated duration.</p>
+
+  <h3>Step 2: Fare Calculation</h3>
+  <pre>fare = base_fare + (distance_km &times; per_km_rate) + (duration_min &times; per_min_rate)
+
+If surge pricing is active in the pickup zone:
+  fare = fare &times; surge_multiplier</pre>
+
+  <p>The response includes estimated fare, ETA, and surge multiplier so the rider can make an informed decision.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_03_pricing_flow.png" alt="Ride Pricing Flow">
+    <div class="caption">Figure 3: Ride pricing sequence. The Ride Service calls the Routing Service for route distance/duration, computes the fare, and returns the estimate to the rider. Trip record stored in Espresso.</div>
+  </div>
+
+  <h3>Surge Pricing: Supply-Demand Balancing</h3>
+  <p>When demand exceeds supply in a geographic zone, surge pricing kicks in to incentivize more drivers to that area. The feedback loop: higher surge &rarr; higher fare &rarr; more drivers attracted to zone &rarr; supply increases &rarr; surge decreases.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_12_surge_pricing.png" alt="Surge Pricing Architecture">
+    <div class="caption">Figure 4: Surge pricing computed by Samza stream processing consuming ride request and driver availability events from Kafka. Pre-computed surge map stored in Venice for fast reads by the Ride Service.</div>
+  </div>
+
+  <div class="info-box linkedin">
+    <strong>LinkedIn Stack for Surge Pricing</strong>
+    <ul style="margin-top:8px;">
+      <li><strong>Kafka:</strong> Events backbone&mdash;ride requests and driver availability events published to topics partitioned by geo zone.</li>
+      <li><strong>Samza:</strong> Stream processor consuming from Kafka with a 5-minute sliding window per zone. Computes <code>surge = demand_count / supply_count</code> and publishes to Venice.</li>
+      <li><strong>Venice:</strong> Derived data store serving the pre-computed surge map. Key: <code>zone_geohash</code>, Value: <code>surge_multiplier</code>. Read-optimized for the Ride Service to look up surge during fare calculation. Millisecond read latency at massive QPS.</li>
+    </ul>
+  </div>
+
+  <h3>Interview Question: Why Venice instead of Espresso for surge data?</h3>
+  <div class="info-box warning">
+    <strong>Key Tradeoff: Venice vs Espresso</strong>
+    Surge data is a classic <strong>CQRS</strong> (Command Query Responsibility Segregation) pattern. The writes happen through Samza (command side), and reads happen from the Ride Service at high QPS (query side). Venice is optimized for this pattern: it ingests pre-computed data and serves it with millisecond latency. Using Espresso would work but adds unnecessary write overhead since Espresso is designed for mixed read/write OLTP workloads. Venice's read-only serving layer is more efficient for this access pattern.
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 5: FIND & MATCH ==================== -->
+<div class="section" id="sec-5">
+  <div class="section-num">FR2</div>
+  <h2>Find &amp; Match a Driver</h2>
+
+  <p>The rider confirmed the ride. The system needs to answer: "Which available drivers are near this rider?" and assign the best one.</p>
+
+  <h3>The Problem: Naive Query</h3>
+  <p>The naive approach queries the driver database directly:</p>
+  <pre><span class="lang-label">SQL</span>
+SELECT * FROM drivers
+WHERE status = 'available'
+  AND distance(lat, lng, 37.77, -122.41) &lt; 3000
+ORDER BY distance
+LIMIT 5;</pre>
+  <p>With 2 million online drivers and no spatial index, this calculates distance for every row. Standard B-tree indexes on latitude or longitude alone don't help&mdash;they narrow one dimension but still scan thousands in the other. At 1,000 ride requests/sec during peak, each full-scan query exhausts the connection pool.</p>
+
+  <h3>Step 1: Geospatial Index for Nearby Search</h3>
+  <p>Instead of scanning all drivers, organize driver locations in a <strong>geohash-based spatial index</strong> that groups nearby drivers together. Encode each driver's coordinates into a string where <em>nearby locations share a common prefix</em>.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_04_geospatial_index.png" alt="Geospatial Index">
+    <div class="caption">Figure 5: Geohash-based driver search. The rider's cell and 8 neighbors form a 9-cell search pattern. Drivers are filtered by availability and ranked by distance.</div>
+  </div>
+
+  <h4>Search Algorithm</h4>
+  <ol>
+    <li>Compute the rider's geohash at search precision (precision 6 &asymp; 1km cells)</li>
+    <li>Query the rider's cell and all <strong>8 neighboring cells</strong>&mdash;the 9-cell pattern handles drivers near cell boundaries</li>
+    <li>Filter to <code>status = AVAILABLE</code> and remove any beyond max search radius using actual distance</li>
+    <li>Rank remaining candidates by distance from rider's pickup point</li>
+    <li>If &lt; 3 candidates found, expand to coarser precision (&asymp;5km cells) and retry</li>
+  </ol>
+
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4 style="color: var(--accent);">Geohash (Recommended)</h4>
+      <ul>
+        <li>String prefix encodes proximity</li>
+        <li>Works with any key-value store</li>
+        <li>Simple: prefix query + 8 neighbors</li>
+        <li>Cells aren't perfectly uniform (vary by latitude)</li>
+        <li>Used by: Uber (H3), Lyft, Grab</li>
+      </ul>
+    </div>
+    <div class="compare-card">
+      <h4 style="color: var(--accent2);">Quadtree / R-Tree</h4>
+      <ul>
+        <li>Tree-based spatial index</li>
+        <li>Better for non-uniform distributions</li>
+        <li>More complex implementation</li>
+        <li>Harder to shard across machines</li>
+        <li>Better for in-process/single-node use cases</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Step 2: Send Offer and Match</h3>
+  <p>With a ranked list of nearby available drivers, the Matching Service sends a ride offer to the nearest candidate via their WebSocket connection: "New ride request, pickup at X, destination Y. Accept?"</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_05_matching_flow.png" alt="Ride Matching Flow">
+    <div class="caption">Figure 6: Offer/accept protocol. The Matching Service queries the geospatial index, sends an offer to the nearest driver via WebSocket, and handles accept/decline with fallback to next candidate.</div>
+  </div>
+
+  <h4>Offer/Accept Protocol</h4>
+  <ul>
+    <li><strong>Accept:</strong> Trip transitions to MATCHED. Rider is notified with driver details and ETA.</li>
+    <li><strong>Decline or timeout (15s):</strong> System tries the next candidate on the list.</li>
+    <li><strong>All candidates exhausted:</strong> Expand search radius and retry. If still none, notify rider "No drivers available."</li>
+  </ul>
+
+  <h3>The Double-Dispatch Problem</h3>
+  <p>What if two ride requests simultaneously try to assign the same driver? Without protection, both succeed and the driver is double-booked.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_06_double_dispatch.png" alt="Double-Dispatch Prevention">
+    <div class="caption">Figure 7: Race condition without protection (left) vs. optimistic concurrency control with version field (right). Only one assignment succeeds; the loser retries with the next candidate.</div>
+  </div>
+
+  <h4>Solution: Optimistic Concurrency Control (OCC)</h4>
+  <pre><span class="lang-label">SQL</span>
+UPDATE drivers
+SET status = 'ON_TRIP', version = version + 1
+WHERE driver_id = ?
+  AND version = ?         -- Must match what we read
+  AND status = 'AVAILABLE'
+
+-- If affected_rows = 0 &rarr; concurrent modification &rarr; retry with next driver
+-- If affected_rows = 1 &rarr; success, driver exclusively assigned</pre>
+
+  <div class="info-box linkedin">
+    <strong>LinkedIn: Espresso Conditional Updates</strong>
+    Espresso supports <strong>conditional updates (CAS&mdash;Compare-And-Swap)</strong> natively. The <code>version</code> field in the Driver entity enables optimistic concurrency control without distributed locks. When two matching requests race on the same driver, exactly one will succeed (the one whose version matches), and the other will get a version mismatch and try the next candidate. This is more scalable than pessimistic locking because it doesn't hold locks during the offer/accept timeout.
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 6: REAL-TIME TRACKING ==================== -->
+<div class="section" id="sec-6">
+  <div class="section-num">FR3</div>
+  <h2>Real-Time Driver Tracking</h2>
+
+  <p>The ride is matched. The rider watches their phone, waiting for the driver's car icon to appear and move toward them. This requires two things: a pipeline to <strong>ingest driver GPS updates at massive scale</strong>, and a way to <strong>push those updates to the rider in real-time</strong>.</p>
+
+  <h3>The Problem</h3>
+  <p>2 million online drivers send GPS coordinates every 4 seconds. That's roughly <strong>500,000 writes per second</strong> at peak&mdash;potentially bursty after reconnection storms. And during an active trip, each location update must reach the rider's phone within seconds.</p>
+
+  <h3>Step 1: WebSocket Connections</h3>
+  <p>Both rider and driver apps maintain a <strong>persistent WebSocket connection</strong> to a Connection Service. WebSocket provides a bidirectional channel: the driver sends location updates upstream and receives ride offers downstream; the rider sends ride requests upstream and receives tracking updates downstream.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_09_websocket_arch.png" alt="WebSocket Connection Architecture">
+    <div class="caption">Figure 8: WebSocket connection architecture. A connection registry maps user_id to Connection Service instance for cross-instance message delivery. ~100K connections per instance, 30-50 instances for 2M+ connected users.</div>
+  </div>
+
+  <h4>Why WebSocket over alternatives?</h4>
+  <table class="kv-table">
+    <tr><th>Option</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+    <tr>
+      <td><strong>Short Polling</strong></td>
+      <td>Simple, works through all proxies</td>
+      <td>2M drivers polling every 2s = 1M req/sec of overhead. Most responses empty. Latency = polling interval.</td>
+      <td style="color:var(--red);">Too wasteful</td>
+    </tr>
+    <tr>
+      <td><strong>SSE (Server-Sent Events)</strong></td>
+      <td>Server pushes, no polling overhead</td>
+      <td>One-way only (server&rarr;client). Drivers still need separate upstream channel for sending locations.</td>
+      <td style="color:var(--accent4);">Half solution</td>
+    </tr>
+    <tr>
+      <td><strong>WebSocket</strong></td>
+      <td>Persistent bidirectional. One connection handles both upload + download. Low per-message overhead.</td>
+      <td>Connections are stateful. Need sticky sessions or connection registry for routing.</td>
+      <td style="color:var(--accent2);">Best fit</td>
+    </tr>
+  </table>
+
+  <h3>Step 2: Location Ingestion Pipeline (Hot + Cold Path)</h3>
+  <p>Every 4 seconds, each online driver's app sends a location update over WebSocket. The Location Service receives these and splits into two paths:</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_07_hot_cold_path.png" alt="Hot Path vs Cold Path">
+    <div class="caption">Figure 9: Dual-path architecture. Hot path: in-memory geospatial index for real-time matching (&lt;5ms writes). Cold path: Kafka &rarr; Samza &rarr; Time-Series DB for durable history (seconds-to-minutes lag).</div>
+  </div>
+
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4 style="color: var(--red);">Hot Path (Real-Time)</h4>
+      <ul>
+        <li>Update geospatial index (compute geohash, store/move driver)</li>
+        <li>Latency: <strong>&lt;5ms</strong></li>
+        <li>Durability: <strong>None</strong> (in-memory)</li>
+        <li>Purpose: Real-time matching &amp; tracking</li>
+        <li>Recovery: Drivers re-report within one GPS interval</li>
+      </ul>
+    </div>
+    <div class="compare-card">
+      <h4 style="color: var(--accent);">Cold Path (Durable)</h4>
+      <ul>
+        <li>Publish to Kafka &rarr; batch to time-series DB</li>
+        <li>Latency: <strong>seconds to minutes</strong></li>
+        <li>Durability: <strong>Yes</strong> (persistent)</li>
+        <li>Purpose: Trip history, analytics, disputes</li>
+        <li>Recovery: Replay from Kafka</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="info-box note">
+    <strong>Key Insight: The geospatial index doesn't need durability.</strong> If it crashes, connected drivers send new updates within a few seconds. Replication or replay from Kafka helps close the gap. This means the real-time index can be purely in-memory, optimized for speed. The durable record can be written asynchronously. Neither needs to do both.
+  </div>
+
+  <h3>Step 3: Location Relay to Rider</h3>
+  <p>When a driver's location update arrives and the driver is on an active trip, the Location Service forwards it to the rider. But the rider is connected to a <em>different</em> Connection Service instance.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_15_location_relay.png" alt="Location Relay Flow">
+    <div class="caption">Figure 10: End-to-end location relay. Driver app &rarr; Connection Service A &rarr; Location Service &rarr; Connection Registry (lookup rider) &rarr; Connection Service B &rarr; Rider app. Total: &lt;10ms typically.</div>
+  </div>
+
+  <h4>Client-Side Optimizations</h4>
+  <ul>
+    <li><strong>Interpolation:</strong> Smooth animation between GPS updates (every 4s) so the car icon doesn't "jump"</li>
+    <li><strong>Dead reckoning:</strong> Use heading + speed to estimate position when an update is late</li>
+    <li><strong>Snap-to-road:</strong> Keep car icon on roads instead of showing raw GPS (which might place it in a building)</li>
+  </ul>
+
+  <h4>Handling Disconnections</h4>
+  <p>When a rider's WebSocket drops (tunnel, elevator), the system buffers recent events for each active trip. On reconnection, the client sends its last-seen event timestamp, and the server replays anything newer.</p>
+
+  <div class="info-box linkedin">
+    <strong>LinkedIn: Real-Time Delivery Platform</strong>
+    LinkedIn's <strong>Real-Time Delivery</strong> infrastructure for messaging uses a similar pattern: persistent connections with a connection registry that maps user IDs to instances. The registry is backed by a distributed key-value store with TTL-based entries refreshed by heartbeats. This is the same architecture needed for Uber's location relay.
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 7: TRIP LIFECYCLE ==================== -->
+<div class="section" id="sec-7">
+  <div class="section-num">FR4</div>
+  <h2>Trip Lifecycle Management</h2>
+
+  <p>A ride involves many state changes, each triggering different side effects. Without a formal state machine, these transitions become ad-hoc and error-prone&mdash;a missed notification, a fare that never starts metering, a payment that fires twice.</p>
+
+  <h3>Step 1: Trip State Machine</h3>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_08_trip_state_machine.png" alt="Trip State Machine">
+    <div class="caption">Figure 11: Trip state machine with 6 states and defined transitions. Each transition is performed atomically in a single database transaction (conditional state update + outbox insert).</div>
+  </div>
+
+  <table class="kv-table">
+    <tr><th>State</th><th>Description</th><th>Enters When</th></tr>
+    <tr><td style="color:#d29922;"><strong>SEARCHING</strong></td><td>Rider requested, system finding a driver</td><td>Rider confirms ride (POST /rides)</td></tr>
+    <tr><td style="color:var(--accent);"><strong>MATCHED</strong></td><td>Driver assigned, en route to pickup</td><td>Driver accepts ride offer</td></tr>
+    <tr><td style="color:var(--accent3);"><strong>ARRIVED</strong></td><td>Driver at pickup, waiting for rider</td><td>Driver GPS within threshold of pickup</td></tr>
+    <tr><td style="color:var(--accent2);"><strong>IN_PROGRESS</strong></td><td>Rider picked up, driving to destination</td><td>Driver confirms rider picked up</td></tr>
+    <tr><td style="color:#1a6b2a;"><strong>COMPLETED</strong></td><td>Trip finished, fare calculated</td><td>Arrive at destination</td></tr>
+    <tr><td style="color:var(--red);"><strong>CANCELLED</strong></td><td>Cancelled by rider or driver</td><td>Cancel action (rules depend on state)</td></tr>
+  </table>
+
+  <h3>Step 2: Transition Side Effects</h3>
+
+  <table class="kv-table">
+    <tr><th>Transition</th><th>Side Effects</th></tr>
+    <tr>
+      <td>SEARCHING &rarr; MATCHED</td>
+      <td>Notify rider (driver details, ETA). Start streaming driver location to rider. Notify driver with pickup location &amp; navigation.</td>
+    </tr>
+    <tr>
+      <td>MATCHED &rarr; ARRIVED</td>
+      <td>Notify rider "Your driver has arrived." Start wait timer&mdash;if rider doesn't show within 5 min, driver can cancel.</td>
+    </tr>
+    <tr>
+      <td>ARRIVED &rarr; IN_PROGRESS</td>
+      <td>Start metering trip (distance + time for fare). Switch navigation to destination.</td>
+    </tr>
+    <tr>
+      <td>IN_PROGRESS &rarr; COMPLETED</td>
+      <td>Calculate actual fare from metered distance/time + surge. Trigger payment processing. Prompt both parties for ratings.</td>
+    </tr>
+    <tr>
+      <td>Any &rarr; CANCELLED</td>
+      <td>Rules depend on state: free during SEARCHING; fee after MATCHED; partial fare during IN_PROGRESS.</td>
+    </tr>
+  </table>
+
+  <h3>The Outbox Pattern: Reliable Event Publishing</h3>
+  <p>A critical problem: what if the DB update succeeds but the event publish to Kafka fails? The trip transitions but downstream consumers (notifications, payment) are never told.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_14_outbox_pattern.png" alt="Outbox Pattern">
+    <div class="caption">Figure 12: The outbox pattern solves the dual-write problem. State change + event are written atomically in one DB transaction. An outbox reader publishes events to Kafka independently. Consumers handle side effects.</div>
+  </div>
+
+  <h4>How It Works</h4>
+  <ol>
+    <li><strong>Atomic Transaction:</strong> In a single DB transaction, update the trip status AND insert an event record into an <code>outbox</code> table. Both succeed or both fail.</li>
+    <li><strong>Outbox Reader:</strong> A separate process polls the outbox table (or uses Change Data Capture) and publishes events to Kafka. Marks events as published after successful delivery.</li>
+    <li><strong>Event Consumers:</strong> Notification Service, Payment Service, Analytics all subscribe to Kafka topics and handle their respective side effects.</li>
+  </ol>
+
+  <pre><span class="lang-label">SQL</span>
+BEGIN TRANSACTION;
+  UPDATE trip SET status = 'MATCHED', version = version + 1
+    WHERE trip_id = ? AND version = ?;
+  INSERT INTO outbox (id, event_type, payload, created_at)
+    VALUES (uuid(), 'trip.matched', '{"trip_id":"...","driver_id":"..."}', now());
+COMMIT;</pre>
+
+  <h4>Idempotent Transitions</h4>
+  <p>Network issues can cause duplicate transition requests. If the driver's app sends "arrived at pickup" twice, the Trip Service checks current state: if already ARRIVED, it's a no-op. Side effects also need deduplication via idempotency keys or unique constraints in the outbox.</p>
+
+  <div class="info-box linkedin">
+    <strong>LinkedIn: Espresso Change Capture &rarr; Brooklin &rarr; Kafka</strong>
+    LinkedIn uses <strong>Brooklin</strong> (their change data capture framework) to stream changes from Espresso to Kafka topics. This is exactly the outbox pattern: Espresso's change capture feeds events reliably to Kafka without dual-write risk. Downstream Samza jobs consume these events for side effects.
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 8: SCALING DEEP DIVE ==================== -->
+<div class="section" id="sec-8">
+  <div class="section-num">Deep Dive</div>
+  <h2>Scaling 500K Location Writes/sec</h2>
+
+  <p>2 million online drivers, each sending GPS every 4 seconds. ~500K writes/sec at peak, with spikes during rush hour. A relational database doing 500K durable random writes/sec on a single table would struggle&mdash;WAL/fsync overhead, index maintenance, and transaction coordination make this impractical.</p>
+
+  <h3>Separating Hot and Cold Paths</h3>
+  <p>The geospatial index for real-time matching <strong>doesn't need durability</strong>. If it crashes, connected drivers send new updates within seconds. This means the real-time index can be purely in-memory. The durable record can be written asynchronously.</p>
+
+  <table class="kv-table">
+    <tr><th>Property</th><th>Hot Path</th><th>Cold Path</th></tr>
+    <tr><td>Latency</td><td>&lt;5ms</td><td>seconds-minutes</td></tr>
+    <tr><td>Durability</td><td>No (in-memory)</td><td>Yes (persistent)</td></tr>
+    <tr><td>Purpose</td><td>Real-time matching</td><td>History &amp; analytics</td></tr>
+    <tr><td>Recovery</td><td>Drivers re-report</td><td>Replay from Kafka</td></tr>
+    <tr><td>Technology</td><td>Redis/Couchbase GEOADD</td><td>Kafka &rarr; Samza &rarr; Time-Series DB</td></tr>
+  </table>
+
+  <h3>Sharding the Geospatial Index</h3>
+  <p>Even in-memory, a single node handling 500K writes/sec may hit CPU limits. Shard the index by geographic region.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_11_geo_sharding.png" alt="Geospatial Index Sharding">
+    <div class="caption">Figure 13: Two-level sharding: region shards (NA, EU, APAC, LATAM) and city sub-shards within each region. Each shard: ~125K updates/sec, Primary + Replica for failover.</div>
+  </div>
+
+  <h4>Sharding Strategy</h4>
+  <ul>
+    <li><strong>Level 1 &mdash; Region:</strong> NA, EU, APAC, LATAM. Each shard handles drivers in its region.</li>
+    <li><strong>Level 2 &mdash; City:</strong> Within a region, partition by metro area using coarse geohash prefix (first 2-3 characters).</li>
+    <li><strong>Cross-shard queries:</strong> For riders near a shard boundary, query both shards and merge results.</li>
+    <li><strong>Failover:</strong> Each shard has Primary + hot standby Replica. Promote replica in &lt;1 second.</li>
+    <li><strong>Rebuild:</strong> Replay last 30 seconds from Kafka, or wait for drivers to re-report.</li>
+  </ul>
+
+  <h3>Adaptive Update Frequency</h3>
+  <p>Not all location updates are equally valuable:</p>
+  <ul>
+    <li><strong>Parked driver:</strong> Reduce to every 30-60 seconds (position isn't changing)</li>
+    <li><strong>Moving toward pickup:</strong> Increase to every 2-3 seconds (rider watching closely)</li>
+    <li><strong>On active trip:</strong> Every 4 seconds (standard fare metering)</li>
+    <li><strong>Battery saving mode:</strong> OS may throttle to every 10-15 seconds</li>
+  </ul>
+  <p>This can cut total update volume by <strong>30-50%</strong> without affecting matching quality.</p>
+
+  <h3>Handling Stale Data</h3>
+  <p>If a driver's app loses connectivity, their last-known position stays in the index. After a timeout (e.g., 30 seconds without an update), mark the driver as <strong>stale</strong> and exclude them from matching. A background sweeper periodically removes stale entries.</p>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 9: LINKEDIN TECH MAPPING ==================== -->
+<div class="section" id="sec-9">
+  <div class="section-num">Deep Dive</div>
+  <h2>LinkedIn Technology Mapping</h2>
+
+  <p>If you were building Uber's architecture using LinkedIn's technology stack, here's how each component maps:</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_10_linkedin_mapping.png" alt="LinkedIn Technology Mapping">
+    <div class="caption">Figure 14: Mapping of Uber components to LinkedIn technologies. The key decision framework: write-heavy + consistency &rarr; Espresso, read-heavy derived &rarr; Venice, large blobs &rarr; Ambry.</div>
+  </div>
+
+  <h3>Espresso vs Venice vs Ambry Decision Tree</h3>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_13_data_stores.png" alt="Espresso vs Venice vs Ambry">
+    <div class="caption">Figure 15: Decision tree for choosing between LinkedIn's three data stores. Each has a distinct sweet spot based on access pattern.</div>
+  </div>
+
+  <div class="three-grid">
+    <div class="compare-card">
+      <h4 style="color: var(--accent);">Espresso</h4>
+      <p><strong>LinkedIn's NoSQL Document Store</strong></p>
+      <ul>
+        <li>OLTP workloads, read+write</li>
+        <li>Strong (timeline) consistency</li>
+        <li>Conditional updates (CAS)</li>
+        <li>Auto-sharding by key</li>
+        <li>Secondary indexes</li>
+        <li>Change data capture</li>
+      </ul>
+      <p style="color:var(--accent2);margin-top:12px;"><strong>Uber use:</strong> Trip DB, Driver DB</p>
+    </div>
+    <div class="compare-card">
+      <h4 style="color: var(--accent2);">Venice</h4>
+      <p><strong>LinkedIn's Derived Data Store</strong></p>
+      <ul>
+        <li>Read-heavy, precomputed data</li>
+        <li>Eventually consistent (seconds lag)</li>
+        <li>Batch push from Hadoop</li>
+        <li>Incremental updates from Samza</li>
+        <li>Read-only serving layer</li>
+        <li>Millisecond read latency</li>
+      </ul>
+      <p style="color:var(--accent2);margin-top:12px;"><strong>Uber use:</strong> Surge map, fare history, rating aggregates</p>
+    </div>
+    <div class="compare-card">
+      <h4 style="color: var(--accent4);">Ambry</h4>
+      <p><strong>LinkedIn's Distributed Blob Store</strong></p>
+      <ul>
+        <li>Large binary objects</li>
+        <li>Write-once, read-many</li>
+        <li>Immutable, content-addressed</li>
+        <li>Multi-datacenter replication</li>
+        <li>TTL support</li>
+        <li>CDN integration</li>
+      </ul>
+      <p style="color:var(--accent2);margin-top:12px;"><strong>Uber use:</strong> Trip receipts, profile photos, route screenshots</p>
+    </div>
+  </div>
+
+  <h3>Full LinkedIn Stack Mapping</h3>
+  <table class="kv-table">
+    <tr><th>Uber Component</th><th>LinkedIn Equivalent</th><th>Why This Choice</th></tr>
+    <tr><td>Trip Database</td><td><strong>Espresso</strong></td><td>OLTP with strong consistency. CAS for state machine transitions. Partitioned by trip_id.</td></tr>
+    <tr><td>Driver Profile Store</td><td><strong>Espresso</strong></td><td>Read+write. Version-based OCC for double-dispatch prevention.</td></tr>
+    <tr><td>Geospatial Index</td><td><strong>Couchbase / Custom</strong></td><td>In-memory for &lt;5ms writes. Similar to how LinkedIn's Galene handles search indexing.</td></tr>
+    <tr><td>Message Queue</td><td><strong>Kafka</strong></td><td>LinkedIn invented Kafka. Event streaming backbone. Partitioned by driver_id for location, by trip_id for events.</td></tr>
+    <tr><td>Stream Processing</td><td><strong>Samza</strong></td><td>LinkedIn's stream processing framework. Consumes from Kafka, computes surge, writes to Venice.</td></tr>
+    <tr><td>Surge Pricing / Derived Views</td><td><strong>Venice</strong></td><td>Pre-computed read-heavy data. Millisecond read latency. Updated incrementally from Samza.</td></tr>
+    <tr><td>Blob Storage</td><td><strong>Ambry</strong></td><td>Immutable blobs (receipts, photos). Petabyte-scale, multi-DC replication.</td></tr>
+    <tr><td>API Framework</td><td><strong>Rest.li</strong></td><td>Declarative REST framework with resource models, pagination, batch operations.</td></tr>
+    <tr><td>Service Discovery</td><td><strong>D2</strong></td><td>Client-side load balancing with dynamic service discovery. Zero-config routing.</td></tr>
+    <tr><td>Real-Time Push</td><td><strong>Real-Time Delivery</strong></td><td>LinkedIn Messaging infrastructure. Persistent connections with connection registry.</td></tr>
+    <tr><td>Feature Flags</td><td><strong>LIX</strong></td><td>A/B testing for surge algorithm variants, matching strategies, UI experiments.</td></tr>
+    <tr><td>Config Management</td><td><strong>cfg2</strong></td><td>Dynamic configuration for per-city pricing rules, thresholds, feature toggles.</td></tr>
+    <tr><td>Change Data Capture</td><td><strong>Brooklin</strong></td><td>Streams Espresso changes to Kafka. Powers the outbox pattern without dual-write risk.</td></tr>
+  </table>
+
+  <div class="info-box success">
+    <strong>Key Decision Framework</strong>
+    <ul style="margin-top:8px;">
+      <li>Write-heavy + need consistency &rarr; <strong>Espresso</strong></li>
+      <li>Write-once, read-many (derived/precomputed) &rarr; <strong>Venice</strong></li>
+      <li>Large blobs (images, files) &rarr; <strong>Ambry</strong></li>
+      <li>Event streaming between services &rarr; <strong>Kafka</strong></li>
+      <li>Real-time stream processing &rarr; <strong>Samza</strong></li>
+      <li>Database change propagation &rarr; <strong>Brooklin</strong></li>
+    </ul>
+  </div>
+
+  <h3>Interview Question: Why not just use Espresso for everything?</h3>
+  <div class="info-box warning">
+    <strong>Why Specialized Stores Matter</strong>
+    <p>Espresso is excellent for OLTP but it's not optimized for:</p>
+    <ul style="margin-top:8px;">
+      <li><strong>Read-only derived data:</strong> Venice avoids write amplification for data that's computed once and read millions of times (surge map, aggregated ratings).</li>
+      <li><strong>Large blobs:</strong> Ambry is purpose-built for immutable binary objects with multi-DC replication and CDN integration. Storing 5MB receipt PDFs in Espresso wastes its OLTP optimization.</li>
+      <li><strong>Time-series data:</strong> Location history at 500K/sec needs specialized time-series storage with columnar compression and downsampling. Espresso's row-oriented storage isn't efficient for this.</li>
+    </ul>
+    <p style="margin-top:8px;">Using the right store for each access pattern reduces total cost and improves latency at scale.</p>
+  </div>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 10: COMPLETE ARCHITECTURE ==================== -->
+<div class="section" id="sec-10">
+  <div class="section-num">Complete View</div>
+  <h2>Complete Architecture</h2>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_16_complete_arch.png" alt="Complete Uber Architecture">
+    <div class="caption">Figure 16: Complete Uber architecture with LinkedIn stack. Five layers: Client, Gateway (Rest.li + D2), Core Services, Data (OLTP, Real-Time, Event Streaming, Derived, Blob), and Downstream Services.</div>
+  </div>
+
+  <h3>Architecture Summary by Layer</h3>
+
+  <table class="kv-table">
+    <tr><th>Layer</th><th>Components</th><th>LinkedIn Tech</th></tr>
+    <tr>
+      <td><strong>Client</strong></td>
+      <td>Rider App (iOS/Android), Driver App (iOS/Android)</td>
+      <td>&mdash;</td>
+    </tr>
+    <tr>
+      <td><strong>Gateway</strong></td>
+      <td>API Gateway (REST endpoints), Connection Service (WebSocket + Connection Registry)</td>
+      <td>Rest.li, D2, Real-Time Delivery</td>
+    </tr>
+    <tr>
+      <td><strong>Core Services</strong></td>
+      <td>Ride Service (trip lifecycle, fare), Matching Service (nearby search, offers), Location Service (GPS ingest, hot/cold split), Routing Service (graph-based ETA)</td>
+      <td>Java microservices on Rest.li</td>
+    </tr>
+    <tr>
+      <td><strong>OLTP Data</strong></td>
+      <td>Trip DB (strong consistency, CAS), Driver DB (OCC version field)</td>
+      <td>Espresso</td>
+    </tr>
+    <tr>
+      <td><strong>Real-Time Data</strong></td>
+      <td>Geospatial Index (in-memory, geohash-sharded), Connection Registry</td>
+      <td>Couchbase / Redis</td>
+    </tr>
+    <tr>
+      <td><strong>Event Streaming</strong></td>
+      <td>trip-events topic, driver-locations topic, CDC from Espresso</td>
+      <td>Kafka, Brooklin</td>
+    </tr>
+    <tr>
+      <td><strong>Stream Processing</strong></td>
+      <td>Surge computation, analytics aggregation, location batch writes</td>
+      <td>Samza</td>
+    </tr>
+    <tr>
+      <td><strong>Derived Data</strong></td>
+      <td>Surge pricing map, fare history, rating aggregates</td>
+      <td>Venice</td>
+    </tr>
+    <tr>
+      <td><strong>Blob Storage</strong></td>
+      <td>Trip receipts, profile photos</td>
+      <td>Ambry</td>
+    </tr>
+    <tr>
+      <td><strong>Downstream</strong></td>
+      <td>Payment Service, Notification Service, Analytics, Fraud Detection</td>
+      <td>&mdash;</td>
+    </tr>
+  </table>
+
+  <h3>Data Flow Summary</h3>
+  <ol>
+    <li><strong style="color:var(--accent);">Ride Request Flow:</strong> Rider App &rarr; API Gateway &rarr; Ride Service &rarr; Routing Service (ETA) &rarr; Venice (surge) &rarr; Espresso (store trip) &rarr; Matching Service</li>
+    <li><strong style="color:var(--accent2);">Matching Flow:</strong> Matching Service &rarr; Geospatial Index (nearby search) &rarr; Connection Service &rarr; Driver App (offer) &rarr; Driver accepts &rarr; Espresso (update trip + driver with OCC)</li>
+    <li><strong style="color:var(--accent4);">Location Flow:</strong> Driver App &rarr; WebSocket &rarr; Location Service &rarr; Geospatial Index (hot) + Kafka (cold) &rarr; Connection Registry &rarr; Rider App</li>
+    <li><strong style="color:var(--accent3);">Event Flow:</strong> Espresso (trip state change) &rarr; Brooklin (CDC) &rarr; Kafka &rarr; Event Consumers (Notification, Payment, Analytics)</li>
+  </ol>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+<!-- ==================== SECTION 11: INTERVIEW QUESTIONS ==================== -->
+<div class="section" id="sec-11">
+  <div class="section-num">Interview Prep</div>
+  <h2>Interview Questions &amp; What They Test</h2>
+
+  <p>These are the deep dive questions an interviewer is likely to ask after you present the high-level design. Each question tests specific distributed systems knowledge.</p>
+
+  <div class="diagram-box">
+    <img src="images/sd_uber_17_interview_questions.png" alt="Interview Questions Overview">
+    <div class="caption">Figure 17: Interview questions organized by category: Consistency, Scalability, Real-Time Communication, and Design Tradeoffs.</div>
+  </div>
+
+  <h3>Consistency &amp; Correctness</h3>
+
+  <div class="info-box note">
+    <strong>Q1: How do you prevent double-dispatch of drivers?</strong>
+    <p><em>What it tests:</em> Optimistic concurrency control, CAS operations, distributed locking tradeoffs.</p>
+    <p><em>Answer framework:</em> Version field on Driver entity. Read driver (status=AVAILABLE, version=N). Conditional update: SET status=ON_TRIP, version=N+1 WHERE version=N. If affected_rows=0, another request won. Retry with next candidate. This is more scalable than pessimistic locks because it doesn't hold locks during the 15-second offer timeout.</p>
+    <p><em>Follow-up:</em> Why not use a distributed lock (e.g., ZooKeeper)? Because the lock would need to be held for the entire offer/accept window (15 seconds), blocking other requests. OCC with retry is better for high-contention, short-duration operations.</p>
+  </div>
+
+  <div class="info-box note">
+    <strong>Q2: What happens if the trip DB write succeeds but Kafka publish fails?</strong>
+    <p><em>What it tests:</em> Outbox pattern, dual-write problem, exactly-once semantics.</p>
+    <p><em>Answer framework:</em> Use the transactional outbox pattern. Write the state change AND the event to the same DB in one transaction. A separate outbox reader (or Espresso Change Capture via Brooklin) publishes to Kafka. This ensures atomicity&mdash;either both succeed or both fail.</p>
+    <p><em>Follow-up:</em> How do consumers handle duplicate events? Idempotency keys. Each event has a unique ID. Consumers track processed IDs and skip duplicates.</p>
+  </div>
+
+  <div class="info-box note">
+    <strong>Q3: How do you handle a driver accepting two ride offers simultaneously?</strong>
+    <p><em>What it tests:</em> Linearizable writes, single-writer principle.</p>
+    <p><em>Answer framework:</em> The driver's accept request goes through the Matching Service, which performs the Espresso conditional update on the Trip (version check). Even if two offers were somehow sent (which shouldn't happen since the driver's status should already be EN_ROUTE after the first offer is sent), the second accept would fail the version check.</p>
+  </div>
+
+  <h3>Scalability &amp; Performance</h3>
+
+  <div class="info-box warning">
+    <strong>Q4: How do you handle 500K location writes/sec?</strong>
+    <p><em>What it tests:</em> Hot/cold path separation, in-memory indexing, sharding strategy.</p>
+    <p><em>Answer framework:</em> Split into two paths. Hot path: in-memory geospatial index (Redis GEOADD or custom), sharded by geographic region. No durability needed&mdash;drivers re-report in seconds. Cold path: Kafka &rarr; Samza &rarr; time-series DB in batches. Neither path does both speed AND durability.</p>
+    <p><em>Follow-up:</em> How do you shard? By geohash prefix (Level 1: region, Level 2: city). Cross-boundary queries fan out to adjacent shards and merge.</p>
+  </div>
+
+  <div class="info-box warning">
+    <strong>Q5: What if a geospatial index shard fails? How do you recover?</strong>
+    <p><em>What it tests:</em> Replication, replay from Kafka, failover strategy.</p>
+    <p><em>Answer framework:</em> Three recovery options: (1) Hot standby replica&mdash;promote in &lt;1 second. (2) Replay last 30 seconds from Kafka to rebuild. (3) Wait for drivers to re-report naturally (takes a few GPS intervals). Most deployments use replica promotion + client re-reporting as backup.</p>
+  </div>
+
+  <div class="info-box warning">
+    <strong>Q6: How does surge pricing computation scale across cities?</strong>
+    <p><em>What it tests:</em> Stream processing (Samza), derived stores (Venice), windowed aggregation.</p>
+    <p><em>Answer framework:</em> Samza consumes ride_request and driver_available events from Kafka. 5-minute sliding window per geographic zone. Computes demand/supply ratio. Writes surge map to Venice (key: zone_geohash, value: surge_multiplier). Ride Service reads from Venice at fare calculation time. Venice handles millions of reads/sec with millisecond latency. Each city's zones are processed independently&mdash;naturally parallelizable.</p>
+  </div>
+
+  <h3>Real-Time Communication</h3>
+
+  <div class="info-box success">
+    <strong>Q7: Why WebSocket over SSE or polling? What are the tradeoffs?</strong>
+    <p><em>What it tests:</em> Bidirectional vs unidirectional, connection statefulness, reconnection.</p>
+    <p><em>Answer framework:</em> WebSocket: bidirectional (driver sends GPS upstream, receives offers downstream) over one connection. SSE: server-to-client only, would need separate channel for driver uploads. Polling: 1M requests/sec of pure overhead at 2M drivers. Tradeoff: WebSocket connections are stateful&mdash;need sticky sessions or connection registry. Worth it for the bandwidth savings and latency.</p>
+  </div>
+
+  <div class="info-box success">
+    <strong>Q8: How does a location update reach the rider if they're on a different server?</strong>
+    <p><em>What it tests:</em> Connection registry, pub/sub backplane, message routing.</p>
+    <p><em>Answer framework:</em> Connection registry (Redis/Couchbase) maps user_id &rarr; Connection Service instance. When Location Service needs to push to rider_R7: (1) Look up R7 in registry &rarr; Instance B. (2) Route message to Instance B. (3) Instance B pushes via R7's WebSocket. Registry entries have TTL, refreshed by heartbeat.</p>
+  </div>
+
+  <div class="info-box success">
+    <strong>Q9: What happens when rider's phone goes through a tunnel?</strong>
+    <p><em>What it tests:</em> Buffering, replay on reconnect, eventual consistency.</p>
+    <p><em>Answer framework:</em> System buffers recent events for each active trip (small in-memory queue per trip). On WebSocket reconnection, client sends last-seen event timestamp. Server replays anything newer. Client-side: dead reckoning using last known heading + speed for smooth animation until reconnection. If offline too long (&gt;30s), show stale indicator on map.</p>
+  </div>
+
+  <h3>Design Tradeoffs</h3>
+
+  <div class="info-box linkedin">
+    <strong>Q10: Why Espresso over a relational DB (MySQL/Postgres) for trip records?</strong>
+    <p><em>What it tests:</em> Horizontal scaling, partition tolerance, consistency model.</p>
+    <p><em>Answer framework:</em> At 20M trips/day, a single-node relational DB would struggle. Espresso provides: (1) Auto-sharding by trip_id&mdash;horizontal scaling without application-level sharding logic. (2) Timeline consistency&mdash;strong within a partition, which is sufficient since trip operations are keyed by trip_id. (3) Conditional updates (CAS) for the state machine version checks. (4) Change data capture via Brooklin for the outbox pattern. A sharded MySQL/Postgres with Vitess could work but requires more operational complexity.</p>
+  </div>
+
+  <div class="info-box linkedin">
+    <strong>Q11: Why Venice for surge pricing instead of just reading from Espresso?</strong>
+    <p><em>What it tests:</em> Read amplification, precomputation, CQRS pattern.</p>
+    <p><em>Answer framework:</em> Surge data is computed by Samza and read by every fare estimate request. The read:write ratio is extreme (millions of reads for every update). Venice is optimized for this: it ingests precomputed data (from Samza) and serves reads with minimal overhead. Espresso would work but its OLTP optimization (write-ahead logging, transaction support) adds unnecessary overhead for read-only serving. Venice's read path is simpler and faster for this access pattern.</p>
+  </div>
+
+  <div class="info-box linkedin">
+    <strong>Q12: How would you add ride pooling (shared rides) to this design?</strong>
+    <p><em>What it tests:</em> Extensibility, matching complexity, state machine evolution.</p>
+    <p><em>Answer framework:</em> Three changes: (1) <strong>Matching Service:</strong> Instead of 1:1 matching, solve a constrained optimization&mdash;can this rider share with an existing in-progress trip? Check if detour adds &lt;X minutes. (2) <strong>Trip entity:</strong> Add <code>rider_ids</code> (array) instead of single <code>rider_id</code>. Add <code>waypoints</code> (ordered list of pickup/dropoff). (3) <strong>State machine:</strong> New states like PICKING_UP_SECOND_RIDER. New transitions and side effects for multi-rider notifications. The core architecture (WebSocket, location ingestion, Kafka events) stays the same.</p>
+  </div>
+
+  <h3>Questions YOU Should Ask</h3>
+  <p>In an interview, always clarify scope before designing. Good questions to ask:</p>
+  <table class="kv-table">
+    <tr><th>Question</th><th>Why It Matters</th></tr>
+    <tr><td>Do we need ride pooling or just 1:1 rides?</td><td>Pooling dramatically changes matching algorithm complexity</td></tr>
+    <tr><td>What geographies? Single city or global?</td><td>Global requires multi-region deployment, cross-region data sync</td></tr>
+    <tr><td>Do we need scheduling (future rides)?</td><td>Adds a scheduling service and delayed matching queue</td></tr>
+    <tr><td>What payment methods? Just credit cards?</td><td>Cash rides need a different completion flow (no automatic charge)</td></tr>
+    <tr><td>How accurate do fare estimates need to be?</td><td>Determines complexity of routing service (traffic-aware? toll-aware?)</td></tr>
+    <tr><td>Do we handle driver onboarding and background checks?</td><td>Usually out of scope&mdash;confirm with interviewer</td></tr>
+    <tr><td>What level of fraud detection is needed?</td><td>Fake GPS, phantom trips, etc. Usually out of scope but good to mention</td></tr>
+  </table>
+
+  <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="container">
+    <p>System Design &mdash; Design Uber | With LinkedIn Technology Mapping</p>
+    <p style="margin-top: 8px;"><a href="index.html" style="color: var(--accent); text-decoration: none;">Chapter 6: Processes</a> &nbsp;|&nbsp; <a href="chapter2.html" style="color: var(--accent3); text-decoration: none;">Chapter 2: Fundamentals</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
