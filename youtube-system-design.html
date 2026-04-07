@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design - Design YouTube</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --yt-red: #ff0000;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a0a0a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--yt-red); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.red { color: var(--yt-red); border-color: var(--yt-red); }
+  .nav-links a.red:hover { background: rgba(255,0,0,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .section h3 {
+    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .section h4 {
+    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    color: var(--accent3);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 20px 0;
+  }
+  .card.highlight { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--accent4); }
+  .card.success { border-left: 4px solid var(--accent2); }
+  .card.danger { border-left: 4px solid var(--yt-red); }
+
+  .diagram {
+    margin: 30px 0; text-align: center;
+  }
+  .diagram img {
+    max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    background: #fff;
+  }
+  .caption {
+    font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
+  }
+
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.9em; color: var(--accent3);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; overflow-x: auto;
+    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 8px; overflow: hidden;
+  }
+  th {
+    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  .scale-box {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+  .scale-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .scale-item .number {
+    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+  }
+  .scale-item .label {
+    font-size: 0.85em; color: var(--text-muted); margin-top: 4px;
+  }
+
+  .walkthrough {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; margin: 16px 0 30px;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-top: 0; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 8px 0; }
+
+  .linkedin-tag {
+    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
+    font-weight: 600;
+  }
+
+  .tradeoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .tradeoff-grid { grid-template-columns: 1fr; }
+    .scale-box { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    text-align: center; padding: 40px 0; border-top: 1px solid var(--border);
+    color: var(--text-muted); font-size: 0.9em; margin-top: 60px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <h1>Design <span>YouTube</span></h1>
+    <p>A complete deep dive into the architecture of the world's largest video platform &mdash; CDN, video processing, search, ads, caching, NoSQL, and recommendations.</p>
+    <div class="badge">System Design Interview Guide &bull; LinkedIn Tech Mapping</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="chapter2.html">Chapter 2: Fundamentals</a>
+      <a href="chapter6.html">Chapter 6: Processes</a>
+      <a href="system-design.html" class="red">Design Uber</a>
+      <a href="youtube-system-design.html" class="purple">Design YouTube (Current)</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">High-Level Architecture Overview</a></li>
+    <li><a href="#sec-2">Video Upload &amp; Processing Pipeline</a>
+      <ul class="sub">
+        <li><a href="#sec-2-1">Chunked Upload Protocol</a></li>
+        <li><a href="#sec-2-2">GOP-Aligned Splitting &amp; Parallel Transcoding</a></li>
+        <li><a href="#sec-2-3">Audio Separation</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-3">CDN &amp; Video Streaming</a>
+      <ul class="sub">
+        <li><a href="#sec-3-1">Three-Tier CDN</a></li>
+        <li><a href="#sec-3-2">Adaptive Bitrate Streaming</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-4">Search System &amp; Index Generation</a>
+      <ul class="sub">
+        <li><a href="#sec-4-1">Inverted Index &amp; BM25</a></li>
+        <li><a href="#sec-4-2">ML Re-Ranking</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-5">Cache Architecture</a>
+      <ul class="sub">
+        <li><a href="#sec-5-1">Cache-Aside (Metadata)</a></li>
+        <li><a href="#sec-5-2">Write-Back (View Counts)</a></li>
+        <li><a href="#sec-5-3">Thundering Herd &amp; Cache Warming</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-6">Video Metadata Fetch: Fan-Out Pattern</a></li>
+    <li><a href="#sec-7">NoSQL Data Model (Bigtable)</a>
+      <ul class="sub">
+        <li><a href="#sec-7-1">Column Family Layout</a></li>
+        <li><a href="#sec-7-2">Secondary Indexes</a></li>
+      </ul>
+    </li>
+    <li><a href="#sec-8">Ad Serving Pipeline</a></li>
+    <li><a href="#sec-9">Recommendation Engine</a></li>
+    <li><a href="#sec-10">Kafka Message Queue Topology</a></li>
+    <li><a href="#sec-11">LinkedIn Technology Mapping</a></li>
+    <li><a href="#sec-12">SQL vs NoSQL Decision Matrix</a></li>
+    <li><a href="#sec-13">Backup &amp; Disaster Recovery</a></li>
+    <li><a href="#sec-14">Interview Questions &amp; Talking Points</a></li>
+  </ol>
+</div>
+
+<!-- ======================= SECTION 1 ======================= -->
+<div class="section" id="sec-1">
+  <div class="section-num">Section 1</div>
+  <h2>High-Level Architecture Overview</h2>
+
+  <p>YouTube serves over <strong>2 billion monthly active users</strong>, processes <strong>500 hours of video uploads per minute</strong>, and delivers <strong>1 billion hours of watch time daily</strong>. The architecture is organized into eight distinct tiers, each independently scalable.</p>
+
+  <div class="scale-box">
+    <div class="scale-item"><div class="number">2B+</div><div class="label">Monthly Active Users</div></div>
+    <div class="scale-item"><div class="number">500 hrs</div><div class="label">Uploaded per Minute</div></div>
+    <div class="scale-item"><div class="number">1B hrs</div><div class="label">Watched Daily</div></div>
+    <div class="scale-item"><div class="number">800M+</div><div class="label">Total Videos</div></div>
+    <div class="scale-item"><div class="number">5B+</div><div class="label">Daily Ad Impressions</div></div>
+    <div class="scale-item"><div class="number">~$30B</div><div class="label">Annual Ad Revenue</div></div>
+  </div>
+
+  <div class="diagram">
+    <img src="images/sd_yt_01_architecture.png" alt="YouTube High-Level Architecture">
+    <div class="caption">Figure 1: YouTube High-Level Architecture &mdash; Eight tiers from clients to ML infrastructure</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: High-Level Architecture</h4>
+    <ol>
+      <li><strong>Tier 1 &mdash; Clients:</strong> Web browsers, mobile apps (iOS/Android), and smart TVs connect to YouTube. Each platform has different codec support (H.264 universal, VP9 for Chrome/Android, AV1 for newer devices), which drives the need for multi-format transcoding.</li>
+      <li><strong>Tier 2 &mdash; CDN:</strong> The Content Delivery Network is the first responder for video requests. With ~200 edge Points of Presence globally and ISP-embedded caches, it absorbs the majority of video traffic without reaching origin servers. This tier alone handles 1 billion hours of video delivery daily.</li>
+      <li><strong>Tier 3 &mdash; API Gateway:</strong> All non-video API requests (search, metadata, comments) route through the gateway, which handles authentication, rate limiting, and routing to the correct microservice.</li>
+      <li><strong>Tier 4 &mdash; Microservices:</strong> Six core services handle distinct business logic: Upload, Video Processing, Search, Metadata, Ads, and Recommendations. Each service is independently deployable and scalable.</li>
+      <li><strong>Tier 5 &mdash; Kafka:</strong> The event-driven backbone connects services asynchronously. Topics like <code>video-uploaded</code>, <code>video-processed</code>, and <code>user-activity</code> decouple producers from consumers, enabling each to scale independently.</li>
+      <li><strong>Tier 6 &mdash; Cache Layer:</strong> Redis clusters sit in front of data stores, caching video metadata, view counters, and ML feature vectors. Two different caching patterns (cache-aside and write-back) serve different data characteristics.</li>
+      <li><strong>Tier 7 &mdash; Data Stores:</strong> Five specialized stores each handle different access patterns: Bigtable for NoSQL key-value data, Vitess/MySQL for relational data, Elasticsearch for search, PostgreSQL for ACID billing, and GCS for video files.</li>
+      <li><strong>Tier 8 &mdash; ML Infrastructure:</strong> GPU inference servers run ranking models, ad targeting, and content moderation in real-time. The training pipeline retrains models daily on billions of user events.</li>
+    </ol>
+  </div>
+
+  <div class="card highlight">
+    <strong>Key Design Principle:</strong> Strict separation of concerns. The CDN handles content delivery, the API gateway handles auth and routing, microservices handle business logic, Kafka decouples async processing, and specialized data stores handle persistence. Each layer scales independently.
+  </div>
+
+  <h3>LinkedIn Alternative: Architecture Mapping</h3>
+  <table>
+    <tr><th>YouTube Tier</th><th>LinkedIn Equivalent</th><th>Rationale</th></tr>
+    <tr><td>CDN (Google Edge)</td><td><span class="linkedin-tag">LinkedIn CDN + Akamai</span></td><td>LinkedIn uses a mix of its own edge infrastructure and third-party CDNs for media delivery</td></tr>
+    <tr><td>API Gateway</td><td><span class="linkedin-tag">Rest.li + D2</span></td><td>Rest.li provides the declarative REST framework; D2 handles dynamic service discovery and client-side load balancing</td></tr>
+    <tr><td>Kafka (Event Bus)</td><td><span class="linkedin-tag">Kafka</span></td><td>LinkedIn invented Kafka &mdash; same technology, same role as event backbone</td></tr>
+    <tr><td>Redis Cache</td><td><span class="linkedin-tag">Couchbase + Venice</span></td><td>Couchbase for low-latency caching; Venice for precomputed read-heavy derived data</td></tr>
+    <tr><td>ML Infrastructure</td><td><span class="linkedin-tag">Pro-ML</span></td><td>LinkedIn's end-to-end ML platform for model training, serving, and feature management</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 2 ======================= -->
+<div class="section" id="sec-2">
+  <div class="section-num">Section 2</div>
+  <h2>Video Upload &amp; Processing Pipeline</h2>
+
+  <p>When a creator uploads a video, it goes through a multi-stage pipeline: chunked upload, raw storage, and then an asynchronous processing pipeline that splits, transcodes, extracts audio, generates thumbnails, and packages everything into streaming manifests.</p>
+
+  <h3 id="sec-2-1">2.1 Chunked Upload Protocol</h3>
+
+  <div class="card highlight">
+    <p>Large video files are split <strong>client-side</strong> into 5&ndash;8MB chunks using the File API's <code>Blob.slice()</code>. Each chunk is sent via a <strong>resumable upload protocol</strong> with checksums. If the network drops, the client queries the server for the last acknowledged offset and resumes from there.</p>
+    <p style="margin-top:12px;">This is critical for mobile users on unreliable networks &mdash; a 2GB video upload that fails at 95% doesn't need to restart from zero.</p>
+  </div>
+
+  <h4>How Resumable Upload Works</h4>
+  <ol>
+    <li><strong>Initiate:</strong> Client sends a POST to create an upload session. Server returns a unique <code>upload_url</code> with a session ID.</li>
+    <li><strong>Chunk:</strong> Client splits the file into 5&ndash;8MB chunks and sends each as a PUT request with <code>Content-Range</code> header and MD5 checksum.</li>
+    <li><strong>Acknowledge:</strong> Server validates the checksum, persists the chunk, and responds with the committed byte offset.</li>
+    <li><strong>Resume:</strong> On network failure, client sends a GET to the upload URL. Server responds with the last committed offset. Client resumes from that byte.</li>
+    <li><strong>Finalize:</strong> After the last chunk, server reassembles the complete file, stores it in blob storage, and publishes a <code>video-uploaded</code> event to Kafka.</li>
+  </ol>
+
+  <div class="diagram">
+    <img src="images/sd_yt_02_upload_pipeline.png" alt="Video Upload and Processing Pipeline">
+    <div class="caption">Figure 2: Video Upload and Processing Pipeline &mdash; From client upload to playback-ready content</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Upload &amp; Processing Pipeline</h4>
+    <ol>
+      <li><strong>Client (Step 1):</strong> The creator's app splits the video file into 5&ndash;8MB chunks. Each chunk includes a checksum for integrity verification. The resumable protocol means only failed chunks need retransmission.</li>
+      <li><strong>Upload Service (Step 2):</strong> Receives chunks, verifies their checksums against corruption, and reassembles them into the complete raw file. The raw file is immediately written to Blob Storage (GCS) for durability. Simultaneously, a <code>video-uploaded</code> Kafka event is published to trigger downstream processing.</li>
+      <li><strong>Processing Pipeline (Step 3):</strong> This is the most compute-intensive stage. The pipeline runs five sub-stages:
+        <ul style="margin-top:8px;">
+          <li><strong>3a &mdash; GOP-Aligned Splitting:</strong> The raw video is scanned for keyframes (I-frames) and split into 2&ndash;10 second segments at GOP boundaries. Each segment is independently decodable.</li>
+          <li><strong>3b &mdash; Parallel Transcoding:</strong> Each segment is transcoded into 6 quality levels (240p through 4K) using H.264, VP9, and AV1 codecs. A 10-minute video produces 150 segments &times; 6 qualities = 900 independent FFmpeg jobs running on auto-scaled Kubernetes pods.</li>
+          <li><strong>3c &mdash; Audio Extraction:</strong> Audio is separated into its own track using AAC/Opus codecs. This enables language switching without re-downloading video, and audio-only playback for mobile background mode.</li>
+          <li><strong>3d &mdash; Thumbnail Generation:</strong> Key frames are extracted and thumbnails generated at multiple sizes for different device screens.</li>
+          <li><strong>3e &mdash; DASH/HLS Manifest:</strong> A manifest file lists all segment URLs by quality level. The player uses this manifest to select and switch quality at segment boundaries.</li>
+        </ul>
+      </li>
+      <li><strong>Blob Storage (Step 4):</strong> All transcoded segments, audio tracks, thumbnails, and manifests are stored back in blob storage.</li>
+      <li><strong>Post-Processing Events (Step 5):</strong> A <code>video-processed</code> Kafka event triggers three downstream consumers: Elasticsearch indexes the video for search, the CDN pre-warms popular content, and the Notification Service alerts subscribers.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-2-2">2.2 GOP-Aligned Splitting &amp; Parallel Transcoding</h3>
+
+  <p>The raw video is split into 2&ndash;10 second segments at <strong>Group of Pictures (GOP) boundaries</strong>. Each segment starts with a keyframe, making it independently decodable. This enables three critical capabilities:</p>
+
+  <div class="tradeoff-grid">
+    <div class="card success">
+      <strong>Parallel Transcoding</strong><br>
+      Each segment is processed independently. A 10-minute video with 4-second segments produces 150 segments. Transcoded into 6 quality levels = <strong>900 independent FFmpeg jobs</strong> running on auto-scaled K8s pods. 10x faster than sequential.
+    </div>
+    <div class="card success">
+      <strong>Instant Seeking</strong><br>
+      Since each segment starts with a keyframe, the player can jump to any boundary without decoding previous frames. Users can scrub through a 2-hour video and land precisely.
+    </div>
+    <div class="card success">
+      <strong>Adaptive Bitrate Switching</strong><br>
+      The player can change quality level at every segment boundary (every 2&ndash;10 seconds). When bandwidth drops, the next segment fetched is at a lower quality &mdash; seamless transition.
+    </div>
+    <div class="card highlight">
+      <strong>Codec Options</strong><br>
+      <strong>H.264:</strong> Widest compatibility (all browsers/devices)<br>
+      <strong>VP9:</strong> 30&ndash;50% better compression (Chrome, Android)<br>
+      <strong>AV1:</strong> 50% better compression (newest, limited HW decode)
+    </div>
+  </div>
+
+  <div class="diagram">
+    <img src="images/sd_yt_14_gop_transcoding.png" alt="GOP-Aligned Splitting and Parallel Transcoding">
+    <div class="caption">Figure 3: GOP-Aligned Splitting &mdash; How a raw video becomes 900 parallel transcoding jobs</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: GOP-Aligned Splitting</h4>
+    <ol>
+      <li><strong>GOP Detection:</strong> The pipeline scans the raw video for I-frames (keyframes). An I-frame is a complete image that doesn't depend on any other frame. P-frames (predicted) reference the previous frame and are smaller. B-frames (bidirectional) reference both previous and future frames and are the smallest. The sequence <code>I → P → P → B → P → P → B → I</code> shows one complete GOP.</li>
+      <li><strong>Segment Creation:</strong> The video is split at I-frame boundaries into segments of 2&ndash;10 seconds. Each segment begins with an I-frame, making it independently decodable. A 10-minute video produces approximately 150 segments.</li>
+      <li><strong>Parallel Transcoding:</strong> Each of the 150 segments is independently transcoded into 6 quality levels. The resolution and bitrate ladder goes from 240p at 350 Kbps (mobile on slow networks) up to 4K at 15 Mbps (smart TVs on fiber). This creates 900 independent FFmpeg jobs that run concurrently on Kubernetes pods that auto-scale based on queue depth.</li>
+      <li><strong>Manifest Generation:</strong> After transcoding, a DASH or HLS manifest is created that indexes all segments by quality level. The player downloads this manifest first, then fetches segments at the appropriate quality based on measured bandwidth.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-2-3">2.3 Audio Separation</h3>
+
+  <div class="card">
+    <p>Audio is extracted as a separate track from video. This doubles storage but provides three key benefits:</p>
+    <ul style="margin-top:12px;">
+      <li><strong>Language Switching:</strong> Users can switch audio language without re-downloading the entire video stream. Only the audio track changes.</li>
+      <li><strong>Background Playback:</strong> Mobile apps can play audio-only when the app is minimized, saving bandwidth and battery.</li>
+      <li><strong>Independent Codec Optimization:</strong> Audio uses AAC or Opus (optimized for speech/music), while video uses H.264/VP9/AV1 (optimized for visual compression). Each codec is chosen independently.</li>
+    </ul>
+  </div>
+
+  <h3>LinkedIn Alternative: Video Processing</h3>
+  <table>
+    <tr><th>YouTube Component</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+    <tr><td>GCS Blob Storage (raw + transcoded)</td><td><span class="linkedin-tag">Ambry</span></td><td>LinkedIn's distributed blob store. Write-once read-many with triple replication across data centers. Handles video uploads for LinkedIn Video and Learning.</td></tr>
+    <tr><td>K8s Auto-scaled Transcoding</td><td><span class="linkedin-tag">Kubernetes + Nimbus</span></td><td>LinkedIn runs transcoding workloads on its own Kubernetes infrastructure managed by the Nimbus platform, with autoscaling based on queue depth.</td></tr>
+    <tr><td>Kafka (video-uploaded event)</td><td><span class="linkedin-tag">Kafka</span></td><td>Identical technology &mdash; Kafka originated at LinkedIn. Same event-driven architecture triggers downstream processing.</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 3 ======================= -->
+<div class="section" id="sec-3">
+  <div class="section-num">Section 3</div>
+  <h2>CDN &amp; Video Streaming</h2>
+
+  <p>The CDN is the backbone of YouTube's video delivery, serving <strong>1 billion hours of video daily</strong> across the globe. Its three-tier architecture minimizes latency and network transit costs while handling extreme traffic volumes.</p>
+
+  <h3 id="sec-3-1">3.1 Three-Tier CDN Architecture</h3>
+
+  <div class="diagram">
+    <img src="images/sd_yt_03_cdn.png" alt="Three-Tier CDN Architecture">
+    <div class="caption">Figure 4: Three-Tier CDN Architecture &mdash; From edge PoPs through ISP caches to origin</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Three-Tier CDN</h4>
+    <ol>
+      <li><strong>Tier 1 &mdash; Edge PoPs (~200 globally):</strong> These are Google-owned servers positioned in major metropolitan areas and internet exchange points worldwide. They cache the top 20% of videos that generate 80% of traffic (Zipfian distribution). Popular and trending videos are <em>proactively pushed</em> to edge caches before users request them. Latency from user to edge is typically &lt;10ms.</li>
+      <li><strong>Tier 2 &mdash; ISP Cache (Google Global Cache):</strong> GGC nodes are physically installed <em>inside ISP networks</em>. When a user watches a video cached at the GGC node, the video data never leaves the ISP's network &mdash; this dramatically reduces transit costs for the ISP and latency for the user. This tier serves mid-popularity content that doesn't warrant edge caching but is too popular for origin-only serving.</li>
+      <li><strong>Tier 3 &mdash; Origin Servers:</strong> For long-tail content (the 80% of the catalog that's rarely watched), origin servers pull from GCS blob storage on demand. The first request is slow, but the pulled content is cached at Tiers 1 and 2 for subsequent requests.</li>
+      <li><strong>Request Flow:</strong> User requests a video segment → Edge PoP checks its local cache → Cache hit? Serve directly (most cases) → Cache miss? Forward to ISP cache → ISP miss? Pull from origin → Cache the response at both tiers on the way back.</li>
+      <li><strong>Cache Key:</strong> <code>{video_id}/{quality}/{segment_number}</code>. Each combination of video, quality level, and segment is cached independently. TTL ranges from 24&ndash;72 hours depending on popularity.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-3-2">3.2 Adaptive Bitrate Streaming (ABR)</h3>
+
+  <div class="card highlight">
+    <p>The video player implements adaptive bitrate streaming using the DASH manifest:</p>
+    <ol style="margin-top:12px;">
+      <li><strong>Fetch manifest:</strong> The player downloads the DASH/HLS manifest listing all available quality levels and segment URLs.</li>
+      <li><strong>Measure bandwidth:</strong> The player continuously measures actual download speed of each segment.</li>
+      <li><strong>Select quality:</strong> Based on measured bandwidth, the player selects the highest quality that can be downloaded faster than real-time playback.</li>
+      <li><strong>Dynamic switching:</strong> At every segment boundary (every 2&ndash;10 seconds), the player can switch to a different quality level &mdash; no rebuffering needed.</li>
+      <li><strong>Lookahead buffer:</strong> A 5&ndash;30 second buffer absorbs transient network jitter. If bandwidth drops briefly, the buffer sustains playback while the player drops to a lower quality.</li>
+    </ol>
+  </div>
+
+  <h3>LinkedIn Alternative: CDN</h3>
+  <table>
+    <tr><th>YouTube Component</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+    <tr><td>Google Edge PoPs</td><td><span class="linkedin-tag">LinkedIn CDN + Akamai + Azure CDN</span></td><td>LinkedIn uses a combination of its own edge infrastructure and third-party CDN providers for global media delivery. LinkedIn Video and LinkedIn Learning content are served through this hybrid CDN.</td></tr>
+    <tr><td>GCS Blob Storage (origin)</td><td><span class="linkedin-tag">Ambry</span></td><td>Ambry serves as the origin store for all binary content &mdash; video files, images, documents. Write-once read-many with cross-DC replication.</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 4 ======================= -->
+<div class="section" id="sec-4">
+  <div class="section-num">Section 4</div>
+  <h2>Search System &amp; Index Generation</h2>
+
+  <p>YouTube's search pipeline transforms a user query into ranked results through six stages: query understanding, Elasticsearch scatter-gather, ML re-ranking, personalization, diversity injection, and result assembly. The entire pipeline runs in under 200ms.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_04_search.png" alt="Search Pipeline">
+    <div class="caption">Figure 5: Search Pipeline &mdash; Six stages from query to ranked results</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Search Pipeline</h4>
+    <ol>
+      <li><strong>Stage 1 &mdash; Query Understanding:</strong> The user types "cooking tutorial." The system tokenizes the input, corrects spelling errors, expands synonyms (cook → cooking), detects the language, and outputs a cleaned, analyzed query. This stage also handles query classification (is this a navigational query for a specific channel, or an exploratory query?).</li>
+      <li><strong>Stage 2 &mdash; Elasticsearch Scatter-Gather:</strong> The analyzed query is scattered across ~500 Elasticsearch primary shards. Each shard runs BM25 scoring against its local inverted index. Fields are weighted differently: title gets a 3x boost (most relevant), tags get 2x, description gets 1x, and auto-generated captions get 0.5x (noisy, less reliable). The coordinator gathers and merges the top ~1,000 candidates from all shards.</li>
+      <li><strong>Stage 3 &mdash; ML Re-Ranking:</strong> The top 1,000 BM25 candidates are re-ranked by a deep neural network running on GPU servers. The model predicts a combined score: <code>P(click) &times; P(watch &ge; 30s) &times; quality_score</code>. Features include view count, like ratio, click-through rate, freshness (newer videos boosted for trending topics), and channel authority. The latency budget for this stage is &lt;50ms.</li>
+      <li><strong>Stage 4 &mdash; Personalization:</strong> The re-ranked results are adjusted based on the specific user: their watch history embedding similarity (have they watched similar content?), language and region preferences, and current session context.</li>
+      <li><strong>Stage 5 &mdash; Diversity Injection:</strong> Maximal Marginal Relevance (MMR) penalizes candidates too similar to already-selected results. 10&ndash;20% of slots are reserved for exploration &mdash; showing content outside the user's typical patterns. This prevents filter bubbles and improves long-term engagement.</li>
+      <li><strong>Stage 6 &mdash; Result Assembly:</strong> The final ranked list is enriched by fanning out to metadata, channel, and engagement services. Each result gets its thumbnail, title, channel name, view count, and upload date. The assembled response of 20 results is returned to the client.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-4-1">4.1 Inverted Index &amp; BM25</h3>
+
+  <div class="card">
+    <p>Elasticsearch maintains an <strong>inverted index</strong> that maps terms to document lists. For each term, the index stores:</p>
+    <pre>[doc_id, term_frequency, positions]
+
+Example: "cooking" → [{vid_1, tf=3, [0,5,12]}, {vid_2, tf=1, [4]}]</pre>
+    <p>This means "cooking" appears in <code>vid_1</code> three times at positions 0, 5, and 12, and in <code>vid_2</code> once at position 4. Positions enable phrase queries ("cooking tutorial" must have both terms adjacent).</p>
+  </div>
+
+  <h4>Index Population (Write Path)</h4>
+  <ol>
+    <li>A Kafka consumer listens on the <code>video-processed</code> topic.</li>
+    <li>For each new video, it extracts title, description, tags, and auto-generated captions.</li>
+    <li>Text passes through a language-specific analyzer: lowercasing, stemming (cooking → cook), stop-word removal (the, a, is).</li>
+    <li>Analyzed tokens are bulk-written to Elasticsearch.</li>
+    <li>Replicas sync within 1&ndash;2 seconds (near real-time).</li>
+  </ol>
+
+  <h3 id="sec-4-2">4.2 ML Re-Ranking</h3>
+
+  <div class="card warn">
+    <strong>Why not just use BM25?</strong> BM25 ranks by text relevance alone. A video titled "Cooking Tutorial" uploaded yesterday with 10 views would rank equally to one with 50 million views and a 98% like ratio. The ML model incorporates engagement signals, freshness, channel authority, and user-specific preferences to produce much better rankings.
+  </div>
+
+  <h3>LinkedIn Alternative: Search</h3>
+  <table>
+    <tr><th>YouTube Component</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+    <tr><td>Elasticsearch (500+ shards)</td><td><span class="linkedin-tag">Galene</span></td><td>LinkedIn's custom-built search engine. Unlike Elasticsearch which is general-purpose, Galene is optimized specifically for LinkedIn's search needs: people, jobs, companies, posts, and content. Supports early termination, tiered ranking, and custom scoring plugins.</td></tr>
+    <tr><td>ML Re-Ranking (GPU)</td><td><span class="linkedin-tag">Pro-ML + Galene Ranking</span></td><td>LinkedIn's ML platform (Pro-ML) trains ranking models. Galene integrates these models directly into its scoring pipeline. Features include member profile similarity, network proximity, and engagement predictions.</td></tr>
+    <tr><td>Kafka (index population)</td><td><span class="linkedin-tag">Kafka + Brooklin</span></td><td>Kafka streams new content events. Brooklin (LinkedIn's Change Data Capture framework) streams Espresso changes to keep the search index in sync with the source of truth.</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 5 ======================= -->
+<div class="section" id="sec-5">
+  <div class="section-num">Section 5</div>
+  <h2>Cache Architecture</h2>
+
+  <p>YouTube uses two fundamentally different caching patterns for different data types. Understanding <em>why</em> each pattern is chosen is the key interview insight.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_05_cache.png" alt="Cache Architecture">
+    <div class="caption">Figure 6: Cache Architecture &mdash; Cache-Aside for metadata vs Write-Back for counters</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Two Caching Patterns</h4>
+    <ol>
+      <li><strong>Cache-Aside (Left):</strong> The application checks Redis on every read. On a cache hit (~3ms), data is returned immediately. On a cache miss, the application queries Bigtable's read replica (~20ms), writes the result back to Redis with a 300-second TTL, and returns it. The critical rule: on a <em>write</em>, the application <strong>deletes</strong> the cache key rather than updating it. Why? If two concurrent writes update the cache, they can write in the wrong order, leaving stale data. Deletion is safe &mdash; the next read will populate fresh data.</li>
+      <li><strong>Write-Back (Right):</strong> View count updates go directly to Redis using <code>INCR</code> (atomic O(1) operation). Redis is the source of truth for real-time counts. Every 30 seconds, a background flusher batch-writes accumulated counts from Redis to Bigtable for durability. Reads always come from Redis, never from the database. The risk: up to 30 seconds of data loss if Redis crashes before flushing. Mitigation: Sentinel failover promotes a replica within seconds, and Kafka replay can recover lost increments.</li>
+      <li><strong>Thundering Herd (Bottom-Left):</strong> When a viral video's cache expires, thousands of simultaneous cache misses could overwhelm the database. The solution: request coalescing via a distributed lock (<code>SETNX</code>). The first request acquires the lock, fetches from the database, and populates the cache. All other requests wait on the lock and then read from the freshly populated cache.</li>
+      <li><strong>Cache Warming (Bottom-Right):</strong> For predictable traffic spikes (mega-creator uploads), the Upload Service proactively populates the cache immediately after writing to the database. No cache miss ever occurs during the initial surge of views.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-5-1">5.1 Cache-Aside Pattern (Video Metadata)</h3>
+
+  <div class="card highlight">
+    <p><strong>When to use:</strong> Read-heavy data that changes infrequently. Video metadata (title, description, duration) is read on every <code>/watch</code> page load but only changes when a creator edits their video &mdash; maybe once a month.</p>
+    <p style="margin-top:8px;"><strong>Cache key:</strong> <code>video:meta:{id}</code></p>
+    <p><strong>TTL:</strong> 300 seconds (5 minutes)</p>
+    <p><strong>Hit rate:</strong> ~95%+ for popular videos</p>
+  </div>
+
+  <h3 id="sec-5-2">5.2 Write-Back Pattern (View Counts)</h3>
+
+  <div class="card warn">
+    <p><strong>When to use:</strong> Write-heavy counters where real-time accuracy matters more than durability. With potentially millions of view increments per second across all videos, each increment going to the database would be prohibitively expensive.</p>
+    <p style="margin-top:8px;"><strong>Key insight:</strong> Nobody cares if a view count is stale by 3 seconds. But everybody notices if the counter doesn't increment when they press play. Redis <code>INCR</code> is atomic O(1) &mdash; it handles millions of increments per second.</p>
+  </div>
+
+  <h3 id="sec-5-3">5.3 Thundering Herd &amp; Cache Warming</h3>
+
+  <p>Two complementary strategies prevent the database from being overwhelmed during traffic spikes:</p>
+
+  <div class="tradeoff-grid">
+    <div class="card danger">
+      <strong>Thundering Herd Problem</strong><br>
+      A viral video's cache key expires. 10,000 concurrent requests all see a cache miss simultaneously. All 10,000 hit the database at once. The database becomes overloaded, response times spike, and a cascading failure begins.
+    </div>
+    <div class="card success">
+      <strong>Solution: Request Coalescing</strong><br>
+      The first request acquires a distributed lock (<code>SETNX</code> in Redis). It fetches from the database and populates the cache. All other requests detect the lock, wait briefly, then read from the freshly populated cache. Only 1 database query instead of 10,000.
+    </div>
+  </div>
+
+  <h3>LinkedIn Alternative: Caching</h3>
+  <table>
+    <tr><th>YouTube Component</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+    <tr><td>Redis (metadata cache-aside)</td><td><span class="linkedin-tag">Couchbase</span></td><td>LinkedIn uses Couchbase as its primary distributed cache for low-latency key-value lookups. Supports automatic failover, cross-DC replication, and sub-millisecond reads.</td></tr>
+    <tr><td>Redis (view counters, write-back)</td><td><span class="linkedin-tag">Couchbase + Espresso</span></td><td>Counter increments go to Couchbase for real-time reads, with periodic flush to Espresso for durability. Espresso's conditional update (CAS) prevents lost updates.</td></tr>
+    <tr><td>Redis (ML feature store)</td><td><span class="linkedin-tag">Venice</span></td><td>Venice is LinkedIn's derived data store purpose-built for serving precomputed ML features. Batch or incremental ingestion from offline pipelines, millisecond-latency reads. Replaces Redis feature store with better operational properties.</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 6 ======================= -->
+<div class="section" id="sec-6">
+  <div class="section-num">Section 6</div>
+  <h2>Video Metadata Fetch: Fan-Out Pattern</h2>
+
+  <p>Loading a single <code>/watch</code> page requires data from <strong>five independent services</strong>, each with its own cache and data store. The aggregator fans out to all five in parallel, merges results, and returns a single response. Total latency = max(individual latencies) &asymp; 15&ndash;20ms.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_06_metadata_fetch.png" alt="Video Metadata Fetch Fan-Out">
+    <div class="caption">Figure 7: Video Metadata Fetch &mdash; Fan-out to 5 services, merge into single response</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Fan-Out Pattern</h4>
+    <ol>
+      <li><strong>User Request:</strong> A user loads <code>/watch?v=abc123</code>. The request hits the API Gateway, which routes it to the Aggregator Service.</li>
+      <li><strong>Fan-Out:</strong> The Aggregator Service sends 5 requests in parallel to independent microservices. This is the key optimization &mdash; parallel execution means total latency equals the <em>slowest</em> individual response, not the <em>sum</em> of all responses.</li>
+      <li><strong>Metadata Service (~3ms hit / ~20ms miss):</strong> Returns video title, description, duration, and available quality levels. Cache key: <code>video:meta:{id}</code> in Redis, backed by Bigtable read replica.</li>
+      <li><strong>Channel Service (~3ms hit / ~15ms miss):</strong> Returns channel name, avatar URL, and subscriber count. Cache key: <code>channel:{ch_id}</code> in Redis, backed by Vitess/MySQL read replica.</li>
+      <li><strong>Engagement Service (~2ms always):</strong> Returns view count, like count, and dislike count. This always reads from Redis (write-back pattern) &mdash; never hits the database. Fastest of all five services.</li>
+      <li><strong>Recommendation Engine (~15ms):</strong> Returns 20&ndash;50 personalized video recommendations for the sidebar. Uses the Redis-backed feature store and GPU inference for ranking. This is the slowest service and typically determines total latency.</li>
+      <li><strong>Comments Service (~3ms hit / ~20ms miss):</strong> Returns the top comments and reply counts. Cache key: <code>top_comments:{id}</code> in Redis, backed by Bigtable partitioned by <code>video_id</code>.</li>
+      <li><strong>Merge &amp; Return:</strong> The Aggregator merges all five responses into a single JSON payload and returns it to the client. Total latency &asymp; 15&ndash;20ms (bounded by the Recommendation Engine).</li>
+    </ol>
+  </div>
+
+  <table>
+    <tr><th>Service</th><th>Cache Layer</th><th>Data Store</th><th>Latency</th></tr>
+    <tr><td>Metadata Service</td><td>Redis: <code>video:meta:{id}</code></td><td>Bigtable (read replica)</td><td>~3ms hit / ~20ms miss</td></tr>
+    <tr><td>Channel Service</td><td>Redis: <code>channel:{ch_id}</code></td><td>Vitess/MySQL (read replica)</td><td>~3ms hit / ~15ms miss</td></tr>
+    <tr><td>Engagement Service</td><td>Redis: <code>video:views:{id}</code></td><td>Direct from Redis (write-back)</td><td>~2ms always</td></tr>
+    <tr><td>Recommendation Engine</td><td>Feature Store (Redis)</td><td>ML Model on GPU</td><td>~15ms</td></tr>
+    <tr><td>Comments Service</td><td>Redis: <code>top_comments:{id}</code></td><td>Bigtable (by video_id)</td><td>~3ms hit / ~20ms miss</td></tr>
+  </table>
+
+  <h3>LinkedIn Alternative: Fan-Out Pattern</h3>
+  <table>
+    <tr><th>YouTube Service</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+    <tr><td>Aggregator Service</td><td><span class="linkedin-tag">Rest.li Finder + D2</span></td><td>Rest.li provides the scatter-gather framework. D2 handles service discovery, routing each fan-out leg to the correct service instance with client-side load balancing.</td></tr>
+    <tr><td>Metadata Service (Bigtable)</td><td><span class="linkedin-tag">Espresso</span></td><td>Post/article metadata stored in Espresso. Key-value access by document ID with auto-sharding and read replicas.</td></tr>
+    <tr><td>Channel Service (MySQL)</td><td><span class="linkedin-tag">Espresso</span></td><td>Member/company profiles stored in Espresso. Espresso's document model handles both relational-like and NoSQL access patterns.</td></tr>
+    <tr><td>Engagement Service (Redis)</td><td><span class="linkedin-tag">Couchbase + Venice</span></td><td>Like/share/comment counts cached in Couchbase for real-time reads. Venice serves precomputed engagement aggregations.</td></tr>
+    <tr><td>Recommendation Engine</td><td><span class="linkedin-tag">Pro-ML + Venice</span></td><td>Pro-ML serves ranking models. Venice provides the feature store with precomputed member and content embeddings.</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 7 ======================= -->
+<div class="section" id="sec-7">
+  <div class="section-num">Section 7</div>
+  <h2>NoSQL Data Model (Bigtable)</h2>
+
+  <h3 id="sec-7-1">7.1 Column Family Layout</h3>
+
+  <p>Bigtable organizes columns into <strong>column families</strong> stored together on disk. Each family has different compression, TTL, and garbage collection policies. This is the most important design decision in Bigtable modeling &mdash; separating high-write from high-read data prevents write amplification from interfering with read performance.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_07_data_model.png" alt="Bigtable Data Model">
+    <div class="caption">Figure 8: Bigtable Column Family Layout &mdash; Four families with distinct access patterns</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Column Family Layout</h4>
+    <ol>
+      <li><strong>Row Key (<code>video_id</code>):</strong> Each row represents one video. With 800M+ total videos, this is a massive table. The row key is the video ID, enabling direct lookup by ID in O(1) time.</li>
+      <li><strong><code>meta</code> family (blue):</strong> Contains title, description, tags, channel_id, duration, and status. Read on every <code>/watch</code> page load but rarely updated (only when a creator edits). Compressed with Snappy for storage efficiency. This is the highest-read family.</li>
+      <li><strong><code>media</code> family (green):</strong> Contains manifest_url, thumbnails, available qualities, audio_tracks, and captions. Read by the video player and CDN. Set once after transcoding completes and never updated again. URLs aren't compressed (already compact).</li>
+      <li><strong><code>stats</code> family (orange, highlighted):</strong> Contains view_count, like_count, dislike_count, and comment_count. This is the write-heavy family, updated every 30 seconds from the Redis flush. <strong>Critically, it's separated from the <code>meta</code> family</strong> &mdash; if stats writes were co-located with meta reads, write amplification (compaction during writes) would increase read latency on the meta family.</li>
+      <li><strong><code>moderation</code> family (red):</strong> Contains content_rating, brand_safety_score, and flags. Read by the ad targeting system to determine which ads are safe to show alongside this video. Updated rarely, only when content moderation events occur.</li>
+    </ol>
+  </div>
+
+  <h3 id="sec-7-2">7.2 Secondary Indexes</h3>
+
+  <div class="card warn">
+    <p><strong>Key limitation:</strong> Bigtable only supports row key lookups. Any other access pattern (e.g., "all videos by channel X" or "user Y's watch history") requires <strong>manually maintained secondary index tables</strong>, populated by Kafka consumers.</p>
+  </div>
+
+  <table>
+    <tr><th>Index Table</th><th>Row Key</th><th>Query</th><th>Populated By</th></tr>
+    <tr><td><code>channel_videos</code></td><td><code>{channel_id}#{reverse_ts}</code></td><td>All videos by channel, newest first</td><td>Kafka: <code>video-uploaded</code></td></tr>
+    <tr><td><code>category_videos</code></td><td><code>{category}#{popularity}#{vid}</code></td><td>Trending in category</td><td>Daily batch job</td></tr>
+    <tr><td><code>watch_history</code></td><td><code>{user_id}#{reverse_ts}</code></td><td>User's watch history</td><td>Kafka: <code>user-activity</code></td></tr>
+  </table>
+
+  <div class="card">
+    <p><strong>Why <code>reverse_ts</code>?</strong> Bigtable stores rows in lexicographic order. Using <code>MAX_TIMESTAMP - actual_timestamp</code> as part of the key means the most recent entries appear first in a scan. A query for "latest 10 videos by channel X" is a simple prefix scan with limit 10, scanning forward from the beginning of that channel's key range.</p>
+  </div>
+
+  <h3>LinkedIn Alternative: Data Model</h3>
+  <table>
+    <tr><th>YouTube Component</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+    <tr><td>Bigtable (NoSQL, column families)</td><td><span class="linkedin-tag">Espresso</span></td><td>Espresso is LinkedIn's NoSQL document store. Unlike Bigtable's column family model, Espresso uses a document model (JSON-like). It provides auto-sharding, master-slave replication, and secondary indexes natively &mdash; no need for manually maintained index tables. Supports conditional updates (CAS) for consistency.</td></tr>
+    <tr><td>Bigtable secondary index tables</td><td><span class="linkedin-tag">Espresso Secondary Indexes</span></td><td>Espresso supports declarative secondary indexes out of the box. The <code>channel_videos</code> index (all videos by a channel) would be a secondary index on <code>channel_id</code> with a sort key. No Kafka consumer needed to maintain it.</td></tr>
+    <tr><td>Bigtable (watch history, time-series)</td><td><span class="linkedin-tag">Espresso + Venice</span></td><td>Raw watch history in Espresso (mutable, append-heavy). Precomputed "recently watched" feeds in Venice (read-optimized derived data).</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 8 ======================= -->
+<div class="section" id="sec-8">
+  <div class="section-num">Section 8</div>
+  <h2>Ad Serving Pipeline</h2>
+
+  <p>YouTube generates ~$30B in annual ad revenue. Every ad opportunity triggers a <strong>real-time auction</strong> that must complete in under 100ms. The auction uses second-price (Vickrey) bidding where the winner pays $0.01 more than the second-highest effective bid.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_08_ads.png" alt="Ad Serving Pipeline">
+    <div class="caption">Figure 9: Ad Serving Pipeline &mdash; Real-time auction from ad request to billing</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Ad Serving Pipeline</h4>
+    <ol>
+      <li><strong>Step 1 &mdash; Video Player:</strong> During transcoding, an ML model analyzed the video for scene transitions and silence gaps. These timestamps are stored in the DASH manifest. When the player reaches a natural break point, it triggers an ad request. This ensures ads don't interrupt mid-sentence.</li>
+      <li><strong>Step 2 &mdash; Ad Request Service:</strong> Receives the ad opportunity with context about the user (demographics, watch history, device type) and the video (category, brand safety score). This context determines which ads are eligible to compete.</li>
+      <li><strong>Step 3 &mdash; Auction Engine:</strong> All eligible ad campaigns submit bids. The auction uses second-price (Vickrey) bidding: the winner pays $0.01 more than the second-highest bid. Example: Advertiser A bids $5.00, B bids $3.50, C bids $2.00. A wins but pays $3.51 (not their full $5.00 bid). This mechanism incentivizes truthful bidding &mdash; you should always bid your true value because you'll never pay more than the next highest bidder. Budget: entire auction must complete in &lt;100ms.</li>
+      <li><strong>Step 4 &mdash; Ad Targeting:</strong> Matches the user profile to ad campaigns. Checks brand safety (a family-friendly ad shouldn't appear on violent content). Applies frequency capping (don't show the same ad 10 times in one session).</li>
+      <li><strong>Step 5 &mdash; Ad Delivery:</strong> Returns the winning creative's URL to the player. The player fetches the ad directly from the CDN. Impression, click, and view-through events are tracked for billing and analytics.</li>
+      <li><strong>Step 6 &mdash; Billing Pipeline:</strong> Impression events flow through Kafka to the fraud detection ML model. The model identifies and filters bot traffic, click farms, and invalid traffic (IVT). Only clean, validated impressions are written to PostgreSQL (ACID transactions for financial integrity). Advertisers are billed only for verified impressions.</li>
+    </ol>
+  </div>
+
+  <h3>Ad Auction: Second-Price (Vickrey) Bidding</h3>
+
+  <div class="card highlight">
+    <p><strong>Why second-price?</strong> In a first-price auction, advertisers have to guess what others are bidding and shade their bids down to avoid overpaying. This leads to inefficient outcomes. In a second-price auction, the optimal strategy is to bid your true value &mdash; you'll win when your value exceeds the competition, and you'll never pay more than the second-highest bid. This maximizes revenue for YouTube while keeping advertisers honest.</p>
+    <pre>Advertiser A bids: $5.00 eCPM
+Advertiser B bids: $3.50 eCPM
+Advertiser C bids: $2.00 eCPM
+
+Winner: Advertiser A
+Pays: $3.51 (second-highest bid + $0.01)</pre>
+  </div>
+
+  <h3>LinkedIn Alternative: Ad Serving</h3>
+  <table>
+    <tr><th>YouTube Component</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+    <tr><td>Real-Time Auction Engine</td><td><span class="linkedin-tag">LinkedIn Ad Server</span></td><td>LinkedIn's ad platform runs similar real-time auctions for sponsored content, InMail, and display ads. Uses a combination of first-price and second-price auctions depending on the ad format.</td></tr>
+    <tr><td>PostgreSQL (ACID billing)</td><td><span class="linkedin-tag">Espresso (ACID mode)</span></td><td>Ad billing records stored in Espresso with strong consistency and conditional updates. Financial records require ACID guarantees to prevent revenue loss or overcharging.</td></tr>
+    <tr><td>Fraud Detection ML</td><td><span class="linkedin-tag">Pro-ML + Samza</span></td><td>Samza stream processors analyze impression streams in real-time. Pro-ML models classify invalid traffic. LinkedIn's professional context makes ad fraud detection different from consumer platforms &mdash; more sophisticated bot detection but lower volume.</td></tr>
+    <tr><td>Kafka (ad events)</td><td><span class="linkedin-tag">Kafka</span></td><td>Same technology. Ad impression and click events flow through Kafka to billing, analytics, and fraud detection consumers.</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 9 ======================= -->
+<div class="section" id="sec-9">
+  <div class="section-num">Section 9</div>
+  <h2>Recommendation Engine</h2>
+
+  <p>The recommendation system reduces <strong>800M+ videos</strong> to <strong>20&ndash;50 personalized suggestions</strong> through a two-stage pipeline: candidate generation (broad retrieval of ~800 candidates) followed by a deep ranking model (precise scoring and ordering).</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_09_recommendations.png" alt="Recommendation Engine">
+    <div class="caption">Figure 10: Recommendation Engine &mdash; Two-stage pipeline from 800M videos to 20 personalized results</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Recommendation Engine</h4>
+    <ol>
+      <li><strong>Stage 1 &mdash; Candidate Generation:</strong> Four parallel sources generate candidate videos:
+        <ul style="margin-top:8px;">
+          <li><strong>ANN Search (~500 candidates):</strong> The user's embedding (a vector representing their interests) is compared against all video embeddings using Approximate Nearest Neighbors. This finds videos semantically similar to what the user has enjoyed. ANN is approximate (not exact) to keep latency under 10ms even with 800M+ vectors.</li>
+          <li><strong>Co-Watch Graph (~200 candidates):</strong> Collaborative filtering based on "users who watched X also watched Y." This captures patterns that content-based methods miss &mdash; for example, users who watch cooking videos might also watch food travel vlogs.</li>
+          <li><strong>Subscriptions (~100 candidates):</strong> Recent uploads from channels the user subscribes to. These are naturally relevant and have high CTR. Sorted by chronological freshness.</li>
+          <li><strong>Trending (~50 candidates):</strong> Globally or regionally trending videos with time-decay weighting. These add serendipity and keep the feed fresh with current events.</li>
+        </ul>
+        All candidates are merged and deduplicated, producing approximately 800 unique candidates.
+      </li>
+      <li><strong>Stage 2 &mdash; Deep Ranking Model:</strong> A deep neural network scores each of the 800 candidates. The model uses four feature categories:
+        <ul style="margin-top:8px;">
+          <li><strong>Video features:</strong> View count, like ratio, click-through rate, freshness, duration</li>
+          <li><strong>User features:</strong> Watch history, search history, demographics</li>
+          <li><strong>Context features:</strong> Time of day, device type, current session length</li>
+          <li><strong>Cross features:</strong> User-video embedding similarity (dot product)</li>
+        </ul>
+        The model predicts multiple objectives simultaneously: P(click), P(watch &ge; 30s), P(like), P(share) are positive signals. P(dislike) and P(misleading) are negative signals. The final score is a weighted combination. The model runs on GPU inference servers with pre-cached embeddings from a Redis-backed feature store. It's retrained daily on billions of watch events.
+      </li>
+      <li><strong>Post-Ranking &mdash; Diversity Injection (MMR):</strong> Maximal Marginal Relevance penalizes candidates too similar to already-selected results. Without this, the top 20 results might all be cooking videos if the user recently watched one. 10&ndash;20% of slots are reserved for exploration, introducing the user to topics outside their usual patterns. This prevents filter bubbles and improves long-term engagement.</li>
+    </ol>
+  </div>
+
+  <h3>LinkedIn Alternative: Recommendations</h3>
+  <table>
+    <tr><th>YouTube Component</th><th>LinkedIn Equivalent</th><th>Details</th></tr>
+    <tr><td>ANN Search (video embeddings)</td><td><span class="linkedin-tag">Pro-ML + Venice</span></td><td>Member and content embeddings stored in Venice for millisecond-latency retrieval. ANN search uses LinkedIn's custom vector similarity infrastructure.</td></tr>
+    <tr><td>Co-Watch Graph</td><td><span class="linkedin-tag">Samza + Venice</span></td><td>"Members who viewed this profile also viewed..." &mdash; computed by Samza stream processing on Kafka events, stored in Venice for serving.</td></tr>
+    <tr><td>Deep Ranking Model (GPU)</td><td><span class="linkedin-tag">Pro-ML</span></td><td>LinkedIn's ML platform handles the full lifecycle: feature engineering, model training (daily on billions of events), serving on GPU clusters. Powers Feed ranking, "People You May Know," and Job recommendations.</td></tr>
+    <tr><td>Redis Feature Store</td><td><span class="linkedin-tag">Venice</span></td><td>Venice is purpose-built for this use case: batch or incremental ingestion of precomputed features, millisecond reads at serving time, eventually consistent with source pipelines.</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 10 ======================= -->
+<div class="section" id="sec-10">
+  <div class="section-num">Section 10</div>
+  <h2>Kafka Message Queue Topology</h2>
+
+  <p>Kafka serves as the <strong>event-driven backbone</strong> connecting all YouTube services. Each topic is partitioned by its primary entity key for ordering guarantees. Consumer groups use at-least-once delivery with idempotent handlers.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_10_kafka.png" alt="Kafka Message Queue Topology">
+    <div class="caption">Figure 11: Kafka Topology &mdash; Six topic families connecting producers and consumers</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Kafka Topology</h4>
+    <ol>
+      <li><strong>Topic 1 &mdash; <code>video-uploaded</code> (blue):</strong> Produced by the Upload Service when a new raw video is stored in blob storage. Consumed by the Processing Pipeline (triggers transcoding), Search Indexer (creates initial index entry), and Notification Service (alerts channel subscribers). Partitioned by <code>video_id</code> to ensure all events for the same video are processed in order.</li>
+      <li><strong>Topic 2 &mdash; <code>video-processed</code> (green):</strong> Produced by the Processing Pipeline when transcoding and manifest generation complete. Consumed by the Search Indexer (updates the index with extracted text, captions, and thumbnail URLs), CDN Warmer (pre-caches segments at edge PoPs for anticipated popular content), and Metadata Service (updates the video record with available qualities and manifest URL). Partitioned by <code>video_id</code>.</li>
+      <li><strong>Topic 3 &mdash; <code>user-activity</code> (orange):</strong> The highest-volume topic with billions of events per day. Produced by Watch Service and Engagement Service. Contains watch starts, watch completions, likes, comments, shares, and search queries. Consumed by the Watch History Writer (persists to Bigtable), Recommendation Training (feeds model retraining), and Analytics. Partitioned by <code>user_id</code> to group a user's activity together.</li>
+      <li><strong>Topic 4 &mdash; <code>ad-events</code> (red):</strong> Financial data requiring the strictest delivery guarantees. Contains impression, click, and view-through events. Consumed by the Billing Pipeline, Fraud Detection, and Analytics. Partitioned by <code>impression_id</code>. Uses exactly-once semantics to prevent double-billing or lost revenue.</li>
+      <li><strong>Topic 5 &mdash; <code>view-events</code> (purple):</strong> Produced by the Player/Watch Service. Consumed by the Redis view counter (real-time count update), Analytics, and Trend detection (identifies rapidly growing videos). Partitioned by <code>video_id</code> to aggregate view counts per video.</li>
+      <li><strong>Topic 6 &mdash; <code>moderation-events</code> (gray):</strong> Produced by Content Moderation ML models when a video is flagged or its safety score changes. Consumed by the Video Status Updater (restricts or removes unsafe content), Ad Safety (updates brand safety score for ad targeting), and Creator Notifications (informs creators of policy decisions). Partitioned by <code>video_id</code>.</li>
+    </ol>
+    <p style="margin-top:12px;"><strong>Key properties across all topics:</strong> Partitioned by entity key for ordering guarantees within a partition. At-least-once delivery with idempotent handlers on the consumer side. Consumer groups enable parallel processing across instances. 7-day retention enables replay for debugging, backfill, or recovery.</p>
+  </div>
+
+  <h3>LinkedIn Alternative: Kafka</h3>
+  <div class="card success">
+    <p><strong>LinkedIn invented Kafka.</strong> The technology is identical. LinkedIn runs one of the largest Kafka deployments in the world, processing trillions of events per day across hundreds of topics. The same partition-by-entity-key pattern, consumer group model, and at-least-once delivery semantics apply. LinkedIn also uses <strong>Brooklin</strong> for Change Data Capture (CDC) &mdash; streaming database changes to Kafka topics, which YouTube would implement using its own CDC infrastructure.</p>
+  </div>
+</div>
+
+<!-- ======================= SECTION 11 ======================= -->
+<div class="section" id="sec-11">
+  <div class="section-num">Section 11</div>
+  <h2>LinkedIn Technology Mapping</h2>
+
+  <p>For every YouTube component, there's a LinkedIn equivalent. This mapping is invaluable for interview preparation &mdash; it demonstrates deep knowledge of multiple technology stacks and the reasoning behind architectural choices.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_11_linkedin_mapping.png" alt="LinkedIn Technology Mapping">
+    <div class="caption">Figure 12: LinkedIn Technology Mapping &mdash; YouTube/Google tech to LinkedIn equivalents</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Technology Mapping</h4>
+    <ol>
+      <li><strong>Bigtable → Espresso:</strong> Both are the primary OLTP data store. Bigtable uses a wide-column model; Espresso uses a document model. Espresso adds built-in secondary indexes and conditional updates (CAS) that Bigtable lacks. Both support auto-sharding and replication.</li>
+      <li><strong>Redis → Couchbase + Venice:</strong> YouTube uses Redis for three purposes: caching (→ Couchbase), counters (→ Couchbase with flush to Espresso), and ML feature store (→ Venice). Venice is purpose-built for serving precomputed data with batch/incremental ingestion &mdash; operationally simpler than managing a Redis cluster for feature serving.</li>
+      <li><strong>GCS → Ambry:</strong> Both handle large, immutable binary objects. Ambry is LinkedIn's distributed blob store with write-once read-many semantics and triple-replication across data centers. Used for profile images, video content, and document attachments.</li>
+      <li><strong>Kafka → Kafka:</strong> LinkedIn invented Kafka. Same technology, same role. LinkedIn runs one of the world's largest Kafka deployments.</li>
+      <li><strong>Dataflow → Samza:</strong> Both are stream processing frameworks for real-time computation on event streams. Samza integrates tightly with Kafka (also LinkedIn-invented) for windowed aggregation, real-time analytics, and derived data generation.</li>
+      <li><strong>Vitess/MySQL → Espresso:</strong> Espresso's document model handles both SQL-like queries (with secondary indexes) and NoSQL key-value patterns. This consolidation reduces operational complexity &mdash; one data store instead of two.</li>
+      <li><strong>Elasticsearch → Galene:</strong> Galene is LinkedIn's custom-built search engine, powering search across people, jobs, companies, and content. Custom-built for LinkedIn's specific ranking needs, with deep integration into the ML ranking pipeline.</li>
+      <li><strong>PostgreSQL (Ad Billing) → Espresso (ACID mode):</strong> Espresso supports conditional updates with strong consistency for financial data. While not a full RDBMS, its ACID-like guarantees on individual document updates are sufficient for billing records.</li>
+      <li><strong>REST API Gateway → Rest.li + D2:</strong> Rest.li provides the declarative REST framework with resource models. D2 handles dynamic service discovery and client-side load balancing, routing requests to healthy service instances.</li>
+      <li><strong>TensorFlow Serving → Pro-ML:</strong> LinkedIn's end-to-end ML platform handles feature engineering, model training, A/B testing (via LIX), and model serving. Manages the full ML lifecycle from data to production.</li>
+    </ol>
+  </div>
+
+  <h3>Detailed Component Comparison</h3>
+
+  <h4>Espresso vs Bigtable</h4>
+  <div class="tradeoff-grid">
+    <div class="card">
+      <strong>Bigtable (YouTube)</strong><br>
+      <ul>
+        <li>Wide-column data model</li>
+        <li>Row key lookups only</li>
+        <li>Manual secondary index tables</li>
+        <li>Column families for isolation</li>
+        <li>Managed service (GCP)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <strong>Espresso (LinkedIn)</strong><br>
+      <ul>
+        <li>Document data model (JSON-like)</li>
+        <li>Built-in secondary indexes</li>
+        <li>Conditional updates (CAS/OCC)</li>
+        <li>Auto-sharding + replication</li>
+        <li>Self-managed within LinkedIn</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4>Venice vs Redis Feature Store</h4>
+  <div class="tradeoff-grid">
+    <div class="card">
+      <strong>Redis Feature Store (YouTube)</strong><br>
+      <ul>
+        <li>In-memory, ultra-low latency</li>
+        <li>General-purpose key-value store</li>
+        <li>Manual data pipeline management</li>
+        <li>Sentinel for failover</li>
+        <li>Memory-limited (expensive at scale)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <strong>Venice (LinkedIn)</strong><br>
+      <ul>
+        <li>Purpose-built for derived data serving</li>
+        <li>Batch + incremental ingestion modes</li>
+        <li>Eventually consistent by design</li>
+        <li>Built-in versioning and rollback</li>
+        <li>Optimized for read-heavy ML serving</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4>Ambry vs GCS</h4>
+  <div class="tradeoff-grid">
+    <div class="card">
+      <strong>GCS Blob Storage (YouTube)</strong><br>
+      <ul>
+        <li>Managed cloud storage</li>
+        <li>Cross-region replication</li>
+        <li>Lifecycle policies (hot → cold → archive)</li>
+        <li>Versioning for object history</li>
+        <li>Integrated with Google Cloud ecosystem</li>
+      </ul>
+    </div>
+    <div class="card">
+      <strong>Ambry (LinkedIn)</strong><br>
+      <ul>
+        <li>Self-hosted distributed blob store</li>
+        <li>Write-once read-many (WORM)</li>
+        <li>Triple replication across DCs</li>
+        <li>Optimized for large immutable objects</li>
+        <li>Lower operational cost at LinkedIn scale</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= SECTION 12 ======================= -->
+<div class="section" id="sec-12">
+  <div class="section-num">Section 12</div>
+  <h2>SQL vs NoSQL Decision Matrix</h2>
+
+  <p>Choosing the right data store is one of the most important design decisions. YouTube uses five different stores, each optimized for specific access patterns. The decision tree helps you reason about which store to use for any data type.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_12_sql_nosql.png" alt="SQL vs NoSQL Decision Matrix">
+    <div class="caption">Figure 13: SQL vs NoSQL Decision Matrix &mdash; How to choose the right data store</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Decision Matrix</h4>
+    <ol>
+      <li><strong>Decision Tree:</strong> Start with "What kind of data?" and follow the branches:
+        <ul style="margin-top:8px;">
+          <li>Need ACID transactions or relational joins? → <strong>SQL</strong> (Vitess/MySQL for app data, PostgreSQL for financial data)</li>
+          <li>800M+ rows with key-value access and flexible schema? → <strong>NoSQL</strong> (Bigtable)</li>
+          <li>Full-text search with scoring and ranking? → <strong>Elasticsearch</strong></li>
+          <li>Write-heavy counters with sub-millisecond reads? → <strong>Redis</strong></li>
+          <li>Large binary files (video, images)? → <strong>Blob Storage</strong> (GCS)</li>
+          <li>Pre-computed ML features for serving? → <strong>Feature Store</strong> (Redis)</li>
+        </ul>
+      </li>
+      <li><strong>Consistency Models:</strong> Different data tolerates different consistency levels:
+        <ul style="margin-top:8px;">
+          <li><strong>Strong consistency:</strong> User accounts (can't have duplicate registrations) and ad billing (can't lose money or double-charge)</li>
+          <li><strong>Eventual consistency:</strong> View counts (stale by 3 seconds is fine &mdash; nobody notices) and video metadata cache (TTL-based expiration)</li>
+          <li><strong>Near real-time:</strong> Search index (replicas sync within 1&ndash;2 seconds)</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+
+  <table>
+    <tr><th>Data</th><th>Store</th><th>Why This Store</th><th>LinkedIn Alternative</th></tr>
+    <tr><td>User accounts</td><td>SQL (Vitess/MySQL)</td><td>ACID for auth, unique email constraint, relational joins</td><td><span class="linkedin-tag">Espresso</span></td></tr>
+    <tr><td>Video metadata</td><td>NoSQL (Bigtable)</td><td>800M+ rows, flexible schema, key-value access</td><td><span class="linkedin-tag">Espresso</span></td></tr>
+    <tr><td>Comments</td><td>NoSQL (Bigtable)</td><td>High write volume, partitioned by video_id</td><td><span class="linkedin-tag">Espresso</span></td></tr>
+    <tr><td>Search index</td><td>Elasticsearch</td><td>Full-text search with BM25 + ML re-ranking</td><td><span class="linkedin-tag">Galene</span></td></tr>
+    <tr><td>Ad billing</td><td>SQL (PostgreSQL)</td><td>Financial data needs ACID, complex reporting</td><td><span class="linkedin-tag">Espresso (ACID)</span></td></tr>
+    <tr><td>Watch history</td><td>NoSQL (Bigtable)</td><td>Append-heavy time-series, partitioned by user_id</td><td><span class="linkedin-tag">Espresso</span></td></tr>
+    <tr><td>Recommendations</td><td>Feature Store + Redis</td><td>Pre-computed embeddings, low-latency serving</td><td><span class="linkedin-tag">Venice</span></td></tr>
+    <tr><td>View/like counts</td><td>Redis primary + NoSQL</td><td>Write-back: Redis for real-time, flush to DB</td><td><span class="linkedin-tag">Couchbase + Espresso</span></td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 13 ======================= -->
+<div class="section" id="sec-13">
+  <div class="section-num">Section 13</div>
+  <h2>Backup &amp; Disaster Recovery</h2>
+
+  <p>Each data store has a different replication and backup strategy based on its consistency requirements, write volume, and recovery time objectives.</p>
+
+  <div class="diagram">
+    <img src="images/sd_yt_13_disaster_recovery.png" alt="Backup and Disaster Recovery">
+    <div class="caption">Figure 14: Backup &amp; Disaster Recovery &mdash; Replication and recovery strategy per data store</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Disaster Recovery</h4>
+    <ol>
+      <li><strong>SQL (Vitess/MySQL):</strong> 3&ndash;5 read replicas per shard handle read scaling. Daily snapshots plus Write-Ahead Log (WAL) shipping enable point-in-time recovery with near-zero data loss (RPO &asymp; 0). The primary provides strong consistency; replicas provide eventually consistent reads. RTO is minutes (promote a replica to primary). <span class="linkedin-tag">LinkedIn: Espresso</span> provides built-in multi-DC replication with automatic failover.</li>
+      <li><strong>NoSQL (Bigtable):</strong> Multi-region replication with continuous backup to cold storage. Tunable consistency &mdash; you can trade latency for stronger guarantees. RTO and RPO are both seconds. <span class="linkedin-tag">LinkedIn: Espresso</span> uses master-slave replication across data centers with automatic leader election.</li>
+      <li><strong>Blob Storage (GCS):</strong> Cross-region replication ensures video files survive a full region outage. Versioning preserves object history. Lifecycle policies automatically move old content from hot to cold to archive storage, reducing costs. RTO is automatic (Google handles it); RPO is near-zero with versioning. <span class="linkedin-tag">LinkedIn: Ambry</span> triple-replicates across data centers.</li>
+      <li><strong>Elasticsearch:</strong> 1&ndash;2 replica shards per primary shard handle both availability and read scaling. Daily snapshots to GCS provide backup. Near real-time consistency (replicas sync in 1&ndash;2 seconds). RTO is minutes (restore from snapshot); RPO is hours (gap between snapshots). <span class="linkedin-tag">LinkedIn: Galene</span> has custom index replication.</li>
+      <li><strong>Redis:</strong> Sentinel provides automatic failover to a replica within seconds. RDB snapshots plus AOF (Append-Only File) provide backup. The main risk: up to 30 seconds of data loss on crash (the write-back flush interval). Mitigation: Kafka replay can recover lost increments. <span class="linkedin-tag">LinkedIn: Couchbase</span> has built-in cross-DC replication with automatic failover.</li>
+    </ol>
+  </div>
+
+  <table>
+    <tr><th>Store</th><th>Replication</th><th>Backup</th><th>Consistency</th><th>RTO / RPO</th></tr>
+    <tr><td>SQL (Vitess)</td><td>3&ndash;5 read replicas/shard</td><td>Daily snapshots + WAL</td><td>Strong (primary)</td><td>Minutes / ~0</td></tr>
+    <tr><td>NoSQL (Bigtable)</td><td>Multi-region</td><td>Continuous to cold storage</td><td>Eventual (tunable)</td><td>Seconds / Seconds</td></tr>
+    <tr><td>Blob (GCS)</td><td>Cross-region</td><td>Versioning + lifecycle</td><td>Eventual</td><td>Automatic / ~0</td></tr>
+    <tr><td>Elasticsearch</td><td>1&ndash;2 replicas/primary</td><td>Daily snapshots to GCS</td><td>Near real-time</td><td>Minutes / Hours</td></tr>
+    <tr><td>Redis</td><td>Sentinel failover</td><td>RDB + AOF</td><td>Eventual</td><td>Seconds / up to 30s</td></tr>
+  </table>
+</div>
+
+<!-- ======================= SECTION 14 ======================= -->
+<div class="section" id="sec-14">
+  <div class="section-num">Section 14</div>
+  <h2>Interview Questions &amp; Talking Points</h2>
+
+  <div class="diagram">
+    <img src="images/sd_yt_16_interview_questions.png" alt="Interview Questions">
+    <div class="caption">Figure 15: Interview Questions &mdash; 12 deep-dive questions in 4 categories</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Interview Strategy</h4>
+    <ol>
+      <li><strong>Category 1 &mdash; Scale and Performance:</strong> These questions test your understanding of how YouTube handles extreme volume. Q1 (500 hours/min uploads) tests chunked uploads, parallel transcoding, and K8s autoscaling. Q2 (1B hours/day serving) tests CDN design, Zipfian caching, and ISP-embedded caches. Q3 (viral video handling) tests cache warming and thundering herd mitigation.</li>
+      <li><strong>Category 2 &mdash; Data Consistency and Storage:</strong> These questions test your ability to choose the right data store and caching pattern. Q4 (Bigtable vs MySQL) tests NoSQL tradeoffs and column family design. Q5 (view counting at scale) tests the write-back cache pattern and approximate vs exact counting. Q6 (cache invalidation) tests cache-aside pattern, delete-on-write strategy, and TTL management.</li>
+      <li><strong>Category 3 &mdash; Search and Recommendations:</strong> These questions test your understanding of information retrieval and ML systems. Q7 (search end-to-end) tests inverted index, BM25, and ML re-ranking. Q8 (recommendation reduction) tests the two-stage pipeline and multi-objective optimization. Q9 (filter bubbles) tests diversity injection and exploration strategies.</li>
+      <li><strong>Category 4 &mdash; Monetization and Reliability:</strong> These questions test system reliability and financial integrity. Q10 (ad auction) tests second-price bidding, mid-roll placement, and fraud detection. Q11 (DC failure) tests multi-region replication and failover strategies. Q12 (exactly-once billing) tests idempotent handlers, deduplication, and ACID transactions.</li>
+    </ol>
+    <p style="margin-top:12px;"><strong>Interview Strategy:</strong> Start with scale numbers (they impress interviewers and set context). Draw the high-level architecture with 8 tiers. Then deep-dive into whichever component the interviewer asks about. Always discuss tradeoffs &mdash; there's rarely a "right" answer, only tradeoffs the interviewer wants you to reason through.</p>
+  </div>
+
+  <h3>Key Scale Numbers</h3>
+  <div class="scale-box">
+    <div class="scale-item"><div class="number">500 hrs</div><div class="label">Video uploaded per minute</div></div>
+    <div class="scale-item"><div class="number">1B hrs</div><div class="label">Watched daily</div></div>
+    <div class="scale-item"><div class="number">800M+</div><div class="label">Total videos</div></div>
+    <div class="scale-item"><div class="number">2B+</div><div class="label">Monthly active users</div></div>
+    <div class="scale-item"><div class="number">5B+</div><div class="label">Daily ad impressions</div></div>
+    <div class="scale-item"><div class="number">~$30B</div><div class="label">Annual ad revenue</div></div>
+  </div>
+
+  <h3>Trade-Offs to Discuss</h3>
+  <div class="tradeoff-grid">
+    <div class="card highlight">
+      <strong>Eventual vs Strong Consistency</strong><br>
+      Acceptable for view counts (nobody cares if stale by 3 seconds) but <strong>not</strong> for ad billing (financial data needs ACID). The system uses different consistency models for different data types.
+    </div>
+    <div class="card highlight">
+      <strong>Denormalization vs Normalization</strong><br>
+      Channel name stored with video metadata to avoid a join. Trades storage cost for read speed. At 800M+ videos, the join would be prohibitively expensive on every page load.
+    </div>
+    <div class="card highlight">
+      <strong>Audio/Video Separation</strong><br>
+      Doubles storage but enables language switching without re-downloading video, audio-only background playback on mobile, and independent codec optimization.
+    </div>
+    <div class="card highlight">
+      <strong>Cache-Aside vs Write-Back</strong><br>
+      Different patterns for different data characteristics. Cache-aside for read-heavy metadata (TTL-based, delete on write). Write-back for write-heavy counters (Redis as primary, batch flush to DB).
+    </div>
+    <div class="card highlight">
+      <strong>Fan-Out Strategy</strong><br>
+      Fan-out-on-write for small creators (&lt;100K subscribers): pre-compute follower feeds. Fan-out-on-read for mega-creators (millions of subscribers): compute on demand to avoid massive write amplification.
+    </div>
+    <div class="card highlight">
+      <strong>Approximate vs Exact Counting</strong><br>
+      Not needed for display counters &mdash; approximate counting with Redis INCR + dedup window suffices. Exact counts computed in batch analytics for financial reporting.
+    </div>
+  </div>
+
+  <h3>Common Follow-Up Questions</h3>
+
+  <div class="card">
+    <h4>How do you handle a viral video?</h4>
+    <p><strong>CDN</strong> absorbs the read traffic (edge PoPs serve cached segments). <strong>Cache warming</strong> prevents thundering herd on metadata. <strong>Auto-scaled transcoding fleet</strong> handles the processing. The system is designed so that popularity doesn't affect backend database load &mdash; it's all absorbed at the CDN and cache layers.</p>
+  </div>
+
+  <div class="card">
+    <h4>What if Redis fails?</h4>
+    <p><strong>Sentinel failover</strong> promotes a replica within seconds. For view counts: up to 30 seconds of increments may be lost, but <strong>Kafka replay</strong> can recover them from the <code>view-events</code> topic. For metadata cache: the application falls through to database read replicas (slightly higher latency but fully functional). For feature store: Venice provides a separate serving path that doesn't depend on Redis.</p>
+  </div>
+
+  <div class="card">
+    <h4>How does copyright detection work?</h4>
+    <p><strong>Content ID system:</strong> During transcoding, the pipeline runs audio fingerprinting (Chromaprint algorithm) and video fingerprinting. These fingerprints are compared against a database of copyrighted material. Matches are flagged for the copyright holder, who can choose to block, monetize (claim ad revenue), or track the video.</p>
+  </div>
+
+  <h3>Complete Architecture</h3>
+
+  <div class="diagram">
+    <img src="images/sd_yt_15_complete_architecture.png" alt="Complete YouTube Architecture">
+    <div class="caption">Figure 16: Complete YouTube Architecture &mdash; All 7 layers and 4 data flows in one unified view</div>
+  </div>
+
+  <div class="walkthrough">
+    <h4>Diagram Walkthrough: Complete Architecture</h4>
+    <ol>
+      <li><strong>Layer 1 &mdash; Client Tier:</strong> Web browsers, mobile apps, smart TVs, and Creator Studio. Each platform has different codec support, screen sizes, and network conditions that the system adapts to.</li>
+      <li><strong>Layer 2 &mdash; Edge Tier:</strong> CDN (200+ edge PoPs) serves video segments. API Gateway routes non-video API calls. These are the two entry points into the system.</li>
+      <li><strong>Layer 3 &mdash; Service Tier:</strong> Six core microservices plus the Aggregator. Upload Service and Video Processing handle the write path. Search, Metadata, and Recommendation handle the read path. Ad Service handles monetization. The Aggregator coordinates fan-out reads.</li>
+      <li><strong>Layer 4 &mdash; Async Tier:</strong> Kafka connects everything asynchronously with 6 topic families. Stream Processors (equivalent to Samza at LinkedIn) run real-time analytics and trend detection.</li>
+      <li><strong>Layer 5 &mdash; Cache Tier:</strong> Redis Cluster with two patterns: cache-aside for metadata reads and write-back for view counters and feature store.</li>
+      <li><strong>Layer 6 &mdash; Data Tier:</strong> Five specialized stores, each chosen for its access pattern: Bigtable (NoSQL), Vitess/MySQL (SQL), Elasticsearch (search), PostgreSQL (ACID billing), GCS Blob Storage (video files).</li>
+      <li><strong>Layer 7 &mdash; ML Tier:</strong> GPU Inference servers for real-time ranking and ad targeting. Training Pipeline for daily model retraining. Content Moderation for safety scoring.</li>
+    </ol>
+    <p style="margin-top:12px;"><strong>Four data flows (colored arrows):</strong></p>
+    <ul>
+      <li><strong style="color:#f85149;">RED &mdash; Upload flow:</strong> Client → Upload Service → Blob Storage → Kafka → Video Processing → Blob Storage → CDN</li>
+      <li><strong style="color:#58a6ff;">BLUE &mdash; Watch flow:</strong> Client → CDN → (cache miss) → Blob Storage</li>
+      <li><strong style="color:#3fb950;">GREEN &mdash; Search flow:</strong> Client → API Gateway → Search Service → Elasticsearch → ML Re-rank → Response</li>
+      <li><strong style="color:#f0883e;">ORANGE &mdash; Ad flow:</strong> Player → Ad Service → Auction → CDN → Billing Pipeline</li>
+    </ul>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<footer>
+  <p>System Design Interview Guide &bull; Design YouTube &bull; LinkedIn Technology Mapping</p>
+  <p style="margin-top:8px;">Part of the <a href="index.html" style="color:var(--accent);">Linux Systems &amp; System Design Guide</a></p>
+</footer>
+
+</body>
+</html>
