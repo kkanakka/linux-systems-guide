@@ -293,6 +293,30 @@
     <div class="caption">Figure 1: High-level architecture of the Uber system showing core services, data stores, and the hot/cold path split for location ingestion.</div>
   </div>
 
+  <h4>Diagram Walkthrough: High-Level Architecture</h4>
+  <p>This diagram shows the entire system at a glance. Read it top-to-bottom as layers, left-to-right as data flow:</p>
+  <ol>
+    <li><strong>Client Layer (top):</strong> Two mobile apps&mdash;the <strong>Rider App</strong> (blue) and the <strong>Driver App</strong> (green). The Rider App sends ride requests and receives tracking updates. The Driver App sends GPS locations and receives ride offers. Both maintain persistent WebSocket connections to the Connection Service for real-time bidirectional communication.</li>
+    <li><strong>Gateway Layer:</strong> Two entry points into the backend. The <strong>API Gateway / Rest.li</strong> (orange) handles REST requests like fare estimates and ride creation&mdash;these are request/response flows. The <strong>Connection Service</strong> (purple) manages persistent WebSocket connections for real-time streaming. It maintains a <strong>Connection Registry</strong> that maps each user to the specific Connection Service instance holding their WebSocket.</li>
+    <li><strong>Core Services Layer:</strong> Four microservices that contain the business logic:
+      <ul>
+        <li><strong>Ride Service</strong> (blue)&mdash;owns the trip lifecycle and fare calculation. It's the central coordinator.</li>
+        <li><strong>Matching Service</strong> (green)&mdash;finds nearby drivers by querying the geospatial index and orchestrates the offer/accept flow.</li>
+        <li><strong>Location Service</strong> (orange)&mdash;receives GPS updates from the Connection Service and splits them into two paths: real-time index updates (hot) and durable writes (cold).</li>
+        <li><strong>Routing Service</strong> (gray)&mdash;calculates the driving route, distance, and ETA using a road network graph.</li>
+      </ul>
+    </li>
+    <li><strong>Data Layer&mdash;Hot Path (red arrows, labeled "real-time"):</strong> The Location Service writes to the <strong>Geospatial Index</strong> (in-memory, green cylinder with lightning bolt). This is where nearby-driver queries go for sub-5ms lookups. The Matching Service also reads from this index. No durability&mdash;if it crashes, drivers re-report within seconds.</li>
+    <li><strong>Data Layer&mdash;Cold Path (blue arrows, labeled "async"):</strong> The Location Service also publishes GPS updates to <strong>Kafka</strong> (red parallelogram). From Kafka, a consumer writes batches to a <strong>Time-Series DB</strong> for trip history, analytics, and dispute resolution. This path tolerates seconds-to-minutes of lag.</li>
+    <li><strong>OLTP Data:</strong> The <strong>Trip DB (Espresso)</strong> stores trip records with strong consistency. The Ride Service reads and writes here for all state transitions.</li>
+    <li><strong>Downstream Services (bottom):</strong> <strong>Payment Service</strong> and <strong>Notification Service</strong> consume events from Kafka (published via the outbox pattern) to handle side effects after trip state changes.</li>
+  </ol>
+
+  <div class="info-box note">
+    <strong>Key Insight: Why Two Entry Points?</strong>
+    The API Gateway handles stateless request/response (fare estimates, ride creation). The Connection Service handles stateful persistent connections (GPS streaming, live tracking). Separating them lets you scale each independently&mdash;you need many more Connection Service instances (each holding ~100K WebSocket connections) than API Gateway instances.
+  </div>
+
   <div class="back-top"><a href="#toc">&uarr; Back to top</a></div>
 </div>
 
@@ -398,6 +422,20 @@
   <div class="diagram-box">
     <img src="images/sd_uber_02_data_model.png" alt="Data Model Diagram">
     <div class="caption">Figure 2: Entity-relationship diagram. Trip and Driver have a many-to-one relationship. Trip and DriverLocation have one-to-many (trip route = sequence of GPS snapshots).</div>
+  </div>
+
+  <h4>Diagram Walkthrough: Data Model Relationships</h4>
+  <p>This entity-relationship diagram shows the three core entities and how they connect:</p>
+  <ol>
+    <li><strong>Trip (left, blue header):</strong> The central entity. Every ride request creates a Trip record. It holds the full lifecycle: pickup/destination coordinates, fare estimates, the current status (state machine), and a <code>version</code> field for optimistic locking. The <code>driver_id</code> is nullable because during the SEARCHING state, no driver is assigned yet.</li>
+    <li><strong>Driver (right, orange header):</strong> Represents a registered driver. The <code>status</code> field tracks whether they're AVAILABLE, EN_ROUTE to a pickup, ON_TRIP, or OFFLINE. The critical field is <code>version</code>&mdash;this enables optimistic concurrency control to prevent two ride requests from assigning the same driver simultaneously (the double-dispatch problem).</li>
+    <li><strong>DriverLocation (center, green header):</strong> GPS snapshots sent every ~4 seconds. Each record has lat/lng, heading, speed, and a pre-computed <code>geohash</code> for spatial indexing. The <code>trip_id</code> field is nullable&mdash;it's set only when the driver is on an active trip, so location points can be associated with a specific trip's route.</li>
+    <li><strong>Trip &rarr; Driver relationship (many-to-one):</strong> One driver can have many trips over their lifetime, but each trip has at most one assigned driver. The crow's foot notation shows this directionality.</li>
+    <li><strong>Trip &rarr; DriverLocation relationship (one-to-many):</strong> A single trip generates hundreds of GPS snapshots (one every 4 seconds over a 20-minute ride = ~300 points). These snapshots reconstruct the route taken and are used for fare verification and dispute resolution.</li>
+  </ol>
+  <div class="info-box note">
+    <strong>Storage Split</strong>
+    The Trip and Driver entities live in <strong>Espresso</strong> (strong consistency, CAS updates). The DriverLocation hot index lives in <strong>Redis/in-memory</strong> (speed over durability). Historical DriverLocation records are persisted asynchronously to a <strong>time-series store</strong> via Kafka.
   </div>
 
   <h3>Trip Entity</h3>
@@ -558,6 +596,22 @@ If surge pricing is active in the pickup zone:
     <div class="caption">Figure 3: Ride pricing sequence. The Ride Service calls the Routing Service for route distance/duration, computes the fare, and returns the estimate to the rider. Trip record stored in Espresso.</div>
   </div>
 
+  <h4>Diagram Walkthrough: Ride Pricing Flow (Step-by-Step)</h4>
+  <p>Read this sequence diagram left-to-right following the numbered arrows:</p>
+  <ol>
+    <li><strong>Step 1 &mdash; Rider requests estimate:</strong> The Rider App sends <code>GET /rides/estimate</code> with pickup coordinates (37.77, -122.41) and destination coordinates to the <strong>API Gateway</strong>. The rider hasn't committed to the ride yet&mdash;they just want to see the price.</li>
+    <li><strong>Step 2 &mdash; Gateway forwards:</strong> The API Gateway routes the request to the <strong>Ride Service</strong>. The gateway handles authentication, rate limiting, and request routing (via D2 service discovery at LinkedIn).</li>
+    <li><strong>Step 3 &mdash; Route calculation:</strong> The Ride Service calls the <strong>Routing Service</strong> with the pickup and destination coordinates. It asks: "What's the fastest driving route between these two points?"</li>
+    <li><strong>Step 4 &mdash; Route response:</strong> The Routing Service returns the computed route: <strong>distance = 12.4 km</strong>, <strong>duration = 23 minutes</strong>, plus optional waypoints. Internally, it used a weighted graph algorithm (Dijkstra/A*) on the road network, considering road types, turn costs, and one-way restrictions.</li>
+    <li><strong>Step 5 &mdash; Fare computation:</strong> The Ride Service applies the pricing formula: <code>fare = base_fare + (12.4 &times; per_km_rate) + (23 &times; per_min_rate) &times; surge_multiplier</code>. The surge multiplier is fetched from Venice (pre-computed by Samza). If surge is 1.0x, the fare computes to $24.50.</li>
+    <li><strong>Step 6 &mdash; Optional cache:</strong> The Ride Service may store the estimate in <strong>Trip DB (Espresso)</strong> so that when the rider confirms, the system doesn't need to recalculate. This also provides an audit trail of estimated vs. actual fares.</li>
+    <li><strong>Step 7 &mdash; Response to rider:</strong> The estimate flows back through the API Gateway to the Rider App: <strong>$24.50, 23 min ETA, surge 1.0x</strong>. The rider sees this on their screen and decides whether to confirm.</li>
+  </ol>
+  <div class="info-box note">
+    <strong>Why the Routing Service matters</strong>
+    Without it, you'd compute straight-line ("as the crow flies") distance, which is wildly inaccurate. A 10km straight line through a city could be 18km of actual driving. The Routing Service uses a weighted graph where intersections are nodes, road segments are edges, and edge weights are travel times (factoring in speed limits and traffic).
+  </div>
+
   <h3>Surge Pricing: Supply-Demand Balancing</h3>
   <p>When demand exceeds supply in a geographic zone, surge pricing kicks in to incentivize more drivers to that area. The feedback loop: higher surge &rarr; higher fare &rarr; more drivers attracted to zone &rarr; supply increases &rarr; surge decreases.</p>
 
@@ -565,6 +619,16 @@ If surge pricing is active in the pickup zone:
     <img src="images/sd_uber_12_surge_pricing.png" alt="Surge Pricing Architecture">
     <div class="caption">Figure 4: Surge pricing computed by Samza stream processing consuming ride request and driver availability events from Kafka. Pre-computed surge map stored in Venice for fast reads by the Ride Service.</div>
   </div>
+
+  <h4>Diagram Walkthrough: Surge Pricing Pipeline</h4>
+  <p>Read this diagram from left (supply/demand map) to right (compute pipeline to storage):</p>
+  <ol>
+    <li><strong>City divided into hexagonal zones (left side):</strong> Each zone has a color representing its current surge level. <strong>Green zones (1.0x)</strong> have plenty of drivers relative to demand (e.g., 10 drivers, 3 riders). <strong>Yellow zones (1.5x)</strong> have moderate imbalance. <strong>Orange (2.0x)</strong> and <strong>red (3.0x+)</strong> zones have severe driver shortages (e.g., only 2 drivers for 15 riders&mdash;think concert venue just ended or airport rush hour).</li>
+    <li><strong>Samza Stream Processor (center):</strong> Consumes two event streams from Kafka: <code>ride_request</code> events (a rider asked for a ride in zone X) and <code>driver_available</code> events (a driver became available in zone X). It uses a <strong>5-minute sliding window</strong> per zone to compute the demand-to-supply ratio.</li>
+    <li><strong>Compute Surge Factor:</strong> The formula is straightforward: <code>surge = demand_count / supply_count</code>. If a zone had 15 ride requests and 5 available drivers in the last 5 minutes, surge = 3.0x. The multiplier is capped at a maximum (e.g., 5.0x) to prevent runaway pricing.</li>
+    <li><strong>Store in Venice (right side):</strong> The computed surge map is written to Venice with key = <code>zone_geohash</code> and value = <code>{surge_multiplier, updated_at}</code>. Venice is read-optimized&mdash;the Ride Service reads surge for every fare estimate request at massive QPS with millisecond latency.</li>
+    <li><strong>Feedback Loop (bottom):</strong> This is the self-balancing mechanism. Higher surge &rarr; higher fares &rarr; riders see higher prices (some defer) AND more drivers are attracted to the high-surge zone (more money) &rarr; supply increases &rarr; surge decreases. This is a classic negative feedback loop that naturally balances supply and demand.</li>
+  </ol>
 
   <div class="info-box linkedin">
     <strong>LinkedIn Stack for Surge Pricing</strong>
@@ -609,6 +673,16 @@ LIMIT 5;</pre>
     <div class="caption">Figure 5: Geohash-based driver search. The rider's cell and 8 neighbors form a 9-cell search pattern. Drivers are filtered by availability and ranked by distance.</div>
   </div>
 
+  <h4>Diagram Walkthrough: Geospatial Search</h4>
+  <p>Read the left side as the spatial visualization, the right side as the algorithm steps:</p>
+  <ol>
+    <li><strong>City map grid (left):</strong> The city is divided into geohash cells. Each cell is labeled with its geohash prefix (e.g., "9q8y", "9q8z", "9q9p"). The rider (blue pin) is in the center cell. Green car icons represent available drivers scattered across cells. The <strong>dashed red border</strong> highlights the 9-cell search pattern: the rider's cell plus all 8 neighbors.</li>
+    <li><strong>Step 1 &mdash; Hash Rider Location:</strong> The rider's pickup coordinates (37.77, -122.41) are encoded into geohash string "9q8yyk" at precision 6. At this precision, each cell is roughly 1km &times; 1km. This is a simple mathematical encoding&mdash;no database query needed.</li>
+    <li><strong>Step 2 &mdash; Query 9 Cells:</strong> The system queries the center cell "9q8yyk" <em>plus</em> all 8 neighboring cells. Why 8 neighbors? Because a rider sitting near a cell boundary could have the nearest driver in an adjacent cell. The query filters for <code>status = AVAILABLE</code> and excludes drivers beyond the maximum search radius using actual Haversine distance (geohash is an approximation; actual distance is the final filter).</li>
+    <li><strong>Step 3 &mdash; Rank by Distance:</strong> The remaining candidates are sorted by true distance from the rider's pickup point: Driver A at 0.3km (best), Driver B at 0.8km, Driver C at 1.2km, Driver D at 1.5km (from a different cell). The Matching Service takes the top candidates and proceeds to the offer flow.</li>
+    <li><strong>Expansion fallback (bottom):</strong> If fewer than 3 candidates are found (common in suburban or off-peak areas), the system expands to a coarser precision (precision 5 &asymp; 5km cells) and re-queries. This progressively widens the search net until enough candidates are found or the maximum radius is reached.</li>
+  </ol>
+
   <h4>Search Algorithm</h4>
   <ol>
     <li>Compute the rider's geohash at search precision (precision 6 &asymp; 1km cells)</li>
@@ -649,6 +723,20 @@ LIMIT 5;</pre>
     <div class="caption">Figure 6: Offer/accept protocol. The Matching Service queries the geospatial index, sends an offer to the nearest driver via WebSocket, and handles accept/decline with fallback to next candidate.</div>
   </div>
 
+  <h4>Diagram Walkthrough: Matching Sequence (Step-by-Step)</h4>
+  <p>This is a UML sequence diagram. Read it top-to-bottom as time progresses. The six columns represent different components, and the arrows show messages between them:</p>
+  <ol>
+    <li><strong>Step 1 &mdash; Rider confirms ride:</strong> The Rider App sends <code>POST /rides</code> to the Ride Service. The rider has seen the fare estimate and decided to proceed.</li>
+    <li><strong>Step 2 &mdash; Create trip record:</strong> The Ride Service creates a new Trip record in Espresso with <code>status = SEARCHING</code>. This is the starting state of the trip lifecycle.</li>
+    <li><strong>Step 3 &mdash; Delegate to Matching:</strong> The Ride Service sends a "find driver for trip_123" request to the Matching Service. From here, the Matching Service takes over the search and offer flow.</li>
+    <li><strong>Step 4 &mdash; Query geospatial index:</strong> The Matching Service queries the in-memory Geospatial Index: "Give me available drivers near (37.77, -122.41) within 3km." This is the 9-cell geohash query described earlier.</li>
+    <li><strong>Step 5 &mdash; Ranked candidates returned:</strong> The index returns a ranked list of available drivers: [Driver A at 0.3km, Driver B at 0.8km, Driver C at 1.2km].</li>
+    <li><strong>Step 6 &mdash; Send offer to Driver A:</strong> The Matching Service sends a ride offer to Driver A through the Connection Service. The Connection Service knows which WebSocket instance holds Driver A's connection (via the Connection Registry).</li>
+    <li><strong>Step 7 &mdash; Driver sees offer:</strong> The offer arrives on Driver A's phone via their WebSocket: "New ride request, pickup at Market St, destination SFO Airport." The driver has 15 seconds to respond.</li>
+    <li><strong>Path A (green &mdash; Accept):</strong> Driver A taps "Accept." The accept message flows back: Driver App &rarr; Connection Service &rarr; Matching Service &rarr; Ride Service. The Ride Service updates the trip to <code>status = MATCHED</code> and sets <code>driver_id = A</code>. The rider gets a notification with driver details and ETA.</li>
+    <li><strong>Path B (red &mdash; Decline/Timeout):</strong> If Driver A declines or 15 seconds pass with no response, the Matching Service moves to Driver B and repeats from Step 6. If all candidates are exhausted, it expands the search radius and tries again.</li>
+  </ol>
+
   <h4>Offer/Accept Protocol</h4>
   <ul>
     <li><strong>Accept:</strong> Trip transitions to MATCHED. Rider is notified with driver details and ETA.</li>
@@ -663,6 +751,26 @@ LIMIT 5;</pre>
     <img src="images/sd_uber_06_double_dispatch.png" alt="Double-Dispatch Prevention">
     <div class="caption">Figure 7: Race condition without protection (left) vs. optimistic concurrency control with version field (right). Only one assignment succeeds; the loser retries with the next candidate.</div>
   </div>
+
+  <h4>Diagram Walkthrough: Double-Dispatch Race Condition</h4>
+  <p>This side-by-side comparison shows the problem and solution. Read each side top-to-bottom as a timeline:</p>
+
+  <p><strong>Left Side &mdash; Problem (Without Protection):</strong></p>
+  <ol>
+    <li><strong>Time T1:</strong> Ride Request A reads Driver X's record: <code>status = AVAILABLE</code>. Everything looks good.</li>
+    <li><strong>Time T2:</strong> Ride Request B <em>also</em> reads Driver X's record: <code>status = AVAILABLE</code>. B doesn't know that A is also trying to assign this driver.</li>
+    <li><strong>Time T3:</strong> Request A writes: <code>UPDATE driver SET status = ON_TRIP WHERE driver_id = X</code>. Success&mdash;Driver X is now ON_TRIP for ride A.</li>
+    <li><strong>Time T4:</strong> Request B writes the <em>same</em> update: <code>UPDATE driver SET status = ON_TRIP WHERE driver_id = X</code>. Also succeeds! Now Driver X is "assigned" to BOTH rides. <strong>This is the double-dispatch bug.</strong> The driver gets two conflicting rides, and one rider will be left waiting indefinitely.</li>
+  </ol>
+
+  <p><strong>Right Side &mdash; Solution (Optimistic Concurrency Control):</strong></p>
+  <ol>
+    <li><strong>Time T1:</strong> Request A reads Driver X: <code>status = AVAILABLE, version = 5</code>. It notes the version number.</li>
+    <li><strong>Time T2:</strong> Request B reads Driver X: <code>status = AVAILABLE, version = 5</code>. Same version.</li>
+    <li><strong>Time T3:</strong> Request A writes: <code>UPDATE driver SET status = ON_TRIP, version = 6 WHERE driver_id = X AND version = 5</code>. The WHERE clause checks the version. Since version is still 5, the update succeeds (1 row affected). Version is now 6.</li>
+    <li><strong>Time T4:</strong> Request B writes: <code>UPDATE driver SET status = ON_TRIP, version = 6 WHERE driver_id = X AND version = 5</code>. The WHERE clause checks version = 5, but the version is now 6 (changed by A). <strong>0 rows affected &mdash; the update fails.</strong> Request B detects the conflict and tries the next candidate driver instead.</li>
+  </ol>
+  <p>The result: only ONE assignment ever succeeds. The loser detects the conflict immediately and retries, with no lock contention and no waiting.</p>
 
   <h4>Solution: Optimistic Concurrency Control (OCC)</h4>
   <pre><span class="lang-label">SQL</span>
@@ -701,6 +809,20 @@ WHERE driver_id = ?
     <div class="caption">Figure 8: WebSocket connection architecture. A connection registry maps user_id to Connection Service instance for cross-instance message delivery. ~100K connections per instance, 30-50 instances for 2M+ connected users.</div>
   </div>
 
+  <h4>Diagram Walkthrough: WebSocket Connection Management</h4>
+  <p>Read this diagram top-to-bottom to understand how millions of persistent connections are managed:</p>
+  <ol>
+    <li><strong>Clients (top row):</strong> 6 phone icons represent the millions of Rider Apps (blue) and Driver Apps (green). Each maintains exactly one persistent WebSocket connection.</li>
+    <li><strong>Load Balancer (orange bar):</strong> When a client first connects, the load balancer routes the WebSocket handshake to a Connection Service instance. It uses <strong>consistent hashing by user_id</strong> for sticky sessions&mdash;this ensures the same user reconnects to the same instance (important because WebSocket connections are stateful). Alternatively, connection_id-based routing can be used.</li>
+    <li><strong>Connection Service Instances A, B, C (purple boxes):</strong> Each instance holds ~100K active WebSocket connections. With 2M drivers + active riders (~3M total connected users), you need 30-50 instances. Each instance runs heartbeats every 30 seconds to detect dead connections, and clients auto-reconnect on drops.</li>
+    <li><strong>Connection Registry (red box, center):</strong> This is the critical lookup table. It's an in-memory key-value store (Redis or Couchbase) that maps <code>user_id &rarr; Connection Service instance</code>. When a client connects to Instance A, Instance A writes <code>rider_1 &rarr; Instance A</code> to the registry with a TTL. The TTL is refreshed by heartbeats. If the client disconnects and the TTL expires, the entry is removed.</li>
+    <li><strong>Push flow (bottom):</strong> When the Location Service needs to push a location update to rider_2, it follows three steps: (1) Look up rider_2 in the Connection Registry &rarr; learns rider_2 is on Instance C. (2) Route the message to Instance C via internal RPC. (3) Instance C pushes the message over rider_2's WebSocket. The rider sees the driver's car icon move on their map.</li>
+  </ol>
+  <div class="info-box note">
+    <strong>Why a Connection Registry?</strong>
+    Without it, the Location Service would have to broadcast to ALL Connection Service instances: "Does anyone have rider_2?" This is an O(N) fan-out that doesn't scale. The registry makes it O(1)&mdash;one lookup, one targeted push.
+  </div>
+
   <h4>Why WebSocket over alternatives?</h4>
   <table class="kv-table">
     <tr><th>Option</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
@@ -731,6 +853,30 @@ WHERE driver_id = ?
     <img src="images/sd_uber_07_hot_cold_path.png" alt="Hot Path vs Cold Path">
     <div class="caption">Figure 9: Dual-path architecture. Hot path: in-memory geospatial index for real-time matching (&lt;5ms writes). Cold path: Kafka &rarr; Samza &rarr; Time-Series DB for durable history (seconds-to-minutes lag).</div>
   </div>
+
+  <h4>Diagram Walkthrough: Hot Path vs Cold Path</h4>
+  <p>This is the most critical architectural decision in the system. Read from top (incoming GPS flood) down through the two diverging paths:</p>
+  <ol>
+    <li><strong>Incoming flood (top):</strong> 2 million online drivers generate ~500K GPS updates per second. All of these flow through the <strong>Connection Service (WebSocket)</strong> which handles the persistent connections and initial message parsing.</li>
+    <li><strong>The split:</strong> The Connection Service forwards each GPS update to the <strong>Location Service</strong>, which immediately fans out to TWO independent paths. This is the core insight&mdash;speed and durability have conflicting requirements, so you split them.</li>
+    <li><strong>Hot Path (left, red/orange, labeled "real-time, &lt;5ms"):</strong>
+      <ul>
+        <li>The Location Service computes the driver's geohash from their lat/lng coordinates.</li>
+        <li>It writes to the <strong>Geospatial Index (in-memory)</strong>: <code>GEOADD drivers:9q8y D1 -122.409 37.785</code>. If the driver moved to a new cell, the old entry is removed and a new one is added.</li>
+        <li>The index is sharded by geographic region for O(1) geohash lookups.</li>
+        <li>It also checks: "Is this driver on an active trip?" If yes, it triggers the location relay to the rider (Figure 10).</li>
+        <li><strong>No disk writes. No WAL. No fsync.</strong> This is what makes it fast. If the node crashes, we lose the current positions, but drivers re-report within 4 seconds.</li>
+      </ul>
+    </li>
+    <li><strong>Cold Path (right, blue, labeled "async, seconds-to-minutes lag OK"):</strong>
+      <ul>
+        <li>The Location Service publishes the GPS update to <strong>Kafka</strong>, topic <code>driver-locations</code>, partitioned by <code>driver_id</code>. Kafka provides durability and buffering.</li>
+        <li>A <strong>Samza stream processor</strong> consumes from Kafka, batches writes, aggregates and downsamples the data (e.g., keep 1 point per 10 seconds instead of every 4 seconds for archival).</li>
+        <li>Batches are written to a <strong>Time-Series DB</strong> for permanent storage. This data serves trip history (show the route taken), analytics (average trip duration by city), and dispute resolution (rider claims driver took a longer route).</li>
+      </ul>
+    </li>
+    <li><strong>Comparison table (bottom):</strong> Summarizes the tradeoff. The hot path optimizes for latency (&lt;5ms) at the cost of durability. The cold path optimizes for durability at the cost of latency (seconds to minutes). Neither tries to do both&mdash;that's the key design principle.</li>
+  </ol>
 
   <div class="compare-grid">
     <div class="compare-card">
@@ -767,6 +913,22 @@ WHERE driver_id = ?
     <div class="caption">Figure 10: End-to-end location relay. Driver app &rarr; Connection Service A &rarr; Location Service &rarr; Connection Registry (lookup rider) &rarr; Connection Service B &rarr; Rider app. Total: &lt;10ms typically.</div>
   </div>
 
+  <h4>Diagram Walkthrough: Location Relay (Step-by-Step with Timing)</h4>
+  <p>This diagram traces a single GPS update from the driver's phone to the rider's map. Follow the numbered steps with timing annotations:</p>
+  <ol>
+    <li><strong>Step 1 &mdash; Driver generates GPS (0ms):</strong> The Driver App reads the phone's GPS sensor and constructs a message: <code>{driver_id: D1, lat: 37.785, lng: -122.409, ts: 1234567890, heading: 45&deg;, speed: 30mph}</code>. This includes heading and speed so the rider's app can do dead reckoning between updates.</li>
+    <li><strong>Step 2 &mdash; WebSocket to Connection Service A (~1ms):</strong> The GPS message is sent over the driver's persistent WebSocket connection to their assigned Connection Service Instance A. This is an internal RPC within the data center&mdash;sub-millisecond network hop.</li>
+    <li><strong>Step 3 &mdash; Forward to Location Service:</strong> Connection Service A forwards the message to the Location Service.</li>
+    <li><strong>Step 4a &mdash; Update geospatial index (~2ms):</strong> The Location Service writes to the in-memory Geospatial Index: <code>GEOADD drivers:9q8y D1 -122.409 37.785</code>. The driver's position in the matching index is now current.</li>
+    <li><strong>Step 4b &mdash; Publish to Kafka (async):</strong> Simultaneously, the Location Service publishes the update to the <code>driver-locations</code> Kafka topic for the cold path. This is fire-and-forget&mdash;doesn't block the real-time relay.</li>
+    <li><strong>Step 4c &mdash; Check active trip:</strong> The Location Service queries: "Is driver D1 on an active trip?" It checks the Trip DB (or a local cache): Yes, D1 is on trip_123 with rider R7. This triggers the relay.</li>
+    <li><strong>Step 5 &mdash; Lookup rider's connection (~1ms):</strong> The Location Service looks up <code>R7</code> in the <strong>Connection Registry</strong> and learns that rider R7 is connected to Connection Service Instance B.</li>
+    <li><strong>Step 6 &mdash; Route to Instance B (~2ms):</strong> The Location Service sends the location payload to Connection Service Instance B via internal RPC.</li>
+    <li><strong>Step 7 &mdash; Push to rider via WebSocket:</strong> Instance B pushes the location update over rider R7's WebSocket connection.</li>
+    <li><strong>Step 8 &mdash; Rider sees movement:</strong> The Rider App receives the coordinates and renders the driver's car icon at (37.785, -122.409) on the map. It uses interpolation between this and the previous position (received 4 seconds ago) to animate the car icon smoothly along the road.</li>
+  </ol>
+  <p><strong>Total end-to-end latency: &lt;10ms typically.</strong> The rider's map updates within milliseconds of the driver moving. The 4-second gap between updates is due to GPS reporting frequency, not system latency.</p>
+
   <h4>Client-Side Optimizations</h4>
   <ul>
     <li><strong>Interpolation:</strong> Smooth animation between GPS updates (every 4s) so the car icon doesn't "jump"</li>
@@ -798,6 +960,18 @@ WHERE driver_id = ?
     <img src="images/sd_uber_08_trip_state_machine.png" alt="Trip State Machine">
     <div class="caption">Figure 11: Trip state machine with 6 states and defined transitions. Each transition is performed atomically in a single database transaction (conditional state update + outbox insert).</div>
   </div>
+
+  <h4>Diagram Walkthrough: Trip State Machine</h4>
+  <p>This state machine diagram shows the complete trip lifecycle. Read the <strong>happy path</strong> left-to-right (SEARCHING &rarr; MATCHED &rarr; ARRIVED &rarr; IN_PROGRESS &rarr; COMPLETED), and the <strong>cancel paths</strong> as red dashed arrows going down to CANCELLED:</p>
+  <ol>
+    <li><strong>SEARCHING (yellow):</strong> Entry point. Created when the rider confirms a ride (<code>POST /rides</code>). The system is actively searching for a nearby available driver via the Matching Service. Side effects: none yet&mdash;the rider sees a "Finding your driver..." spinner.</li>
+    <li><strong>SEARCHING &rarr; MATCHED (blue):</strong> Triggered when a driver accepts the ride offer. Side effects: (a) Push notification to rider with driver name, car model, license plate, and ETA. (b) Start streaming the driver's live location to the rider's map. (c) Push navigation to the driver showing pickup location.</li>
+    <li><strong>MATCHED &rarr; ARRIVED (purple):</strong> Triggered when the driver's GPS coordinates come within a threshold (e.g., 200 meters) of the pickup point. Side effects: (a) Push notification to rider: "Your driver has arrived." (b) Start a wait timer&mdash;typically 5 minutes. If the rider doesn't show up within the window, the driver can cancel (with the rider charged a no-show fee).</li>
+    <li><strong>ARRIVED &rarr; IN_PROGRESS (green):</strong> Triggered when the driver confirms the rider has entered the vehicle (taps "Start Trip" in the Driver App). Side effects: (a) Start metering&mdash;the system now tracks distance traveled and elapsed time for fare calculation. (b) Switch navigation to the destination.</li>
+    <li><strong>IN_PROGRESS &rarr; COMPLETED (dark green):</strong> Triggered when the driver arrives at the destination and confirms trip end. Side effects: (a) Calculate actual fare from metered distance and time, multiplied by the surge factor captured at trip creation. (b) Trigger payment processing (charge the rider's payment method). (c) Prompt both parties for ratings.</li>
+    <li><strong>Cancel paths (red dashed arrows):</strong> From SEARCHING: rider can cancel for free (no driver affected). From MATCHED: cancellation may incur a fee (driver already started driving to pickup). From ARRIVED: no-show after wait timer expires. From IN_PROGRESS: emergency cancel with partial fare charged based on metered distance so far.</li>
+    <li><strong>Atomicity (bottom):</strong> Each transition is wrapped in a single database transaction: the trip status update and an outbox event insert happen atomically. The <code>version</code> field is incremented on every transition for optimistic locking&mdash;prevents concurrent conflicting transitions.</li>
+  </ol>
 
   <table class="kv-table">
     <tr><th>State</th><th>Description</th><th>Enters When</th></tr>
@@ -842,6 +1016,37 @@ WHERE driver_id = ?
     <img src="images/sd_uber_14_outbox_pattern.png" alt="Outbox Pattern">
     <div class="caption">Figure 12: The outbox pattern solves the dual-write problem. State change + event are written atomically in one DB transaction. An outbox reader publishes events to Kafka independently. Consumers handle side effects.</div>
   </div>
+
+  <h4>Diagram Walkthrough: Outbox Pattern</h4>
+  <p>This diagram shows the problem at the top and the solution below it:</p>
+
+  <p><strong>Top &mdash; The Problem (Dual-Write Failure):</strong></p>
+  <ol>
+    <li><strong>Step 1:</strong> The Trip Service updates the database: <code>UPDATE trip SET status = 'MATCHED'</code>. This succeeds (green checkmark). The trip is now MATCHED in the DB.</li>
+    <li><strong>Step 2:</strong> The Trip Service tries to publish an event to Kafka: <code>trip.matched</code>. This <strong>fails</strong> (red X)&mdash;maybe a network blip, Kafka broker is temporarily unavailable. Now the DB says MATCHED, but the Notification Service, Location Service, and Payment Service never learn about it. The rider never gets the "Driver assigned" push notification. The system is in an inconsistent state.</li>
+  </ol>
+
+  <p><strong>Bottom &mdash; The Solution (Transactional Outbox):</strong></p>
+  <ol>
+    <li><strong>Trip Service opens a transaction boundary:</strong> Inside a single database transaction, it performs TWO writes:
+      <ul>
+        <li>(a) <code>UPDATE trip SET status = 'MATCHED', version = version + 1 WHERE trip_id = ? AND version = ?</code></li>
+        <li>(b) <code>INSERT INTO outbox (id, event_type, payload, created_at) VALUES (uuid, 'trip.matched', {...}, now())</code></li>
+      </ul>
+      Both writes are in the same transaction: they either BOTH succeed or BOTH fail. There's no state where the trip is updated but the event is missing.
+    </li>
+    <li><strong>Outbox Reader / CDC:</strong> A separate process (orange box) periodically polls the outbox table: <code>SELECT * FROM outbox WHERE published = false ORDER BY created_at LIMIT 100</code>. It reads unpublished events and publishes them to Kafka. After successful delivery, it marks them as published: <code>UPDATE outbox SET published = true WHERE id IN (...)</code>. Alternatively, LinkedIn uses <strong>Brooklin (Change Data Capture)</strong> to stream changes from Espresso directly to Kafka without polling.</li>
+    <li><strong>Kafka (red parallelogram):</strong> The events flow into the <code>trip-events</code> topic, partitioned by trip_id for ordering guarantees.</li>
+    <li><strong>Event Consumers (right):</strong> Four downstream services subscribe to the Kafka topic and handle their respective side effects:
+      <ul>
+        <li><strong>Notification Service:</strong> Sends push notification to rider ("Your driver John is on the way in a blue Toyota Camry").</li>
+        <li><strong>Location Service:</strong> Starts streaming the driver's location updates to the rider.</li>
+        <li><strong>Analytics Service:</strong> Records the "trip matched" event for metrics and dashboards.</li>
+        <li><strong>Payment Service:</strong> Listens specifically for <code>trip.completed</code> events to trigger charges.</li>
+      </ul>
+    </li>
+  </ol>
+  <p><strong>Key properties:</strong> Atomicity (DB change + event always together), at-least-once delivery (outbox reader retries on failure), idempotency (consumers use event_id to deduplicate), and ordering (events published in creation order per partition).</p>
 
   <h4>How It Works</h4>
   <ol>
@@ -896,6 +1101,18 @@ COMMIT;</pre>
     <div class="caption">Figure 13: Two-level sharding: region shards (NA, EU, APAC, LATAM) and city sub-shards within each region. Each shard: ~125K updates/sec, Primary + Replica for failover.</div>
   </div>
 
+  <h4>Diagram Walkthrough: Two-Level Geospatial Sharding</h4>
+  <p>Read this diagram top-to-bottom as a hierarchy&mdash;from global map to region to city:</p>
+  <ol>
+    <li><strong>World map (top):</strong> The map shows four geographic regions, each shaded in a different color: North America (blue), Europe (green), Asia-Pacific (orange), and South America/LATAM (purple). Each region has different driver densities.</li>
+    <li><strong>Level 1 &mdash; Region Shards:</strong> The 2M online drivers are distributed across four region-level shards: NA (500K drivers), EU (400K), APAC (800K), LATAM (300K). Each shard is an independent in-memory instance handling only drivers in its region. At ~500K total updates/sec, each shard handles roughly 125K/sec&mdash;well within a single node's capacity.</li>
+    <li><strong>Level 2 &mdash; City Sub-Shards:</strong> Within the NA shard, further partition by metro area. NYC (80K drivers, geohash prefix "dr5"), SFO (45K drivers, prefix "9q8"), LAX (60K drivers, prefix "9q5"), CHI (35K drivers, prefix "dp3"). This prevents any single city's hotspot from overwhelming the region shard.</li>
+    <li><strong>Routing logic:</strong> Incoming GPS update &rarr; hash(driver_id) &rarr; determine region &rarr; route to correct shard. The region is determined from the coarse geohash prefix of the driver's coordinates.</li>
+    <li><strong>Cross-shard boundary:</strong> A driver near the Newark/NYC border might be in a different sub-shard than riders in NYC. The Matching Service handles this by querying BOTH shards when the rider's 9-cell search pattern crosses a boundary, then merging and ranking results by distance.</li>
+    <li><strong>Replication &amp; failover:</strong> Each shard runs Primary + 1 hot standby Replica. If the primary fails, the replica is promoted in &lt;1 second. To rebuild a shard from scratch: replay the last 30 seconds of location updates from Kafka.</li>
+    <li><strong>Capacity numbers (bottom):</strong> Per shard: ~125K updates/sec, ~50K queries/sec. Memory per shard: ~2GB (100K drivers &times; 20KB state including geohash, coordinates, metadata). This easily fits in a single machine's RAM.</li>
+  </ol>
+
   <h4>Sharding Strategy</h4>
   <ul>
     <li><strong>Level 1 &mdash; Region:</strong> NA, EU, APAC, LATAM. Each shard handles drivers in its region.</li>
@@ -933,12 +1150,47 @@ COMMIT;</pre>
     <div class="caption">Figure 14: Mapping of Uber components to LinkedIn technologies. The key decision framework: write-heavy + consistency &rarr; Espresso, read-heavy derived &rarr; Venice, large blobs &rarr; Ambry.</div>
   </div>
 
+  <h4>Diagram Walkthrough: LinkedIn Technology Mapping</h4>
+  <p>This is a two-column comparison table. Read each row left-to-right: the generic Uber component on the left, and its LinkedIn equivalent on the right:</p>
+  <ol>
+    <li><strong>Trip Database &rarr; Espresso:</strong> Trip records need reads AND writes with strong consistency. When you transition a trip from SEARCHING to MATCHED, the conditional update (version check) must be atomic. Espresso provides timeline consistency&mdash;strong within a partition (and trips are partitioned by trip_id, so all operations on one trip hit the same partition).</li>
+    <li><strong>Driver Profile Store &rarr; Espresso:</strong> Same reasoning. The driver's status (AVAILABLE/ON_TRIP) and version field need atomic conditional updates for the double-dispatch prevention.</li>
+    <li><strong>Geospatial Index &rarr; Couchbase / Custom:</strong> This needs sub-millisecond in-memory writes with no durability. It's similar to how LinkedIn's <strong>Galene</strong> search platform maintains in-memory indexes for fast query serving.</li>
+    <li><strong>Message Queue &rarr; Kafka:</strong> LinkedIn <em>invented</em> Kafka. It's the backbone for all inter-service event streaming: location updates, trip events, surge computation inputs. Partitioned by driver_id for locations and trip_id for events to maintain ordering.</li>
+    <li><strong>Stream Processing &rarr; Samza:</strong> LinkedIn's stream processing framework, built on top of Kafka. Used here for computing surge pricing (windowed aggregation of demand/supply), analytics, and location batch writes.</li>
+    <li><strong>Read-heavy Derived Views &rarr; Venice:</strong> Surge pricing maps, fare history lookups, and driver rating aggregates are precomputed and read millions of times. Venice is optimized for this: batch or incremental ingestion, millisecond read-only serving.</li>
+    <li><strong>Blob Storage &rarr; Ambry:</strong> Trip receipts (PDFs), driver profile photos, route screenshots are large immutable binary objects. Ambry provides petabyte-scale storage with multi-datacenter replication and CDN integration.</li>
+    <li><strong>API Framework &rarr; Rest.li:</strong> LinkedIn's declarative REST framework. All Uber endpoints would be Rest.li resources with built-in pagination, batch operations, and projections.</li>
+    <li><strong>Service Discovery &rarr; D2:</strong> Client-side load balancing with dynamic discovery. When the Ride Service calls the Routing Service, D2 automatically discovers healthy instances and balances load across them.</li>
+    <li><strong>Real-time Push &rarr; Real-Time Delivery Platform:</strong> LinkedIn's messaging infrastructure uses the same pattern: persistent connections, connection registry, cross-instance message routing.</li>
+    <li><strong>Feature Flags &rarr; LIX:</strong> A/B testing for surge algorithm variants (linear vs. exponential surge curves), matching strategies (nearest-first vs. highest-rated-first), and UI experiments.</li>
+    <li><strong>Config Management &rarr; cfg2:</strong> Dynamic configuration for per-city pricing rules, surge caps, wait timer durations, and search radius thresholds&mdash;changeable without deployments.</li>
+  </ol>
+  <div class="info-box note">
+    <strong>Key Decision Framework (bottom of diagram):</strong> Write-heavy + need consistency &rarr; Espresso. Write-once, read-many (derived/precomputed) &rarr; Venice. Large blobs (images, files) &rarr; Ambry. Event streaming between services &rarr; Kafka. Real-time stream processing &rarr; Samza.
+  </div>
+
   <h3>Espresso vs Venice vs Ambry Decision Tree</h3>
 
   <div class="diagram-box">
     <img src="images/sd_uber_13_data_stores.png" alt="Espresso vs Venice vs Ambry">
     <div class="caption">Figure 15: Decision tree for choosing between LinkedIn's three data stores. Each has a distinct sweet spot based on access pattern.</div>
   </div>
+
+  <h4>Diagram Walkthrough: Data Store Decision Tree</h4>
+  <p>Read the flowchart top-down, following the decision branches:</p>
+  <ol>
+    <li><strong>Start: "What kind of data?"</strong> This is the first question when choosing a LinkedIn data store for any component.</li>
+    <li><strong>Branch 1: "Structured records needing reads AND writes?"</strong> If yes, you're dealing with OLTP data (trips, driver profiles). Next question: "Need strong consistency / transactions?" If yes &rarr; <strong>Espresso</strong> (trip state machine needs atomic conditional updates). If no, check the read:write ratio. If reads vastly dominate (>100:1) and data is precomputed &rarr; <strong>Venice</strong>. If mixed read/write &rarr; still <strong>Espresso</strong>.</li>
+    <li><strong>Branch 2: "Large binary objects?"</strong> If yes (images, PDFs, receipts) &rarr; <strong>Ambry</strong>. These are write-once, read-many objects that don't fit in a document store.</li>
+    <li><strong>Three comparison cards (bottom):</strong>
+      <ul>
+        <li><strong>Espresso (blue):</strong> Document-oriented, partitioned by key, timeline consistency. Handles millions of reads/writes per second. Features: conditional updates (CAS), secondary indexes, change capture. <em>Uber use: Trip records, Driver profiles, Ride state machine.</em></li>
+        <li><strong>Venice (green):</strong> Key-value, batch or incremental ingestion, eventually consistent (seconds lag). Millisecond reads at massive QPS. Features: batch push from Hadoop, incremental from Samza, read-only serving. <em>Uber use: Surge pricing map, Driver ratings aggregate, Fare history.</em></li>
+        <li><strong>Ambry (orange):</strong> Immutable blobs, content-addressed, multi-DC replication. Petabytes of storage. Features: TTL, CDN integration. <em>Uber use: Trip receipts (PDF), Driver profile photos, Route screenshots.</em></li>
+      </ul>
+    </li>
+  </ol>
 
   <div class="three-grid">
     <div class="compare-card">
@@ -1037,6 +1289,33 @@ COMMIT;</pre>
     <div class="caption">Figure 16: Complete Uber architecture with LinkedIn stack. Five layers: Client, Gateway (Rest.li + D2), Core Services, Data (OLTP, Real-Time, Event Streaming, Derived, Blob), and Downstream Services.</div>
   </div>
 
+  <h4>Diagram Walkthrough: Complete Architecture</h4>
+  <p>This is the final, unified view of the entire system. Read it layer by layer, top to bottom, and follow the four colored data flows:</p>
+  <ol>
+    <li><strong>Top Layer &mdash; Clients:</strong> Two mobile apps. The <strong>Rider App</strong> handles trip requests, tracking, and payments. The <strong>Driver App</strong> handles status updates, navigation, and earnings. Both maintain persistent WebSocket connections.</li>
+    <li><strong>Layer 2 &mdash; Gateway:</strong> Two entry points. The <strong>API Gateway / Rest.li + D2</strong> handles all REST endpoints (fare estimates, ride creation, cancellation, ratings). D2 provides client-side load balancing. The <strong>Connection Service (WebSocket)</strong> manages persistent bidirectional connections for both riders and drivers, backed by a <strong>Connection Registry</strong> (Couchbase/Redis) for cross-instance message routing.</li>
+    <li><strong>Layer 3 &mdash; Core Services:</strong> Four microservices. <strong>Ride Service</strong> owns the trip lifecycle and fare calculation. <strong>Matching Service</strong> handles nearby driver search and the offer/accept flow. <strong>Location Service</strong> ingests GPS updates and splits into hot/cold paths. <strong>Routing Service</strong> computes driving routes and ETAs.</li>
+    <li><strong>Layer 4 &mdash; Data (five categories):</strong>
+      <ul>
+        <li><strong>OLTP:</strong> Trip DB and Driver DB in Espresso. Strong consistency, CAS updates, optimistic concurrency.</li>
+        <li><strong>Real-Time:</strong> Geospatial Index (in-memory, geohash-sharded) and Connection Registry.</li>
+        <li><strong>Event Streaming:</strong> Kafka (trip-events, driver-locations topics) with Brooklin for CDC from Espresso.</li>
+        <li><strong>Stream Processing:</strong> Samza for surge computation, analytics aggregation, and location batch writes.</li>
+        <li><strong>Derived/Read-Heavy:</strong> Venice for surge map, fare history, rating aggregates.</li>
+        <li><strong>Blob:</strong> Ambry for receipts and profile photos.</li>
+      </ul>
+    </li>
+    <li><strong>Layer 5 &mdash; Downstream:</strong> Payment Service, Notification Service, Analytics/Time-Series DB, and Fraud Detection consume events from Kafka.</li>
+  </ol>
+
+  <h4>Four Data Flows (follow the colored arrows):</h4>
+  <ol>
+    <li><strong style="color:#58a6ff;">Blue &mdash; Ride Request Flow:</strong> Rider App &rarr; API Gateway &rarr; Ride Service &rarr; Routing Service (get route/ETA) &rarr; Venice (get surge multiplier) &rarr; compute fare &rarr; Espresso (store trip with status=SEARCHING) &rarr; Matching Service (begin driver search).</li>
+    <li><strong style="color:#3fb950;">Green &mdash; Matching Flow:</strong> Matching Service &rarr; Geospatial Index (query 9 cells for nearby available drivers) &rarr; Connection Service (send ride offer via WebSocket) &rarr; Driver App (driver sees offer) &rarr; Driver accepts &rarr; Espresso (update trip status=MATCHED + driver status=EN_ROUTE with version check for double-dispatch prevention).</li>
+    <li><strong style="color:#f0883e;">Orange &mdash; Location Flow:</strong> Driver App sends GPS every 4s &rarr; WebSocket &rarr; Connection Service &rarr; Location Service &rarr; forks into: (a) Geospatial Index update (hot path, &lt;5ms) and (b) Kafka publish (cold path, async). If driver is on active trip: Location Service &rarr; Connection Registry (lookup rider) &rarr; Connection Service &rarr; Rider App (car icon moves on map).</li>
+    <li><strong style="color:#d2a8ff;">Purple &mdash; Event Flow:</strong> Trip state changes in Espresso &rarr; Brooklin (CDC) reads outbox/changes &rarr; publishes to Kafka trip-events topic &rarr; Event Consumers: Notification Service (push alerts), Payment Service (charge rider on trip.completed), Analytics (dashboard metrics), Fraud Detection (anomaly checks).</li>
+  </ol>
+
   <h3>Architecture Summary by Layer</h3>
 
   <table class="kv-table">
@@ -1114,6 +1393,19 @@ COMMIT;</pre>
   <div class="diagram-box">
     <img src="images/sd_uber_17_interview_questions.png" alt="Interview Questions Overview">
     <div class="caption">Figure 17: Interview questions organized by category: Consistency, Scalability, Real-Time Communication, and Design Tradeoffs.</div>
+  </div>
+
+  <h4>Diagram Walkthrough: Interview Question Categories</h4>
+  <p>This diagram organizes 12 deep-dive interview questions into four categories. Each question is followed by "Tests:" which tells you what distributed systems concept the interviewer is probing for:</p>
+  <ol>
+    <li><strong>Consistency &amp; Correctness (blue, Q1-Q3):</strong> These questions test whether you understand how to maintain data integrity in a concurrent, distributed system. The interviewer wants to hear about optimistic concurrency control, the outbox pattern, and the dual-write problem. If you can't explain double-dispatch prevention, it's a red flag.</li>
+    <li><strong>Scalability &amp; Performance (green, Q4-Q6):</strong> These questions test whether you can handle the scale numbers (500K writes/sec, 20M trips/day). The interviewer wants to hear about hot/cold path separation, in-memory indexing, geographic sharding, and stream processing. The key insight is that you <em>don't</em> solve everything with one database.</li>
+    <li><strong>Real-Time Communication (purple, Q7-Q9):</strong> These questions test your understanding of persistent connections, bidirectional messaging, and handling network unreliability. The interviewer wants to hear about WebSocket vs SSE vs polling tradeoffs, connection registries for cross-instance routing, and buffering/replay for disconnections.</li>
+    <li><strong>Design Tradeoffs (orange, Q10-Q12):</strong> These questions test whether you can justify your technology choices. Why Espresso over PostgreSQL? Why Venice instead of just reading from Espresso? How would you extend the design for ride pooling? The interviewer wants to see that you understand CQRS, access pattern optimization, and state machine extensibility.</li>
+  </ol>
+  <div class="info-box note">
+    <strong>Interview Strategy</strong>
+    Present the high-level architecture first (Figure 1). Then walk through each functional requirement (FR1-FR4), incrementally adding components. Expect the interviewer to dive deep on one or two topics from the categories above. The most common deep dives are: double-dispatch prevention (Q1), 500K writes/sec scaling (Q4), and WebSocket vs alternatives (Q7).
   </div>
 
   <h3>Consistency &amp; Correctness</h3>
