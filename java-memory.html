@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Java Memory Architecture — Deep Dive</title>
 <style>
-  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9; --heading: #f0f6fc; --accent: #58a6ff; --green: #3fb950; --red: #f85149; --orange: #d29922; --purple: #bc8cff; }
+  :root { --bg: #ffffff; --card: #f7f6f3; --border: #e3e2de; --text: #c9d1d9; --heading: #f0f6fc; --accent: #2383e2; --green: #0f7b0f; --red: #e03e3e; --orange: #d29922; --purple: #bc8cff; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
   .container { max-width: 960px; margin: 0 auto; padding: 20px; }
@@ -20,14 +20,14 @@
   .warn { border-left: 4px solid var(--red); padding-left: 14px; margin: 14px 0; }
   .info { border-left: 4px solid var(--accent); padding-left: 14px; margin: 14px 0; }
   .tip { border-left: 4px solid var(--green); padding-left: 14px; margin: 14px 0; }
-  code { background: #1c2128; padding: 2px 6px; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.92em; color: var(--orange); }
-  pre { background: #1c2128; border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 14px 0; font-size: 0.9em; line-height: 1.5; }
+  code { background: #ffffff; padding: 2px 6px; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.92em; color: var(--orange); }
+  pre { background: #ffffff; border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 14px 0; font-size: 0.9em; line-height: 1.5; }
   pre code { background: none; padding: 0; color: var(--text); }
   table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.95em; }
-  th { background: #1c2128; color: var(--accent); padding: 10px; text-align: left; border: 1px solid var(--border); }
+  th { background: #ffffff; color: var(--accent); padding: 10px; text-align: left; border: 1px solid var(--border); }
   td { padding: 10px; border: 1px solid var(--border); }
-  tr:nth-child(even) { background: #161b22; }
-  .badge { display: inline-block; background: var(--accent); color: #0d1117; padding: 4px 14px; border-radius: 20px; font-size: 0.85em; font-weight: 600; }
+  tr:nth-child(even) { background: #f7f6f3; }
+  .badge { display: inline-block; background: var(--accent); color: #ffffff; padding: 4px 14px; border-radius: 20px; font-size: 0.85em; font-weight: 600; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   .nav-links { margin: 14px 0; }
@@ -36,7 +36,7 @@
   .segment-label { display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: 600; font-size: 0.85em; margin-right: 6px; }
   .seg-text { background: #1f3a5f; color: #79b8ff; }
   .seg-data { background: #1a3a1a; color: #56d364; }
-  .seg-heap { background: #3b1f5e; color: #d2a8ff; }
+  .seg-heap { background: #3b1f5e; color: #6940a5; }
   .seg-stack { background: #1a3a3a; color: #56d3a8; }
   .seg-native { background: #3a2a0f; color: #e3b341; }
   .seg-kernel { background: #2a2a2a; color: #999; }

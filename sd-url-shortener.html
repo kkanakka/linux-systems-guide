@@ -6,18 +6,18 @@
 <title>System Design - Design URL Shortener</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text-muted: #8b949e;
-    --accent: #58a6ff;
-    --accent2: #3fb950;
-    --accent3: #d2a8ff;
-    --accent4: #f0883e;
-    --red: #f85149;
-    --code-bg: #0d1117;
-    --card: #1c2128;
+    --bg: #ffffff;
+    --surface: #f7f6f3;
+    --border: #e3e2de;
+    --text: #37352f;
+    --text-muted: #787774;
+    --accent: #2383e2;
+    --accent2: #0f7b0f;
+    --accent3: #6940a5;
+    --accent4: #d9730d;
+    --red: #e03e3e;
+    --code-bg: #f7f6f3;
+    --card: #ffffff;
     --yt-red: #2196F3;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -30,7 +30,7 @@
   }
   .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
   .hero {
-    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1a2e 100%);
+    background: linear-gradient(135deg, #1a1e2e 0%, #ffffff 50%, #0a1a2e 100%);
     border-bottom: 1px solid var(--border);
     padding: 80px 0 60px;
     text-align: center;
@@ -48,13 +48,13 @@
     padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
     margin: 4px; font-size: 0.9em; transition: all 0.2s;
   }
-  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(35,131,226,0.06); }
   .nav-links a.blue { color: var(--yt-red); border-color: var(--yt-red); }
-  .nav-links a.blue:hover { background: rgba(33,150,243,0.1); }
+  .nav-links a.blue:hover { background: rgba(35,131,226,0.06); }
   .nav-links a.red { color: #ff0000; border-color: #ff0000; }
-  .nav-links a.red:hover { background: rgba(255,0,0,0.1); }
+  .nav-links a.red:hover { background: rgba(224,62,62,0.06); }
   .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
-  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+  .nav-links a.purple:hover { background: rgba(105,64,165,0.06); }
 
   .toc {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -79,9 +79,7 @@
   }
   .section h2 {
     font-size: 2em; font-weight: 700; margin-bottom: 20px;
-    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
+    color: var(--yt-red);}
   .section h3 {
     font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
     color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
@@ -105,7 +103,7 @@
   }
   .diagram img {
     max-width: 100%; border-radius: 10px; border: 1px solid var(--border);
-    background: #fff;
+    background: #ffffff;
   }
   .caption {
     font-size: 0.9em; color: var(--text-muted); margin-top: 10px; font-style: italic;
@@ -128,14 +126,14 @@
     background: var(--card); border-radius: 8px; overflow: hidden;
   }
   th {
-    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    background: rgba(35,131,226,0.08); color: var(--accent); padding: 12px 16px;
     text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
   }
   td {
     padding: 10px 16px; border-bottom: 1px solid var(--border);
   }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: rgba(88,166,255,0.05); }
+  tr:hover td { background: rgba(35,131,226,0.03); }
 
   .scale-box {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -161,7 +159,7 @@
   .walkthrough li { margin: 8px 0; }
 
   .linkedin-tag {
-    display: inline-block; background: rgba(0,119,181,0.2); border: 1px solid rgba(0,119,181,0.4);
+    display: inline-block; background: rgba(0,119,181,0.08); border: 1px solid rgba(0,119,181,0.2);
     padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: #0077b5;
     font-weight: 600;
   }

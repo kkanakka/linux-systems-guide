@@ -6,18 +6,18 @@
 <title>System Design - Design YouTube</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text-muted: #8b949e;
-    --accent: #58a6ff;
-    --accent2: #3fb950;
-    --accent3: #d2a8ff;
-    --accent4: #f0883e;
-    --red: #f85149;
-    --code-bg: #0d1117;
-    --card: #1c2128;
+    --bg: #ffffff;
+    --surface: #f7f6f3;
+    --border: #e3e2de;
+    --text: #37352f;
+    --text-muted: #787774;
+    --accent: #2383e2;
+    --accent2: #0f7b0f;
+    --accent3: #6940a5;
+    --accent4: #d9730d;
+    --red: #e03e3e;
+    --code-bg: #f7f6f3;
+    --card: #ffffff;
     --yt-red: #ff0000;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -30,7 +30,7 @@
   }
   .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
   .hero {
-    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a0a0a 100%);
+    background: linear-gradient(135deg, #1a1e2e 0%, #ffffff 50%, #1a0a0a 100%);
     border-bottom: 1px solid var(--border);
     padding: 80px 0 60px;
     text-align: center;
@@ -48,7 +48,7 @@
     padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
     margin: 4px; font-size: 0.9em; transition: all 0.2s;
   }
-  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(35,131,226,0.06); }
   .nav-links a.red { color: var(--yt-red); border-color: var(--yt-red); }
   .nav-links a.red:hover { background: rgba(255,0,0,0.1); }
   .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
@@ -77,8 +77,7 @@
   }
   .section h2 {
     font-size: 2em; font-weight: 700; margin-bottom: 20px;
-    background: linear-gradient(90deg, var(--yt-red), var(--accent4));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    color: var(--yt-red);
   }
   .section h3 {
     font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
@@ -126,14 +125,14 @@
     background: var(--card); border-radius: 8px; overflow: hidden;
   }
   th {
-    background: rgba(88,166,255,0.15); color: var(--accent); padding: 12px 16px;
+    background: rgba(35,131,226,0.08); color: var(--accent); padding: 12px 16px;
     text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
   }
   td {
     padding: 10px 16px; border-bottom: 1px solid var(--border);
   }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: rgba(88,166,255,0.05); }
+  tr:hover td { background: rgba(35,131,226,0.03); }
 
   .scale-box {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1069,10 +1068,10 @@ Pays: $3.51 (second-highest bid + $0.01)</pre>
     </ol>
     <p style="margin-top:12px;"><strong>Four data flows (colored arrows):</strong></p>
     <ul>
-      <li><strong style="color:#f85149;">RED &mdash; Upload flow:</strong> Client → Upload Service → Blob Storage → Kafka → Video Processing → Blob Storage → CDN</li>
-      <li><strong style="color:#58a6ff;">BLUE &mdash; Watch flow:</strong> Client → CDN → (cache miss) → Blob Storage</li>
-      <li><strong style="color:#3fb950;">GREEN &mdash; Search flow:</strong> Client → API Gateway → Search Service → Elasticsearch → ML Re-rank → Response</li>
-      <li><strong style="color:#f0883e;">ORANGE &mdash; Ad flow:</strong> Player → Ad Service → Auction → CDN → Billing Pipeline</li>
+      <li><strong style="color:#e03e3e;">RED &mdash; Upload flow:</strong> Client → Upload Service → Blob Storage → Kafka → Video Processing → Blob Storage → CDN</li>
+      <li><strong style="color:#2383e2;">BLUE &mdash; Watch flow:</strong> Client → CDN → (cache miss) → Blob Storage</li>
+      <li><strong style="color:#0f7b0f;">GREEN &mdash; Search flow:</strong> Client → API Gateway → Search Service → Elasticsearch → ML Re-rank → Response</li>
+      <li><strong style="color:#d9730d;">ORANGE &mdash; Ad flow:</strong> Player → Ad Service → Auction → CDN → Billing Pipeline</li>
     </ul>
   </div>
 </div>

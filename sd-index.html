@@ -6,13 +6,13 @@
 <title>System Design Hub &mdash; 21 Chapters</title>
 <style>
 :root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --border: #30363d;
-  --text: #e6edf3;
-  --text-muted: #8b949e;
-  --accent: #f0883e;
-  --card: #1c2128;
+  --bg: #ffffff;
+  --surface: #f7f6f3;
+  --border: #e3e2de;
+  --text: #37352f;
+  --text-muted: #787774;
+  --accent: #d9730d;
+  --card: #ffffff;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -25,7 +25,7 @@ body {
 .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
 
 .hero {
-  background: linear-gradient(135deg, #1a1510 0%, #0d1117 50%, #1a1510 100%);
+  background: linear-gradient(135deg, #1a1510 0%, #ffffff 50%, #1a1510 100%);
   border-bottom: 1px solid var(--border);
   padding: 60px 0 40px;
   text-align: center;
@@ -61,7 +61,7 @@ body {
 .chapter-card:hover {
   border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
 }
 .chapter-card .badge {
   display: inline-block;
@@ -207,7 +207,7 @@ footer a { color: var(--accent); text-decoration: none; }
 <div class="grid">
 
 <a href="system-design.html" class="chapter-card">
-  <span class="badge" style="background:#3fb95022;color:#3fb950;border:1px solid #3fb950;">Location</span>
+  <span class="badge" style="background:#0f7b0f22;color:#0f7b0f;border:1px solid #0f7b0f;">Location</span>
   <h3>Design Uber</h3>
   <p>Geospatial indexing, real-time driver tracking, trip state machine, double-dispatch prevention, WebSocket connections.</p>
   <div class="topics"><span>Geohash</span><span>WebSocket</span><span>State Machine</span><span>Espresso</span><span>Kafka</span></div>

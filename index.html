@@ -6,18 +6,18 @@
 <title>Linux Processes &amp; Programs - Complete Guide</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text-muted: #8b949e;
-    --accent: #58a6ff;
-    --accent2: #3fb950;
-    --accent3: #d2a8ff;
-    --accent4: #f0883e;
-    --red: #f85149;
-    --code-bg: #0d1117;
-    --card: #1c2128;
+    --bg: #ffffff;
+    --surface: #f7f6f3;
+    --border: #e3e2de;
+    --text: #37352f;
+    --text-muted: #787774;
+    --accent: #2383e2;
+    --accent2: #0f7b0f;
+    --accent3: #6940a5;
+    --accent4: #d9730d;
+    --red: #e03e3e;
+    --code-bg: #f7f6f3;
+    --card: #ffffff;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -31,7 +31,7 @@
 
   /* Hero */
   .hero {
-    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1628 100%);
+    background: linear-gradient(135deg, #1a1e2e 0%, #ffffff 50%, #0a1628 100%);
     border-bottom: 1px solid var(--border);
     padding: 80px 0 60px;
     text-align: center;
@@ -74,9 +74,7 @@
   }
   .section h2 {
     font-size: 2em; font-weight: 700; margin-bottom: 20px;
-    background: linear-gradient(90deg, var(--accent), var(--accent3));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
+    color: var(--accent);}
   .section h3 {
     font-size: 1.4em; margin: 30px 0 12px; color: var(--accent2);
     border-left: 3px solid var(--accent2); padding-left: 12px;
@@ -155,17 +153,17 @@
     border-bottom: 1px solid #333;
   }
   .terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
-  .terminal-dot.red { background: #f85149; }
+  .terminal-dot.red { background: #e03e3e; }
   .terminal-dot.yellow { background: #d29922; }
-  .terminal-dot.green { background: #3fb950; }
-  .terminal-title { color: #8b949e; font-size: 0.8em; margin-left: 8px; }
+  .terminal-dot.green { background: #0f7b0f; }
+  .terminal-title { color: #787774; font-size: 0.8em; margin-left: 8px; }
   .terminal pre {
     margin: 0; border: none; border-radius: 0;
     padding: 16px 20px;
     background: #000;
-    color: #e6edf3;
+    color: #37352f;
   }
-  .terminal .prompt { color: #3fb950; }
+  .terminal .prompt { color: #0f7b0f; }
   .terminal .output { color: #c9d1d9; }
   .terminal .comment { color: #6e7681; }
 
@@ -275,9 +273,9 @@
     <p>A complete visual guide to how programs become processes, memory layout, virtual memory, stack frames, command-line arguments, environment variables, and non-local gotos.</p>
     <div class="badge">Based on The Linux Programming Interface &mdash; Chapter 6</div>
     <br>
-    <a href="chapter2.html" style="display:inline-block;background:#161b22;border:1px solid #58a6ff;padding:8px 20px;border-radius:8px;color:#58a6ff;text-decoration:none;margin:8px 4px;font-size:.9em;">Chapter 2: Fundamental Concepts &rarr;</a>
-    <a href="java-memory.html" style="display:inline-block;background:#161b22;border:1px solid #bc8cff;padding:8px 20px;border-radius:8px;color:#bc8cff;text-decoration:none;margin:8px 4px;font-size:.9em;">Java Memory Architecture &rarr;</a>
-    <a href="sd-index.html" style="display:inline-block;background:#161b22;border:1px solid #f0883e;padding:8px 20px;border-radius:8px;color:#f0883e;text-decoration:none;margin:8px 4px;font-size:.9em;font-weight:bold;">System Design Hub (21 Chapters) &rarr;</a>
+    <a href="chapter2.html" style="display:inline-block;background:#f7f6f3;border:1px solid #2383e2;padding:8px 20px;border-radius:8px;color:#2383e2;text-decoration:none;margin:8px 4px;font-size:.9em;">Chapter 2: Fundamental Concepts &rarr;</a>
+    <a href="java-memory.html" style="display:inline-block;background:#f7f6f3;border:1px solid #bc8cff;padding:8px 20px;border-radius:8px;color:#bc8cff;text-decoration:none;margin:8px 4px;font-size:.9em;">Java Memory Architecture &rarr;</a>
+    <a href="sd-index.html" style="display:inline-block;background:#f7f6f3;border:1px solid #d9730d;padding:8px 20px;border-radius:8px;color:#d9730d;text-decoration:none;margin:8px 4px;font-size:.9em;font-weight:bold;">System Design Hub (21 Chapters) &rarr;</a>
   </div>
 </div>
 
@@ -1244,7 +1242,7 @@ After longjmp(): nvar=777 rvar=888 vvar=999    <span class="comment"># All 777/8
 <span class="prompt">$</span> cc -O2 -o setjmp_vars_opt setjmp_vars.c
 <span class="prompt">$</span> ./setjmp_vars_opt
 Inside doJump(): nvar=777 rvar=888 vvar=999
-After longjmp(): nvar=<strong style="color:#f85149">111</strong> rvar=<strong style="color:#f85149">222</strong> vvar=<strong style="color:#3fb950">999</strong>
+After longjmp(): nvar=<strong style="color:#e03e3e">111</strong> rvar=<strong style="color:#e03e3e">222</strong> vvar=<strong style="color:#0f7b0f">999</strong>
 
 <span class="comment">#                  ^^^         ^^^         ^^^
 #                REVERTED!   REVERTED!   SURVIVED!

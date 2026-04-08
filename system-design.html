@@ -6,18 +6,18 @@
 <title>System Design - Design Uber</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text-muted: #8b949e;
-    --accent: #58a6ff;
-    --accent2: #3fb950;
-    --accent3: #d2a8ff;
-    --accent4: #f0883e;
-    --red: #f85149;
-    --code-bg: #0d1117;
-    --card: #1c2128;
+    --bg: #ffffff;
+    --surface: #f7f6f3;
+    --border: #e3e2de;
+    --text: #37352f;
+    --text-muted: #787774;
+    --accent: #2383e2;
+    --accent2: #0f7b0f;
+    --accent3: #6940a5;
+    --accent4: #d9730d;
+    --red: #e03e3e;
+    --code-bg: #f7f6f3;
+    --card: #ffffff;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -29,7 +29,7 @@
   }
   .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
   .hero {
-    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #0a1628 100%);
+    background: linear-gradient(135deg, #1a1e2e 0%, #ffffff 50%, #0a1628 100%);
     border-bottom: 1px solid var(--border);
     padding: 80px 0 60px;
     text-align: center;
@@ -47,7 +47,7 @@
     padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
     margin: 4px; font-size: 0.9em; transition: all 0.2s;
   }
-  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(35,131,226,0.06); }
   .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
   .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
 
@@ -74,8 +74,7 @@
   }
   .section h2 {
     font-size: 2em; font-weight: 700; margin-bottom: 20px;
-    background: linear-gradient(90deg, var(--accent), var(--accent3));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    color: var(--accent);
   }
   .section h3 {
     font-size: 1.4em; margin: 30px 0 12px; color: var(--accent2);
@@ -120,7 +119,7 @@
   .info-box {
     border-radius: 8px; padding: 16px 20px; margin: 16px 0; border-left: 4px solid;
   }
-  .info-box.note { background: rgba(88,166,255,0.1); border-left-color: var(--accent); }
+  .info-box.note { background: rgba(35,131,226,0.06); border-left-color: var(--accent); }
   .info-box.warning { background: rgba(240,136,62,0.1); border-left-color: var(--accent4); }
   .info-box.danger { background: rgba(248,81,73,0.1); border-left-color: var(--red); }
   .info-box.success { background: rgba(63,185,80,0.1); border-left-color: var(--accent2); }
@@ -157,10 +156,10 @@
     display: inline-block; padding: 3px 10px; border-radius: 4px; font-weight: 700;
     font-size: 0.85em; margin-right: 10px; font-family: monospace;
   }
-  .api-method.get { background: #1a3a2a; color: #3fb950; }
-  .api-method.post { background: #3a2a1a; color: #f0883e; }
-  .api-method.put { background: #1a2a3a; color: #58a6ff; }
-  .api-method.delete { background: #3a1a1a; color: #f85149; }
+  .api-method.get { background: #1a3a2a; color: #0f7b0f; }
+  .api-method.post { background: #3a2a1a; color: #d9730d; }
+  .api-method.put { background: #1a2a3a; color: #2383e2; }
+  .api-method.delete { background: #3a1a1a; color: #e03e3e; }
   .api-path { font-family: monospace; font-size: 1em; color: var(--text); }
   .api-desc { color: var(--text-muted); font-size: 0.9em; margin-top: 8px; }
 
@@ -1311,10 +1310,10 @@ COMMIT;</pre>
 
   <h4>Four Data Flows (follow the colored arrows):</h4>
   <ol>
-    <li><strong style="color:#58a6ff;">Blue &mdash; Ride Request Flow:</strong> Rider App &rarr; API Gateway &rarr; Ride Service &rarr; Routing Service (get route/ETA) &rarr; Venice (get surge multiplier) &rarr; compute fare &rarr; Espresso (store trip with status=SEARCHING) &rarr; Matching Service (begin driver search).</li>
-    <li><strong style="color:#3fb950;">Green &mdash; Matching Flow:</strong> Matching Service &rarr; Geospatial Index (query 9 cells for nearby available drivers) &rarr; Connection Service (send ride offer via WebSocket) &rarr; Driver App (driver sees offer) &rarr; Driver accepts &rarr; Espresso (update trip status=MATCHED + driver status=EN_ROUTE with version check for double-dispatch prevention).</li>
-    <li><strong style="color:#f0883e;">Orange &mdash; Location Flow:</strong> Driver App sends GPS every 4s &rarr; WebSocket &rarr; Connection Service &rarr; Location Service &rarr; forks into: (a) Geospatial Index update (hot path, &lt;5ms) and (b) Kafka publish (cold path, async). If driver is on active trip: Location Service &rarr; Connection Registry (lookup rider) &rarr; Connection Service &rarr; Rider App (car icon moves on map).</li>
-    <li><strong style="color:#d2a8ff;">Purple &mdash; Event Flow:</strong> Trip state changes in Espresso &rarr; Brooklin (CDC) reads outbox/changes &rarr; publishes to Kafka trip-events topic &rarr; Event Consumers: Notification Service (push alerts), Payment Service (charge rider on trip.completed), Analytics (dashboard metrics), Fraud Detection (anomaly checks).</li>
+    <li><strong style="color:#2383e2;">Blue &mdash; Ride Request Flow:</strong> Rider App &rarr; API Gateway &rarr; Ride Service &rarr; Routing Service (get route/ETA) &rarr; Venice (get surge multiplier) &rarr; compute fare &rarr; Espresso (store trip with status=SEARCHING) &rarr; Matching Service (begin driver search).</li>
+    <li><strong style="color:#0f7b0f;">Green &mdash; Matching Flow:</strong> Matching Service &rarr; Geospatial Index (query 9 cells for nearby available drivers) &rarr; Connection Service (send ride offer via WebSocket) &rarr; Driver App (driver sees offer) &rarr; Driver accepts &rarr; Espresso (update trip status=MATCHED + driver status=EN_ROUTE with version check for double-dispatch prevention).</li>
+    <li><strong style="color:#d9730d;">Orange &mdash; Location Flow:</strong> Driver App sends GPS every 4s &rarr; WebSocket &rarr; Connection Service &rarr; Location Service &rarr; forks into: (a) Geospatial Index update (hot path, &lt;5ms) and (b) Kafka publish (cold path, async). If driver is on active trip: Location Service &rarr; Connection Registry (lookup rider) &rarr; Connection Service &rarr; Rider App (car icon moves on map).</li>
+    <li><strong style="color:#6940a5;">Purple &mdash; Event Flow:</strong> Trip state changes in Espresso &rarr; Brooklin (CDC) reads outbox/changes &rarr; publishes to Kafka trip-events topic &rarr; Event Consumers: Notification Service (push alerts), Payment Service (charge rider on trip.completed), Analytics (dashboard metrics), Fraud Detection (anomaly checks).</li>
   </ol>
 
   <h3>Architecture Summary by Layer</h3>
