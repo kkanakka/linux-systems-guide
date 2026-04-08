@@ -223,7 +223,10 @@
       <li><a href="#s6">Backup Strategy</a></li>
       <li><a href="#s7">Data Deletes &amp; Retention</a></li>
       <li><a href="#s8">Restore from Backup</a></li>
-      <li><a href="#s9">Interview Questions</a></li>
+      <li><a href="#s9">WAL Deep Dive &mdash; Sequence Numbers, Crash Recovery &amp; the Recovery Formula</a></li>
+      <li><a href="#s10">Point-in-Time Recovery &amp; the Data Loss Window</a></li>
+      <li><a href="#s11">Faster Recovery &mdash; From Hours to Seconds</a></li>
+      <li><a href="#s12">Interview Questions</a></li>
     </ol>
   </div>
 
@@ -848,9 +851,387 @@ private final String fullPathForTempSSTFileDir;
     </div>
   </div>
 
-  <!-- SECTION 9: Interview Questions -->
+  <!-- SECTION 9: WAL Deep Dive -->
   <div class="section" id="s9">
     <div class="section-num">Section 09</div>
+    <h2>WAL Deep Dive &mdash; Sequence Numbers, Crash Recovery &amp; the Recovery Formula</h2>
+
+    <div class="diagram-box">
+      <img src="images/sd_venice_05_recovery.png" alt="RocksDB Recovery: WAL, Sequence Numbers, and the Data Loss Window">
+      <div class="caption">Fig 5: WAL lifecycle, crash recovery via sequence numbers, and the RPO spectrum from nightly backup to synchronous replication</div>
+    </div>
+
+    <h3>What Is the WAL?</h3>
+    <p>The <strong>Write-Ahead Log (WAL)</strong> is an append-only log file on disk. Every write to RocksDB does <strong>two things simultaneously</strong>:</p>
+    <div class="grid2">
+      <div class="card venice-border">
+        <h4 class="highlight">1. Append to WAL (Disk)</h4>
+        <p style="color:var(--text-muted);">The key-value pair is serialized and appended to the WAL file on disk. This ensures <strong>crash durability</strong> &mdash; even if the process dies immediately after, the write is on disk. The WAL is sequential I/O (append-only), making it fast even on spinning disks.</p>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">2. Insert into MemTable (RAM)</h4>
+        <p style="color:var(--text-muted);">The same key-value pair is inserted into the MemTable (a skiplist in RAM). This is where reads find the most recent data. The MemTable is <strong>volatile</strong> &mdash; if the process crashes, it's gone. That's why the WAL exists.</p>
+      </div>
+    </div>
+
+    <h3>Sequence Numbers: The Global Order</h3>
+    <p>Every write in RocksDB gets a <strong>monotonically increasing sequence number</strong>. This is the total ordering that resolves all conflicts:</p>
+    <ul>
+      <li><strong>Multiple writes to the same key?</strong> The highest sequence number wins.</li>
+      <li><strong>Key exists in both WAL and SST?</strong> Sequence numbers determine which is newer. Replay is idempotent.</li>
+      <li><strong>Tombstone (delete) vs value?</strong> Whichever has the higher sequence number takes precedence.</li>
+      <li><strong>Compaction?</strong> When merging SST files, the entry with the highest sequence number per key is kept.</li>
+    </ul>
+
+    <pre><code>// Sequence number timeline example:
+// seq=1001: put("user:123", "Alice")    → WAL entry #1001 + MemTable
+// seq=1002: put("user:456", "Bob")      → WAL entry #1002 + MemTable
+// ...
+// seq=1050: put("user:789", "Carol")    → WAL entry #1050 + MemTable
+// ── MemTable full (32MB) ── FLUSH ──
+// L0 SST file created covering seq 1001-1050
+// WAL entries 1001-1050 can now be garbage collected
+// New WAL file starts, new MemTable starts
+// seq=1051: put("user:123", "Alice2")   → NEW WAL + NEW MemTable
+// seq=1052: delete("user:456")          → tombstone in NEW WAL + MemTable</code></pre>
+
+    <h3>Crash Recovery: How RocksDB Rebuilds State</h3>
+    <div class="walkthrough">
+      <h4>Recovery Process</h4>
+      <ol>
+        <li><strong>Read MANIFEST file</strong> &mdash; RocksDB learns which SST files exist, which level each belongs to, and the latest flushed sequence number (e.g., seq 1050).</li>
+        <li><strong>Open all SST files</strong> &mdash; These contain all data that was flushed before the crash. This data is already sorted, compacted, and durable.</li>
+        <li><strong>Find WAL files</strong> &mdash; Any WAL files on disk contain writes that went to the MemTable but were <strong>not yet flushed</strong> to SSTs.</li>
+        <li><strong>Replay WAL</strong> &mdash; Each entry in the WAL (seq 1051, 1052, ..., 1075) is re-applied to a fresh MemTable. This reconstructs exactly the MemTable state at crash time.</li>
+        <li><strong>Ready to serve</strong> &mdash; SST files + replayed MemTable = complete database state up to the last WAL entry.</li>
+      </ol>
+    </div>
+
+    <div class="callout success">
+      <strong class="green">The Recovery Formula</strong>
+      <p><code><strong>SST files + WAL = complete data</strong></code></p>
+      <p style="margin-top:8px;">SST files cover everything flushed from the MemTable. WAL covers everything written to the MemTable but not yet flushed. Together, they reconstruct the full database state. Overlapping data between WAL and SSTs is harmless &mdash; sequence numbers ensure correctness during replay. If a WAL entry has the same sequence number as an SST entry, the replay is a no-op.</p>
+    </div>
+
+    <h3>WAL Garbage Collection</h3>
+    <p>By default, RocksDB <strong>deletes old WAL files</strong> once their contents have been flushed to SSTs. This means:</p>
+    <ul>
+      <li><strong>After a flush:</strong> WAL entries that are now in an SST file are no longer needed. The WAL file is deleted.</li>
+      <li><strong>Only the current WAL</strong> (containing unflushed MemTable data) is kept.</li>
+      <li><strong>Implication for backup:</strong> If you back up SSTs without the WAL, you lose unflushed data. If you back up SSTs with the WAL, you get everything.</li>
+    </ul>
+
+    <h3>Venice's WAL Strategy</h3>
+    <table>
+      <tr><th>Write Path</th><th>WAL Enabled?</th><th>Why</th></tr>
+      <tr>
+        <td><strong>Batch Push</strong></td>
+        <td class="red">Disabled</td>
+        <td>Data comes from Kafka VT, which is durable. If the server crashes, it re-consumes from VT. No WAL needed.</td>
+      </tr>
+      <tr>
+        <td><strong>Streaming (RT)</strong></td>
+        <td class="green">Enabled</td>
+        <td>RT writes go through <code>put()</code> → WAL + MemTable. WAL ensures crash durability for the unflushed MemTable.</td>
+      </tr>
+      <tr>
+        <td><strong>BackupEngine</strong></td>
+        <td>N/A</td>
+        <td>Flushes MemTable before backup, so backup is pure SSTs. No WAL in the backup.</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- SECTION 10: Point-in-Time Recovery & Data Loss Window -->
+  <div class="section" id="s10">
+    <div class="section-num">Section 10</div>
+    <h2>Point-in-Time Recovery &amp; the Data Loss Window</h2>
+
+    <h3>A Backup Is a Snapshot at Time T</h3>
+    <p>Whether you use <code>BackupEngine</code>, <code>Checkpoint</code>, or manual SST copy, you are <strong>freezing the state at a specific point in time T</strong>. Any writes after T are <strong>not</strong> in that backup. Period.</p>
+
+    <div class="callout warning">
+      <strong class="red">The Gap: Backup Time to Crash Time</strong>
+      <p>If you back up at Monday 10pm and the server crashes on Tuesday 3pm, you restore to Monday 10pm. Everything written between Monday 10pm and Tuesday 3pm is <strong>gone</strong> &mdash; unless you saved the WAL files generated after the backup.</p>
+    </div>
+
+    <h3>Closing the Gap: WAL Archiving</h3>
+    <p>To recover writes between backups, you need to <strong>continuously archive WAL files</strong> as they're produced:</p>
+
+    <div class="walkthrough">
+      <h4>WAL Archiving Strategy</h4>
+      <ol>
+        <li><strong>Take periodic SST backups</strong> (e.g., nightly via BackupEngine) &mdash; this gives a clean base snapshot.</li>
+        <li><strong>Continuously ship WAL files</strong> to remote durable storage as they're generated (similar to PostgreSQL's WAL archiving).</li>
+        <li><strong>On restore:</strong> Load the latest SST backup, then replay all archived WAL files generated <em>after</em> that backup's sequence number.</li>
+      </ol>
+    </div>
+
+    <p>RocksDB supports keeping old WALs around via <code>WAL_ttl_seconds</code> and <code>WAL_size_limit_MB</code>. But the production pattern is to ship WALs to remote storage as they're written.</p>
+
+    <h3>Restore from Archived WALs</h3>
+    <pre><code>// Backup at seq #5000 (all data up to seq 5000 as flushed SSTs)
+// Writes #5001 through #8000 happen after backup
+// Server crashes at seq #8000
+
+// RESTORE:
+// 1. Download SST backup (covers seq 1-5000)
+// 2. Download archived WAL files (covering seq 5001-8000)
+// 3. Open RocksDB on SST files
+// 4. Replay WAL: apply seq 5001, 5002, ..., 8000
+// 5. Result: complete data up to seq 8000
+
+// What about overlapping data?
+// If a WAL entry duplicates an SST entry (same seq number),
+// the replay sees the same sequence number and skips it.
+// No corruption, no double-counting. By design.</code></pre>
+
+    <h3>But What About the Last Hour?</h3>
+    <p>Even with WAL archiving, there's always a gap between the <strong>last archived WAL entry</strong> and the <strong>crash point</strong>. If you archive WALs every 5 minutes, you could lose up to 5 minutes of writes. This is the fundamental <strong>RPO (Recovery Point Objective)</strong>.</p>
+
+    <h3>The RPO Spectrum</h3>
+    <table>
+      <tr><th>Strategy</th><th>RPO</th><th>Complexity</th><th>Write Latency Impact</th><th>Description</th></tr>
+      <tr>
+        <td><strong>Nightly backup only</strong></td>
+        <td class="red">Up to 24 hours</td>
+        <td class="green">Low</td>
+        <td>None</td>
+        <td>Simple BackupEngine snapshot once a day. Fine for data you can rebuild from HDFS.</td>
+      </tr>
+      <tr>
+        <td><strong>Backup + periodic WAL archiving</strong></td>
+        <td class="orange">~5 minutes</td>
+        <td>Medium</td>
+        <td>None</td>
+        <td>Archive WAL files every 5 minutes to GPFS. Good middle ground.</td>
+      </tr>
+      <tr>
+        <td><strong>Backup + continuous WAL streaming</strong></td>
+        <td class="blue">Seconds</td>
+        <td>High</td>
+        <td>Minimal</td>
+        <td>Stream WAL entries as they're written. Asynchronous &mdash; might lose the last few seconds.</td>
+      </tr>
+      <tr>
+        <td><strong>Synchronous replication (Raft/Paxos)</strong></td>
+        <td class="green"><strong>ZERO</strong></td>
+        <td class="red">Very High</td>
+        <td>Network roundtrip added</td>
+        <td>Write isn't acked until N replicas have it. Nothing is lost, ever.</td>
+      </tr>
+    </table>
+
+    <h3>The Hard Truth: Single-Node Can't Guarantee Zero Data Loss</h3>
+    <div class="callout warning">
+      <strong class="red">Why Replication Is the Only Real Answer</strong>
+      <p>A single-node RocksDB instance <strong>cannot guarantee zero data loss</strong> no matter what you do. If the disk catches fire one second after a write, that write is gone. Durability fundamentally requires <strong>redundancy across independent failure domains</strong> &mdash; different disks, different machines, different racks, different data centers.</p>
+      <p style="margin-top:10px;">That's why nobody runs a single RocksDB node in production for critical data. It's always RocksDB as the <strong>storage engine inside a replicated system</strong>. RocksDB handles the local sorted storage efficiently, and the replication layer (Raft, Paxos, chain replication) handles making sure no single failure loses data.</p>
+    </div>
+
+    <h3>How Production Systems Solve This</h3>
+    <div class="grid2">
+      <div class="card venice-border">
+        <h4 class="highlight">Synchronous Replication</h4>
+        <p style="color:var(--text-muted);">Don't rely on backup for durability. Replicate every write to <strong>N nodes before acknowledging</strong> it to the client. If one machine dies, N-1 others have the data.</p>
+        <ul style="color:var(--text-muted);margin-top:8px;">
+          <li><strong>TiKV:</strong> Raft consensus, 3 replicas, RocksDB storage engine</li>
+          <li><strong>CockroachDB:</strong> Raft + RocksDB/Pebble, RPO = 0</li>
+          <li><strong>Kafka:</strong> ISR replicas, produce acks=all</li>
+        </ul>
+      </div>
+      <div class="card blue-border">
+        <h4 class="blue">Venice's Approach</h4>
+        <p style="color:var(--text-muted);">Venice uses <strong>Kafka as its replication layer</strong>. All writes go through Kafka topics (VT/RT) first, which are durably replicated. Venice Servers are consumers that materialize Kafka data into RocksDB.</p>
+        <ul style="color:var(--text-muted);margin-top:8px;">
+          <li>Kafka provides the durable, replicated log</li>
+          <li>RocksDB provides the fast local read serving</li>
+          <li>If a Venice Server dies, a new one re-consumes from Kafka</li>
+          <li>RPO depends on how much Kafka data needs to be re-consumed</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 11: Faster Recovery -->
+  <div class="section" id="s11">
+    <div class="section-num">Section 11</div>
+    <h2>Faster Recovery &mdash; From Hours to Seconds</h2>
+
+    <div class="diagram-box">
+      <img src="images/sd_venice_06_faster_recovery.png" alt="Venice Faster Recovery Strategies">
+      <div class="caption">Fig 6: Current Venice recovery baseline (left) vs faster recovery strategies (right)</div>
+    </div>
+
+    <h3>Current Recovery Baseline</h3>
+    <p>When a Venice Server node fails today, the recovery process is:</p>
+    <div class="timeline">
+      <div class="event">
+        <div class="time">1. Node Failure Detected</div>
+        <p>Helix detects the server is unresponsive. Partitions assigned to this server are marked OFFLINE. Other replicas (Leader/Follower) continue serving reads for their partitions.</p>
+      </div>
+      <div class="event">
+        <div class="time">2. Download SST Snapshot</div>
+        <p>A replacement server downloads the RocksDB snapshot from GPFS (sub-second, local mount) or Ambry (minutes to hours, cross-DC). For a 4TB store at 10 Gbps: ~53 minutes from Ambry.</p>
+      </div>
+      <div class="event">
+        <div class="time">3. Open RocksDB</div>
+        <p>RocksDB reads the MANIFEST, opens all SST files, and is ready to accept writes. This takes milliseconds regardless of data size.</p>
+      </div>
+      <div class="event">
+        <div class="time">4. Kafka Catch-Up (The Bottleneck)</div>
+        <p>The server consumes all Kafka messages (VT + RT) from the stored offset to the current latest. For a stale backup, this means replaying days of writes. <strong>This is the slowest step</strong> and determines total recovery time.</p>
+      </div>
+      <div class="event">
+        <div class="time">5. Partition READY</div>
+        <p>Once fully caught up, the partition is marked READY in Helix and begins serving reads. Total time: seconds (fresh GPFS backup) to hours (stale Ambry backup with heavy Kafka catch-up).</p>
+      </div>
+    </div>
+
+    <h3>Faster Recovery Strategies</h3>
+
+    <h4>Strategy 1: P2P Blob Transfer (Already Exists in Venice)</h4>
+    <div class="card green-border" style="margin:16px 0;">
+      <p style="color:var(--text-muted);">Venice already supports <strong>peer-to-peer RocksDB snapshot transfer</strong>. Instead of downloading from GPFS/Ambry, the recovering server can copy a <code>Checkpoint</code> snapshot directly from a healthy replica over the internal network.</p>
+      <ul style="color:var(--text-muted);margin-top:8px;">
+        <li><strong>How:</strong> The healthy replica calls <code>Checkpoint.create(rocksDB).createCheckpoint(snapshotDir)</code> (instant, hard links). The recovering server copies the SST files over the network.</li>
+        <li><strong>Advantage:</strong> Snapshot is <em>fresh</em> (minutes old, not days), so Kafka catch-up is minimal.</li>
+        <li><strong>Recovery time:</strong> Network transfer time + minimal Kafka catch-up = <strong>seconds to minutes</strong>.</li>
+        <li><strong>Limitation:</strong> Requires a healthy replica to be available. If all replicas are down, falls back to GPFS/Ambry.</li>
+      </ul>
+    </div>
+
+    <h4>Strategy 2: Warm Standby Replicas</h4>
+    <div class="card blue-border" style="margin:16px 0;">
+      <p style="color:var(--text-muted);">Keep <strong>3 replicas</strong> (Leader + 2 Followers) that are all continuously consuming from Kafka. When the Leader fails, a Follower is promoted instantly.</p>
+      <ul style="color:var(--text-muted);margin-top:8px;">
+        <li><strong>How:</strong> All replicas consume from VT/RT in real-time. Followers are always up-to-date.</li>
+        <li><strong>Follower promotion:</strong> Helix changes the Follower's state to LEADER. No snapshot download, no Kafka catch-up.</li>
+        <li><strong>Recovery time:</strong> <strong>Sub-second</strong> (just a state transition in Helix).</li>
+        <li><strong>Cost:</strong> 3x storage and 3x Kafka consumer bandwidth. This is what Venice already does with Leader/Follower pairs.</li>
+      </ul>
+    </div>
+
+    <h4>Strategy 3: Tiered Recovery</h4>
+    <div class="card purple-border" style="margin:16px 0;">
+      <p style="color:var(--text-muted);">A cascading fallback approach that tries the fastest recovery method first and falls back to slower methods only when necessary.</p>
+      <table style="margin-top:10px;">
+        <tr><th>Tier</th><th>Source</th><th>Recovery Time</th><th>When Used</th></tr>
+        <tr>
+          <td><strong>Tier 1</strong></td>
+          <td>P2P from healthy replica</td>
+          <td class="green">Seconds</td>
+          <td>Default &mdash; if a healthy replica exists in the same DC</td>
+        </tr>
+        <tr>
+          <td><strong>Tier 2</strong></td>
+          <td>GPFS snapshot + Kafka catch-up</td>
+          <td class="orange">Minutes</td>
+          <td>If no healthy replica in DC, but GPFS is available</td>
+        </tr>
+        <tr>
+          <td><strong>Tier 3</strong></td>
+          <td>Ambry cross-DC + Kafka catch-up</td>
+          <td class="red">Hours</td>
+          <td>Disaster recovery &mdash; entire DC lost, restore from Ambry in another DC</td>
+        </tr>
+      </table>
+    </div>
+
+    <h4>Strategy 4: More Frequent Backups</h4>
+    <div class="card orange-border" style="margin:16px 0;">
+      <p style="color:var(--text-muted);">The biggest contributor to recovery time is <strong>Kafka catch-up</strong> &mdash; the delta between the backup snapshot and the current state. Reduce this delta by backing up more frequently.</p>
+      <table style="margin-top:10px;">
+        <tr><th>Backup Frequency</th><th>Max Kafka Catch-Up</th><th>Additional Cost</th></tr>
+        <tr>
+          <td>Daily</td>
+          <td class="red">Up to 24 hours of writes</td>
+          <td>Baseline</td>
+        </tr>
+        <tr>
+          <td>Every 6 hours</td>
+          <td class="orange">Up to 6 hours of writes</td>
+          <td>4x backup storage churn</td>
+        </tr>
+        <tr>
+          <td>Hourly</td>
+          <td class="blue">Up to 1 hour of writes</td>
+          <td>24x backup storage churn</td>
+        </tr>
+        <tr>
+          <td>Every 15 min</td>
+          <td class="green">Up to 15 minutes of writes</td>
+          <td>96x backup storage churn (but incremental, so delta is small)</td>
+        </tr>
+      </table>
+      <p style="color:var(--text-muted);margin-top:8px;">Since SST files are immutable, incremental backups only upload new files. For hybrid stores with moderate write rates, an hourly incremental backup might only upload a few GB of new SSTs.</p>
+    </div>
+
+    <h3>Recovery Strategy Comparison</h3>
+    <table>
+      <tr><th>Strategy</th><th>RTO</th><th>RPO</th><th>Cost</th><th>Complexity</th></tr>
+      <tr>
+        <td><strong>P2P Blob Transfer</strong></td>
+        <td class="green">Seconds-minutes</td>
+        <td class="green">Near-zero (fresh snapshot)</td>
+        <td class="green">Low (uses existing replicas)</td>
+        <td>Medium</td>
+      </tr>
+      <tr>
+        <td><strong>Warm Standby (3 replicas)</strong></td>
+        <td class="green">Sub-second</td>
+        <td class="green">Zero (sync consuming)</td>
+        <td class="red">High (3x storage)</td>
+        <td>Low (already built into Venice)</td>
+      </tr>
+      <tr>
+        <td><strong>Tiered Recovery</strong></td>
+        <td class="blue">Seconds to hours</td>
+        <td class="orange">Varies by tier</td>
+        <td class="orange">Medium</td>
+        <td>High (orchestration logic)</td>
+      </tr>
+      <tr>
+        <td><strong>Frequent Backups</strong></td>
+        <td class="orange">Minutes</td>
+        <td class="orange">Up to backup interval</td>
+        <td class="orange">Medium (storage)</td>
+        <td>Low</td>
+      </tr>
+      <tr>
+        <td><strong>GPFS (current baseline)</strong></td>
+        <td class="orange">Minutes</td>
+        <td class="orange">Up to backup age</td>
+        <td class="green">Low</td>
+        <td>Low</td>
+      </tr>
+      <tr>
+        <td><strong>Ambry cross-DC</strong></td>
+        <td class="red">Hours</td>
+        <td class="red">Up to backup age</td>
+        <td class="orange">Medium</td>
+        <td>Low</td>
+      </tr>
+    </table>
+
+    <div class="callout success">
+      <strong class="green">The Optimal Recovery Architecture</strong>
+      <p>Combine <strong>warm standby replicas</strong> (Helix Leader/Follower, already in Venice) for instant failover with <strong>P2P blob transfer</strong> for bootstrapping new replicas, <strong>GPFS</strong> for fast local recovery when no peers are available, and <strong>Ambry</strong> as the cross-DC insurance policy. This layered approach gives sub-second recovery for the common case while still handling total DC failure.</p>
+    </div>
+
+    <h3>Venice's Key Advantage: Kafka Is the Source of Truth</h3>
+    <p>Unlike traditional databases where the local WAL is the only durable log, Venice uses <strong>Kafka as its external, replicated WAL</strong>. This means:</p>
+    <ul>
+      <li><strong>No data is ever truly "lost"</strong> from a Venice perspective &mdash; it's all in Kafka (VT + RT topics).</li>
+      <li><strong>Any server can be rebuilt</strong> from scratch by re-consuming Kafka topics. This takes time but always produces a complete dataset.</li>
+      <li><strong>Backups are an optimization</strong>, not a requirement. They reduce recovery time by providing a starting point closer to the current state, so less Kafka catch-up is needed.</li>
+      <li><strong>RPO is effectively zero</strong> for the data itself (it's in Kafka). The recovery question is about <strong>RTO</strong> (how fast can the server rebuild and start serving).</li>
+    </ul>
+  </div>
+
+  <!-- SECTION 12: Interview Questions -->
+  <div class="section" id="s12">
+    <div class="section-num">Section 12</div>
     <h2>Interview Questions</h2>
 
     <h4>Architecture</h4>
@@ -888,14 +1269,28 @@ private final String fullPathForTempSSTFileDir;
       <li>Walk through the restore process from a 7-day-old backup. What determines the total restore time?</li>
     </ol>
 
-    <h4>Operations &amp; Design</h4>
+    <h4>WAL, Recovery &amp; Durability</h4>
     <ol start="20">
+      <li>What is the WAL and why does RocksDB need it? What happens if you disable the WAL?</li>
+      <li>Explain the recovery formula: SST files + WAL = complete data. Why is overlapping data between WAL and SSTs not a problem?</li>
+      <li>A backup was taken at seq #5000 and the server crashes at seq #8000. The archived WAL covers seq 5001-7500. How much data is lost?</li>
+      <li>Why can't a single-node RocksDB instance guarantee zero data loss? What's the fundamental solution?</li>
+      <li>Compare BackupEngine (flush-then-copy) vs manual backup (SST + WAL). When would you use each?</li>
+      <li>Venice uses Kafka as its "external WAL." How does this change the RPO calculation compared to a traditional database?</li>
+      <li>If Venice stores use Kafka as the source of truth, why bother with GPFS/Ambry backups at all?</li>
+    </ol>
+
+    <h4>Faster Recovery &amp; Operations</h4>
+    <ol start="27">
+      <li>Compare P2P blob transfer, warm standby replicas, tiered recovery, and frequent backups. Which combination gives the best RTO?</li>
+      <li>A Venice server fails. The GPFS backup is 3 days old. The store writes 100GB/hour of RT data. Estimate the Kafka catch-up time and total recovery time.</li>
       <li>How does Venice handle GDPR data deletion for streaming vs batch-only stores?</li>
       <li>What is <code>numVersionsToPreserve</code> and what happens when a new version is pushed? Describe the full lifecycle.</li>
       <li>How do RT (real-time) writes interact with version swaps? What ensures consistency during a swap?</li>
       <li>A Venice store has 100 partitions, 2 versions, and each partition is 10GB. Calculate the total storage per server and the number of RocksDB instances.</li>
       <li>Design a Venice store for ML feature serving that needs &lt;10&micro;s read latency. Which client type do you choose and why? What are the tradeoffs?</li>
       <li>A Venice server's L0 file count is spiking during a batch push. Is this expected? How does Venice avoid this problem?</li>
+      <li>Design a recovery architecture for Venice that achieves &lt;1 minute RTO for 95% of failures and &lt;1 hour RTO for complete DC failure. What components do you need?</li>
     </ol>
   </div>
 
