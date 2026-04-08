@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Venice at LinkedIn - Derived Data Platform, RocksDB Internals, Write & Read Paths</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --red: #f85149;
+    --code-bg: #0d1117;
+    --card: #1c2128;
+    --venice-accent: #7B1FA2;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(135deg, #1a1e2e 0%, #0d1117 50%, #1a0a2a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 span { color: var(--venice-accent); }
+  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 750px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .nav-links a.venice { color: var(--venice-accent); border-color: var(--venice-accent); }
+  .nav-links a.venice:hover { background: rgba(123,31,162,0.1); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(210,168,255,0.1); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.85em; font-weight: 700; color: var(--venice-accent);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    background: linear-gradient(90deg, var(--venice-accent), var(--accent3));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .section h3 { font-size: 1.3em; color: var(--accent); margin: 28px 0 12px; }
+  .section h4 { font-size: 1.1em; color: var(--accent3); margin: 20px 0 10px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin: 20px 0; }
+  @media (max-width: 768px) {
+    .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 2em; }
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px;
+  }
+  .card h4 { margin-top: 0; }
+  .card.venice-border { border-left: 3px solid var(--venice-accent); }
+  .card.green-border { border-left: 3px solid var(--accent2); }
+  .card.blue-border { border-left: 3px solid var(--accent); }
+  .card.purple-border { border-left: 3px solid var(--accent3); }
+  .card.orange-border { border-left: 3px solid var(--accent4); }
+  .card.red-border { border-left: 3px solid var(--red); }
+
+  .diagram-box {
+    margin: 30px 0; text-align: center; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px; padding: 24px; overflow: hidden;
+  }
+  .diagram-box img { max-width: 100%; border-radius: 8px; }
+  .diagram-box .caption {
+    margin-top: 12px; font-size: 0.9em; color: var(--text-muted); font-style: italic;
+  }
+
+  .walkthrough {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; margin: 16px 0;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-bottom: 10px; font-size: 1em; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 6px 0; color: var(--text-muted); }
+  .walkthrough li strong { color: var(--text); }
+
+  .scale-box {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 20px; margin: 6px; text-align: center;
+  }
+  .scale-box .num { font-size: 1.5em; font-weight: 700; color: var(--venice-accent); }
+  .scale-box .label { font-size: 0.8em; color: var(--text-muted); }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; overflow-x: auto; font-size: 0.9em; margin: 16px 0; line-height: 1.5;
+  }
+  code { font-family: 'SF Mono', 'Fira Code', monospace; }
+  p code, li code, td code {
+    background: var(--surface); padding: 2px 6px; border-radius: 4px;
+    font-size: 0.9em; color: var(--accent);
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 20px 0;
+    background: var(--surface); border-radius: 8px; overflow: hidden;
+  }
+  th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--card); color: var(--accent); font-weight: 600; }
+
+  ul { padding-left: 20px; margin: 10px 0; }
+  ul li { margin: 6px 0; }
+
+  .highlight { color: var(--venice-accent); font-weight: 600; }
+  .green { color: var(--accent2); }
+  .blue { color: var(--accent); }
+  .purple { color: var(--accent3); }
+  .orange { color: var(--accent4); }
+  .red { color: var(--red); }
+
+  .callout {
+    background: rgba(123,31,162,0.08); border: 1px solid rgba(123,31,162,0.3);
+    border-radius: 10px; padding: 20px; margin: 20px 0;
+  }
+  .callout.warning {
+    background: rgba(248,81,73,0.08); border-color: rgba(248,81,73,0.3);
+  }
+  .callout.info {
+    background: rgba(88,166,255,0.08); border-color: rgba(88,166,255,0.3);
+  }
+  .callout.success {
+    background: rgba(63,185,80,0.08); border-color: rgba(63,185,80,0.3);
+  }
+  .callout strong { display: block; margin-bottom: 8px; }
+
+  .timeline { position: relative; padding-left: 30px; margin: 20px 0; }
+  .timeline::before {
+    content: ''; position: absolute; left: 8px; top: 0; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .timeline .event {
+    position: relative; margin-bottom: 20px; padding: 16px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .timeline .event::before {
+    content: ''; position: absolute; left: -26px; top: 20px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--venice-accent); border: 2px solid var(--bg);
+  }
+  .timeline .event .time { font-size: 0.85em; color: var(--venice-accent); font-weight: 600; }
+  .timeline .event p { margin-top: 6px; color: var(--text-muted); }
+
+  .footer {
+    border-top: 1px solid var(--border); padding: 40px 0; margin-top: 60px;
+    text-align: center; color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="container">
+    <h1><span>Venice</span> at LinkedIn</h1>
+    <p>Derived Data Platform &mdash; Architecture, RocksDB Internals, Write &amp; Read Paths, Compaction, Backup Strategy, Deletes &amp; Data Retention</p>
+    <span class="badge">LinkedIn Infrastructure Deep Dive</span>
+    <div class="nav-links">
+      <a href="sd-index.html">&larr; System Design Hub</a>
+      <a href="index.html" class="purple">Home</a>
+      <a href="sd-flink.html" class="venice">Flink &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<!-- TOC -->
+<div class="container">
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li><a href="#s1">What Is Venice?</a></li>
+      <li><a href="#s2">Core Components</a></li>
+      <li><a href="#s3">Write Path &mdash; Batch Push vs Streaming</a></li>
+      <li><a href="#s4">Read Path</a></li>
+      <li><a href="#s5">RocksDB Compaction Deep Dive</a></li>
+      <li><a href="#s6">Backup Strategy</a></li>
+      <li><a href="#s7">Data Deletes &amp; Retention</a></li>
+      <li><a href="#s8">Restore from Backup</a></li>
+      <li><a href="#s9">Interview Questions</a></li>
+    </ol>
+  </div>
+
+  <!-- SECTION 1: What Is Venice? -->
+  <div class="section" id="s1">
+    <div class="section-num">Section 01</div>
+    <h2>What Is Venice?</h2>
+
+    <p>Venice is LinkedIn's <strong>derived data platform</strong> that bridges the offline, nearline, and online worlds. It ingests precomputed datasets from batch pipelines (HDFS/Spark) and streaming sources (Kafka/Samza/Flink), stores them in RocksDB, and serves them with <strong>sub-millisecond latency</strong> to online applications.</p>
+
+    <div class="grid3" style="margin-top:24px;">
+      <div class="card venice-border">
+        <h4 class="highlight">Immutable Versions</h4>
+        <p style="color:var(--text-muted);">Each batch push creates a new version. The entire dataset is atomically swapped from old to new &mdash; zero downtime, no partial states, instant rollback.</p>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">Dual Ingestion</h4>
+        <p style="color:var(--text-muted);">Batch push from HDFS/Spark for full dataset refreshes. Streaming from Kafka for nearline updates. Hybrid stores combine both for freshness + completeness.</p>
+      </div>
+      <div class="card blue-border">
+        <h4 class="blue">4 Client Types</h4>
+        <p style="color:var(--text-muted);">Thin Client (remote, simple), Fast Client (1-hop, low latency), Da Vinci SSD (local, &lt;1ms), Da Vinci RAM (in-process, &lt;10&micro;s for ML inference).</p>
+      </div>
+    </div>
+
+    <h3>Key Properties</h3>
+    <ul>
+      <li><strong>Immutable version swap:</strong> New versions are ingested in the background. Once ready, an atomic swap makes the new version live &mdash; zero-downtime with instant rollback to the previous version.</li>
+      <li><strong>Batch + Streaming:</strong> Batch pushes provide the "ground truth" full dataset. Streaming (RT) writes overlay nearline updates on top. Hybrid stores merge both.</li>
+      <li><strong>Multi-DC replication:</strong> Data is replicated across data centers via Kafka topics. Each DC has its own Venice cluster serving local reads.</li>
+      <li><strong>Sub-millisecond reads:</strong> Da Vinci clients embed RocksDB directly in the application process &mdash; no network hops, no serialization overhead.</li>
+      <li><strong>Schema evolution:</strong> Venice Controller runs a schema registry. Producers and consumers can evolve Avro schemas independently with compatibility checks.</li>
+    </ul>
+
+    <div class="diagram-box">
+      <img src="images/sd_venice_01_architecture.png" alt="Venice Architecture at LinkedIn">
+      <div class="caption">Fig 1: Venice high-level architecture &mdash; batch and streaming ingestion, RocksDB storage, multi-client serving</div>
+    </div>
+
+    <div style="text-align:center;margin:20px 0;">
+      <div class="scale-box"><div class="num">4.64 PB</div><div class="label">Total Fleet Storage</div></div>
+      <div class="scale-box"><div class="num">&lt;1ms</div><div class="label">Da Vinci SSD p99</div></div>
+      <div class="scale-box"><div class="num">&lt;10&micro;s</div><div class="label">Da Vinci RAM p99</div></div>
+      <div class="scale-box"><div class="num">100+</div><div class="label">Partitions per Store</div></div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: Core Components -->
+  <div class="section" id="s2">
+    <div class="section-num">Section 02</div>
+    <h2>Core Components</h2>
+
+    <h3>Venice Controller</h3>
+    <p>The <strong>Controller</strong> is the brain of Venice. It manages store lifecycle, version pushes, schema registry, and partition assignment. A <strong>Parent Controller</strong> coordinates <strong>Child Controllers</strong> across data centers for multi-DC replication.</p>
+    <div class="card venice-border" style="margin:16px 0;">
+      <h4 class="highlight">Controller Responsibilities</h4>
+      <ul style="color:var(--text-muted);">
+        <li>Create/delete stores, manage store configurations and quotas</li>
+        <li>Orchestrate version pushes: create Kafka VT, track push status, trigger version swap</li>
+        <li>Schema registry: validate schema evolution, enforce compatibility rules</li>
+        <li>Parent Controller sends admin commands to Child Controllers via the Admin Topic</li>
+      </ul>
+    </div>
+
+    <h3>Venice Server (Storage Node)</h3>
+    <p>Servers host <strong>RocksDB instances</strong> for their assigned partitions. Each partition is an independent RocksDB instance. A <code>StoreIngestionTask</code> thread consumes from the Kafka VT and RT topics and writes to the local RocksDB.</p>
+    <div class="card green-border" style="margin:16px 0;">
+      <h4 class="green">Server Internals</h4>
+      <ul style="color:var(--text-muted);">
+        <li><strong>Helix</strong> assigns Leader/Follower pairs for each partition</li>
+        <li>Leader consumes from RT topic, Followers replicate from Leader or consume from VT</li>
+        <li>Each server hosts partitions from many stores &mdash; hundreds of RocksDB instances</li>
+        <li>Block Cache (16GB) is shared across all RocksDB instances on the server</li>
+      </ul>
+    </div>
+
+    <h3>Venice Router</h3>
+    <p>The Router is a <strong>partition-aware read proxy</strong> for Thin Client requests. It looks up which server owns the requested partition, routes the request, and returns the result. For batch-get requests, it performs <strong>scatter-gather</strong> across multiple servers.</p>
+    <ul>
+      <li><strong>Routing metadata:</strong> Router maintains a mapping of store → partition → server via Helix External View</li>
+      <li><strong>Scatter-gather:</strong> Multi-key batch-get requests are split by partition, sent in parallel, and merged</li>
+      <li><strong>Retry &amp; failover:</strong> If a server is slow or down, Router retries on the follower replica</li>
+    </ul>
+
+    <h3>Apache Kafka &mdash; Three Topic Types</h3>
+    <table>
+      <tr><th>Topic Type</th><th>Naming</th><th>Count</th><th>Retention</th><th>Purpose</th></tr>
+      <tr>
+        <td><strong>Version Topic (VT)</strong></td>
+        <td><code>venice_{store}_v{N}</code></td>
+        <td>1 per version</td>
+        <td>Until version retired</td>
+        <td>Full sorted dataset for a batch push version. Consumed by servers to build RocksDB.</td>
+      </tr>
+      <tr>
+        <td><strong>Real-Time Topic (RT)</strong></td>
+        <td><code>venice_{store}_rt</code></td>
+        <td>1 per store (hybrid)</td>
+        <td>Compacted / infinite</td>
+        <td>Streaming writes from Samza/Flink. Compacted to keep latest value per key.</td>
+      </tr>
+      <tr>
+        <td><strong>Admin Topic</strong></td>
+        <td><code>venice_admin_{cluster}</code></td>
+        <td>1 per cluster</td>
+        <td>Long retention</td>
+        <td>Control plane commands from Parent Controller to Child Controllers.</td>
+      </tr>
+    </table>
+
+    <h3>Apache Helix + ZooKeeper</h3>
+    <p>Venice uses <strong>Apache Helix</strong> for partition assignment and state management. Helix assigns each partition to a Leader and one or more Followers across servers. ZooKeeper stores partition metadata and provides leader election.</p>
+    <ul>
+      <li><strong>External View:</strong> Which servers own which partitions (used by Router for routing)</li>
+      <li><strong>Customized View:</strong> Fine-grained partition state (LEADER, STANDBY, OFFLINE, etc.)</li>
+      <li><strong>Metadata storage:</strong> Store configs, version metadata, push status in ZooKeeper znodes</li>
+    </ul>
+
+    <h3>Client Types</h3>
+    <table>
+      <tr><th>Client</th><th>Hops</th><th>Latency (p99)</th><th>Architecture</th><th>Best For</th></tr>
+      <tr>
+        <td><strong>Thin Client</strong></td>
+        <td>2</td>
+        <td>&lt;10ms</td>
+        <td>Stateless &mdash; sends request to Router, which routes to Server</td>
+        <td>Simple integration, no local state needed</td>
+      </tr>
+      <tr>
+        <td><strong>Fast Client</strong></td>
+        <td>1</td>
+        <td>&lt;2ms</td>
+        <td>Caches routing metadata locally, sends requests directly to Server</td>
+        <td>Low-latency reads without local data</td>
+      </tr>
+      <tr>
+        <td><strong>Da Vinci SSD</strong></td>
+        <td>0</td>
+        <td>&lt;1ms</td>
+        <td>Full dataset on local SSD via embedded RocksDB in the application</td>
+        <td>Ultra-low latency, large datasets</td>
+      </tr>
+      <tr>
+        <td><strong>Da Vinci RAM</strong></td>
+        <td>0</td>
+        <td>&lt;10&micro;s</td>
+        <td>Full dataset in application RAM via in-memory RocksDB or off-heap</td>
+        <td>ML inference, feature serving</td>
+      </tr>
+    </table>
+
+    <div class="callout info">
+      <strong class="blue">Da Vinci: The Zero-Hop Client</strong>
+      Da Vinci clients subscribe to Venice store partitions and build a local RocksDB replica inside the application process itself. Reads are local function calls &mdash; no network, no serialization, no Router. This is how LinkedIn serves ML features at &lt;10&micro;s latency for feed ranking models.
+    </div>
+  </div>
+
+  <!-- SECTION 3: Write Path -->
+  <div class="section" id="s3">
+    <div class="section-num">Section 03</div>
+    <h2>Write Path &mdash; Batch Push vs Streaming</h2>
+
+    <p>Venice has <strong>two completely different write paths</strong>. Understanding the difference is critical because they interact with RocksDB in fundamentally different ways.</p>
+
+    <div class="diagram-box">
+      <img src="images/sd_venice_02_write_read.png" alt="Venice Write and Read Paths">
+      <div class="caption">Fig 2: Venice batch push (left) vs streaming write (right) paths, and how they interact with RocksDB</div>
+    </div>
+
+    <h3>Path A: Batch Push (<code>deferredWrite=true</code>)</h3>
+    <p>Batch push is Venice's flagship ingestion mode. It takes a sorted dataset from HDFS/Spark and bulk-loads it into RocksDB <strong>bypassing the MemTable and compaction entirely</strong>.</p>
+
+    <div class="walkthrough">
+      <h4>Batch Push Walkthrough</h4>
+      <ol>
+        <li><strong>Venice Push Job (VPJ)</strong> reads sorted key-value pairs from HDFS or Spark output.</li>
+        <li><strong>VPJ contacts Controller</strong> to create a new version (e.g., <code>v4</code>). Controller creates a new Kafka Version Topic <code>venice_{store}_v4</code>.</li>
+        <li><strong>VPJ writes sorted KV pairs</strong> to the Version Topic via <code>VeniceWriter</code>.</li>
+        <li><strong>Server's StoreIngestionTask</strong> consumes from the VT. Because data arrives sorted, it uses <code>SstFileWriter</code> to generate pre-sorted SST files directly &mdash; <strong>bypasses MemTable and compaction!</strong></li>
+        <li><strong>Server calls <code>ingestExternalFile()</code></strong> to bulk-load the SST files into RocksDB at the bottom level.</li>
+        <li><strong>For Hybrid stores:</strong> RT topic is replayed (from the configured rewind time) on top of the new version to apply recent streaming updates.</li>
+        <li><strong>Version swap:</strong> v4 becomes "current", v3 becomes "backup", v2 is deleted.</li>
+        <li><strong>Cleanup:</strong> Old version's RocksDB directory is deleted. Old Kafka VT is deleted after its retention period.</li>
+      </ol>
+    </div>
+
+    <div class="callout">
+      <strong class="highlight">Why Batch Push Bypasses MemTable</strong>
+      RocksDB's <code>SstFileWriter</code> creates SST files directly from sorted input without going through the write-ahead log or MemTable. Since VPJ data arrives pre-sorted, this avoids all write amplification from compaction. The SST files are ingested at the bottommost level via <code>ingestExternalFile()</code>, meaning they never need to be compacted down. This is <strong>dramatically faster</strong> than row-by-row <code>put()</code> calls.
+    </div>
+
+    <pre><code>// From Venice's RocksDBStoragePartition.java - SstFileWriter for batch push
+// Venice disables WAL and relies on flush via sync() for durability
+protected final WriteOptions writeOptions;  // WAL disabled for batch
+private final String fullPathForTempSSTFileDir;
+
+// Batch push path: sorted data → SstFileWriter → ingestExternalFile()
+// Streaming path: unsorted data → rocksDB.put() → MemTable → flush → compaction
+
+// Key insight: batch push produces SSTs at the BOTTOM level
+// They never need compaction — zero write amplification</code></pre>
+
+    <h3>Path B: Streaming / Real-Time</h3>
+    <p>Streaming writes follow the traditional RocksDB write path through the MemTable and compaction pipeline.</p>
+
+    <div class="walkthrough">
+      <h4>Streaming Write Walkthrough</h4>
+      <ol>
+        <li><strong>Samza, Flink, or Online Producer</strong> writes key-value pairs to the store's RT topic in Kafka.</li>
+        <li><strong>StoreIngestionTask</strong> on the Leader server consumes from the RT topic.</li>
+        <li><strong><code>rocksDB.put(key, value)</code></strong> &rarr; writes to WAL (durability) + MemTable (32MB skiplist in RAM).</li>
+        <li><strong>MemTable full</strong> &rarr; becomes immutable &rarr; background flush thread writes it as an L0 SST file.</li>
+        <li><strong>Compaction</strong> merges L0 &rarr; L1 &rarr; L2 as levels fill up (standard leveled compaction).</li>
+        <li><strong>RT writes go to ALL existing versions</strong> &mdash; current, backup, and any future version if a push is in progress. This ensures version consistency on swap.</li>
+      </ol>
+    </div>
+
+    <h3>Batch vs Streaming Comparison</h3>
+    <table>
+      <tr><th>Aspect</th><th>Batch Push</th><th>Streaming (RT)</th></tr>
+      <tr><td><strong>Data source</strong></td><td>HDFS / Spark (sorted)</td><td>Kafka RT topic (unsorted)</td></tr>
+      <tr><td><strong>RocksDB entry point</strong></td><td><code>SstFileWriter</code> + <code>ingestExternalFile()</code></td><td><code>rocksDB.put()</code></td></tr>
+      <tr><td><strong>WAL usage</strong></td><td>Disabled</td><td>Enabled</td></tr>
+      <tr><td><strong>MemTable usage</strong></td><td>Bypassed</td><td>Yes (32MB)</td></tr>
+      <tr><td><strong>Compaction</strong></td><td>None &mdash; SSTs loaded at bottom level</td><td>Full leveled compaction (L0 &rarr; L1 &rarr; L2...)</td></tr>
+      <tr><td><strong>Write amplification</strong></td><td>~1x (no rewriting)</td><td>~10x (compaction rewrites)</td></tr>
+      <tr><td><strong>Version model</strong></td><td>New version per push</td><td>Updates existing version in-place</td></tr>
+      <tr><td><strong>Freshness</strong></td><td>Periodic (hourly/daily)</td><td>Nearline (seconds)</td></tr>
+    </table>
+  </div>
+
+  <!-- SECTION 4: Read Path -->
+  <div class="section" id="s4">
+    <div class="section-num">Section 04</div>
+    <h2>Read Path</h2>
+
+    <p>Venice reads follow RocksDB's LSM-tree lookup order. The read path <strong>short-circuits on the first match</strong> &mdash; once the key is found, the search stops immediately.</p>
+
+    <div class="callout info">
+      <strong class="blue">Read Order (First Match Wins)</strong>
+      <p>Each layer is checked in order. The moment the key is found, RocksDB returns the value without checking deeper layers.</p>
+    </div>
+
+    <div class="timeline">
+      <div class="event">
+        <div class="time">Step 1: Active MemTable (RAM)</div>
+        <p>The current write buffer. Contains the most recent writes. <strong>Fastest possible lookup</strong> &mdash; in-memory skiplist with O(log n) search. If the key was recently written, it's found here.</p>
+      </div>
+      <div class="event">
+        <div class="time">Step 2: Immutable MemTable(s) (RAM)</div>
+        <p>MemTables that are full and waiting to be flushed to disk. Still in RAM, still fast. Venice uses double-buffered MemTables (max 2), so at most 1 immutable MemTable exists.</p>
+      </div>
+      <div class="event">
+        <div class="time">Step 3: Block Cache (16GB Shared LRU)</div>
+        <p>An LRU cache shared across all RocksDB instances on the server. Caches recently-read SST blocks (16KB each). If the key's SST block was recently accessed by any store, it's in the cache. <strong>16GB total</strong> across hundreds of RocksDB instances.</p>
+      </div>
+      <div class="event">
+        <div class="time">Step 4: Bloom Filter Check</div>
+        <p>Before reading any SST file from disk, RocksDB checks the file's Bloom filter. A Bloom filter can definitively say "key is NOT in this file" (no false negatives) but may say "key MIGHT be in this file" (possible false positive). <strong>Skips ~99% of SST files</strong> that don't contain the key.</p>
+      </div>
+      <div class="event">
+        <div class="time">Step 5: L0 SST Files (Disk)</div>
+        <p>L0 files are flushed MemTables. They <strong>may have overlapping key ranges</strong>, so RocksDB must check ALL L0 files. This is why too many L0 files hurts read performance. Venice's L0 compaction trigger limits this.</p>
+      </div>
+      <div class="event">
+        <div class="time">Step 6: L1 SST Files (Disk)</div>
+        <p>L1 files have <strong>non-overlapping key ranges</strong>. RocksDB uses binary search on file boundaries to find exactly 1 file that could contain the key. Only that file is read.</p>
+      </div>
+      <div class="event">
+        <div class="time">Step 7: L2...Ln SST Files (Disk)</div>
+        <p>Same as L1 &mdash; non-overlapping ranges, binary search, check at most 1 file per level. Each level is ~10x larger than the previous. Most data lives in the bottom levels.</p>
+      </div>
+    </div>
+
+    <h3>Read Amplification Analysis</h3>
+    <table>
+      <tr><th>Scenario</th><th>Layers Checked</th><th>Disk I/O</th><th>Notes</th></tr>
+      <tr>
+        <td>Key in MemTable</td>
+        <td>1</td>
+        <td>0</td>
+        <td>Best case &mdash; recent write, pure RAM lookup</td>
+      </tr>
+      <tr>
+        <td>Key in Block Cache</td>
+        <td>2-3</td>
+        <td>0</td>
+        <td>Recently read key, still in LRU cache</td>
+      </tr>
+      <tr>
+        <td>Key on disk (typical)</td>
+        <td>4-7</td>
+        <td>1 SST read</td>
+        <td>Bloom filter skips most files, 1 file per level for L1+</td>
+      </tr>
+      <tr>
+        <td>Key doesn't exist</td>
+        <td>All levels</td>
+        <td>0 (Bloom filter)</td>
+        <td>Bloom filter says "not here" for every SST file</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- SECTION 5: RocksDB Compaction Deep Dive -->
+  <div class="section" id="s5">
+    <div class="section-num">Section 05</div>
+    <h2>RocksDB Compaction Deep Dive</h2>
+
+    <div class="diagram-box">
+      <img src="images/sd_venice_03_compaction.png" alt="RocksDB LSM-Tree Compaction in Venice">
+      <div class="caption">Fig 3: RocksDB LSM-Tree architecture showing MemTable, L0-L2 levels, and the compaction merge process</div>
+    </div>
+
+    <h3>LSM-Tree Architecture</h3>
+    <p>RocksDB uses a <strong>Log-Structured Merge-Tree (LSM-Tree)</strong> that optimizes for write throughput by batching writes in memory and flushing them to disk as sorted files.</p>
+
+    <div class="walkthrough">
+      <h4>Write Flow Through the LSM-Tree</h4>
+      <ol>
+        <li><strong><code>put(key, value)</code></strong> &rarr; Write goes to the WAL (write-ahead log) for durability AND the MemTable (skiplist in RAM, 32MB).</li>
+        <li><strong>MemTable full</strong> (32MB) &rarr; Becomes an <strong>Immutable MemTable</strong>. A new active MemTable takes its place.</li>
+        <li><strong>Flush thread</strong> writes the Immutable MemTable to disk as a sorted <strong>L0 SST file</strong>.</li>
+        <li><strong>L0 accumulates files</strong>. L0 files can have <strong>overlapping key ranges</strong> because each is a snapshot of whatever was in memory.</li>
+        <li><strong>Compaction triggers</strong> when L0 has too many files (40 in Venice normal mode). Compaction merges L0 files with overlapping L1 files.</li>
+        <li><strong>Cascading compaction:</strong> If L1 grows beyond its size limit (2GB), excess files are compacted into L2. L2 overflows to L3, etc. Each level is ~10x larger.</li>
+      </ol>
+    </div>
+
+    <h3>Leveled Compaction (Default)</h3>
+    <p>Venice uses <strong>Leveled Compaction</strong>, which is RocksDB's default and provides the best read performance.</p>
+
+    <div class="grid2">
+      <div class="card venice-border">
+        <h4 class="highlight">How Leveled Compaction Works</h4>
+        <ol style="color:var(--text-muted);">
+          <li>When L0 has too many files, pick L0 files + overlapping L1 files</li>
+          <li>Sorted merge: combine all selected files, sort by key, keep latest version per key, drop tombstones (if at bottom level)</li>
+          <li>Write new non-overlapping SST files to L1</li>
+          <li>Delete the old input files</li>
+          <li>If L1 exceeds its size target, repeat for L1 &rarr; L2, etc.</li>
+        </ol>
+      </div>
+      <div class="card blue-border">
+        <h4 class="blue">Key Invariant</h4>
+        <p style="color:var(--text-muted);">L1 and above have <strong>non-overlapping key ranges</strong> within each level. This means a point lookup needs to check at most <strong>1 file per level</strong> (after L0). This is why leveled compaction gives the best read amplification.</p>
+        <p style="color:var(--text-muted);margin-top:10px;">L0 is the exception &mdash; files can overlap, so all L0 files must be checked on reads.</p>
+      </div>
+    </div>
+
+    <h3>Venice-Specific Compaction Settings</h3>
+    <table>
+      <tr><th>Setting</th><th>Value</th><th>Why</th></tr>
+      <tr><td><strong>MemTable Size</strong></td><td>32 MB</td><td>Balance between write buffer and flush frequency</td></tr>
+      <tr><td><strong>Max MemTable Count</strong></td><td>2 (double-buffered)</td><td>1 active + 1 flushing; prevents write stalls while flushing</td></tr>
+      <tr><td><strong>Block Cache</strong></td><td>16 GB shared</td><td>Shared LRU across all RocksDB instances on the server</td></tr>
+      <tr><td><strong>SST Block Size</strong></td><td>16 KB</td><td>Granularity of disk reads and cache entries</td></tr>
+      <tr><td><strong>Max Bytes for Level Base (L1)</strong></td><td>2 GB</td><td>L1 target size; L2 = 20GB, L3 = 200GB, etc.</td></tr>
+      <tr><td><strong>L0 Compaction Trigger (normal)</strong></td><td>40 files</td><td>Balance read performance vs compaction frequency</td></tr>
+      <tr><td><strong>L0 Compaction Trigger (RW leader)</strong></td><td>10 files</td><td>Leaders serve reads &mdash; need fewer L0 files for lower read latency</td></tr>
+      <tr><td><strong>L0 Compaction Trigger (write-only)</strong></td><td>100 files</td><td>Write-only followers don't serve reads &mdash; tolerate more L0 files</td></tr>
+      <tr><td><strong>Compaction Style</strong></td><td>LEVEL</td><td>Best read amplification; 1 file per level for point lookups</td></tr>
+    </table>
+
+    <h3>Three Amplification Tradeoffs</h3>
+    <div class="grid3">
+      <div class="card red-border">
+        <h4 class="red">Write Amplification (~10x)</h4>
+        <p style="color:var(--text-muted);">Each byte written to RocksDB may be rewritten ~10x as it's compacted through levels. A 1GB MemTable flush can cause 10GB of total disk writes over time as data moves L0 &rarr; L1 &rarr; L2.</p>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">Read Amplification (1 file/level)</h4>
+        <p style="color:var(--text-muted);">With leveled compaction, a point lookup checks at most 1 SST file per level (plus all L0 files). Bloom filters eliminate most negative lookups. Best-case: 1 disk read.</p>
+      </div>
+      <div class="card orange-border">
+        <h4 class="orange">Space Amplification (~10%)</h4>
+        <p style="color:var(--text-muted);">Obsolete versions of keys and tombstones consume space until compaction removes them. Leveled compaction keeps this tight &mdash; typically &lt;10% overhead.</p>
+      </div>
+    </div>
+
+    <h3>Other Compaction Styles</h3>
+    <table>
+      <tr><th>Style</th><th>How It Works</th><th>Tradeoff</th><th>Venice Usage</th></tr>
+      <tr>
+        <td><strong>Leveled</strong></td>
+        <td>Merge files level-by-level; non-overlapping within each level</td>
+        <td>Best read amp, worst write amp</td>
+        <td>Default for all stores</td>
+      </tr>
+      <tr>
+        <td><strong>Universal (Size-Tiered)</strong></td>
+        <td>Merge all files of similar size together</td>
+        <td>Better write amp, worse read/space amp</td>
+        <td>Not used</td>
+      </tr>
+      <tr>
+        <td><strong>FIFO</strong></td>
+        <td>Delete oldest SST files when total size exceeds limit</td>
+        <td>No compaction at all; time-series only</td>
+        <td>Not used</td>
+      </tr>
+    </table>
+
+    <div class="callout success">
+      <strong class="green">Venice Batch Push = Zero Compaction</strong>
+      Batch push uses <code>SstFileWriter</code> + <code>ingestExternalFile()</code> to load pre-sorted SST files directly at the bottom level. These files never go through the MemTable, never go through L0, and never need compaction. Write amplification is exactly 1x. This is why batch push is dramatically faster and cheaper than streaming writes for full dataset refreshes.
+    </div>
+  </div>
+
+  <!-- SECTION 6: Backup Strategy -->
+  <div class="section" id="s6">
+    <div class="section-num">Section 06</div>
+    <h2>Backup Strategy</h2>
+
+    <div class="diagram-box">
+      <img src="images/sd_venice_04_backup.png" alt="Venice Backup Strategy with GPFS and Ambry">
+      <div class="caption">Fig 4: Venice backup flow &mdash; RocksDB checkpoint, SST hard-links, upload to GPFS and Ambry</div>
+    </div>
+
+    <h3>How Venice Creates Backups</h3>
+    <div class="walkthrough">
+      <h4>Backup Process</h4>
+      <ol>
+        <li><strong><code>Checkpoint.create(rocksDB).createCheckpoint(snapshotDir)</code></strong> &mdash; Creates hard links to all current SST files in a snapshot directory. This is <strong>instant</strong> (just filesystem metadata operations) and <strong>non-blocking</strong> (reads and writes continue normally).</li>
+        <li><strong>Record Kafka offset</strong> in <code>OffsetRecord</code> metadata &mdash; captures the exact position in VT/RT topics at the time of the snapshot.</li>
+        <li><strong>Upload SST files</strong> from the snapshot directory to GPFS (local fast storage) or Ambry (cross-DC blob store).</li>
+      </ol>
+    </div>
+
+    <h3>GPFS vs Ambry</h3>
+    <table>
+      <tr><th>Aspect</th><th>GPFS</th><th>Ambry</th></tr>
+      <tr><td><strong>Cost</strong></td><td>$1,494 / PB / month</td><td>$24,576 / PB / month (16x more)</td></tr>
+      <tr><td><strong>Recovery Time</strong></td><td>Sub-second (local POSIX mount)</td><td>Minutes (REST API download)</td></tr>
+      <tr><td><strong>Access</strong></td><td>Local POSIX filesystem mount</td><td>REST API (cross-network)</td></tr>
+      <tr><td><strong>Replication</strong></td><td>Single DC</td><td>3x cross-DC replication</td></tr>
+      <tr><td><strong>Versions Kept</strong></td><td>5 versions</td><td>1 snapshot</td></tr>
+      <tr><td><strong>Use Case</strong></td><td>Fast recovery, local backup</td><td>Disaster recovery, cross-DC restore</td></tr>
+    </table>
+
+    <div class="callout info">
+      <strong class="blue">Combined Backup Cost</strong>
+      For the complete Venice fleet of 4.64 PB: <strong>~$149K/month</strong> provides both fast local recovery (GPFS, 5 versions) and cross-DC disaster recovery (Ambry, 1 snapshot). GPFS handles 99% of restores; Ambry is the insurance policy.
+    </div>
+
+    <h3>Incremental Backup</h3>
+    <p>SST files in RocksDB are <strong>immutable</strong> &mdash; once written, they never change. This enables efficient incremental backups:</p>
+
+    <div class="grid2">
+      <div class="card venice-border">
+        <h4 class="highlight">How Incremental Backup Works</h4>
+        <ul style="color:var(--text-muted);">
+          <li>Each backup records the set of SST file names and checksums</li>
+          <li>On the next backup, only <strong>new SST files</strong> (created since last backup) are uploaded</li>
+          <li>Old SST files are referenced by name &mdash; no re-upload needed</li>
+          <li>Backup metadata stores the file list + Kafka offset</li>
+        </ul>
+      </div>
+      <div class="card orange-border">
+        <h4 class="orange">Incremental Savings by Store Type</h4>
+        <ul style="color:var(--text-muted);">
+          <li><strong>Batch-only stores:</strong> NO savings. Each version = 100% new SSTs (loaded via <code>ingestExternalFile</code>). The entire dataset is replaced.</li>
+          <li><strong>Hybrid stores:</strong> 30-60% SST reuse between backups. Only compacted/flushed files since last backup are new.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>BackupEngine vs Manual Backup</h3>
+    <table>
+      <tr><th>Method</th><th>Process</th><th>Restores From</th><th>Data Completeness</th></tr>
+      <tr>
+        <td><strong>BackupEngine API</strong></td>
+        <td>Flush MemTable first, then backup SST files only (no WAL needed)</td>
+        <td>SST files alone</td>
+        <td>Complete &mdash; MemTable was flushed before backup</td>
+      </tr>
+      <tr>
+        <td><strong>Manual copy</strong></td>
+        <td>Copy SST files + WAL files</td>
+        <td>SST + WAL replay</td>
+        <td>Complete &mdash; WAL replayed on restore to recover MemTable data</td>
+      </tr>
+    </table>
+
+    <h3>Can You Restore from SST Files Alone?</h3>
+    <div class="callout warning">
+      <strong class="red">NO &mdash; You Lose MemTable Data</strong>
+      <p>SST files only contain data that has been flushed from the MemTable. Any writes still in the active MemTable are <strong>not</strong> in any SST file. To get complete data:</p>
+      <ul style="margin-top:10px;">
+        <li><strong>Formula:</strong> <code>SST files + WAL = complete data</code></li>
+        <li><strong>Or:</strong> Use <code>BackupEngine</code> which flushes the MemTable before backup, making the backup purely SST-based (no WAL needed)</li>
+        <li><strong>Safe overlap:</strong> Data can exist in both WAL and SSTs. RocksDB uses sequence numbers to resolve &mdash; replaying WAL entries that are already in SSTs is a no-op.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SECTION 7: Data Deletes & Retention -->
+  <div class="section" id="s7">
+    <div class="section-num">Section 07</div>
+    <h2>Data Deletes &amp; Retention</h2>
+
+    <h3>Version Retention</h3>
+    <p>Venice keeps a configurable number of versions per store. The default is <code>numVersionsToPreserve = 2</code>: one "current" version serving reads, and one "backup" version for instant rollback.</p>
+
+    <div class="walkthrough">
+      <h4>Version Lifecycle Example</h4>
+      <ol>
+        <li><strong>Before push:</strong> v3 = current (serving reads), v2 = backup</li>
+        <li><strong>New version v4 pushed:</strong> v4 is built in the background while v3 continues serving</li>
+        <li><strong>Push complete, version swap:</strong> v4 = current, v3 = backup, v2 = <span class="red">DELETE</span></li>
+        <li><strong>v2 deletion:</strong> <code>rm -rf</code> the entire RocksDB directory for v2 + delete the Kafka VT <code>venice_{store}_v2</code> after its retention period</li>
+      </ol>
+    </div>
+
+    <h3>Data Deletes (GDPR / Compliance)</h3>
+    <div class="grid2">
+      <div class="card venice-border">
+        <h4 class="highlight">Streaming / Hybrid Stores</h4>
+        <ul style="color:var(--text-muted);">
+          <li><code>put(key, DELETE_MARKER)</code> writes a <strong>tombstone</strong> to the RT topic</li>
+          <li>Tombstone is consumed by StoreIngestionTask and written to RocksDB</li>
+          <li>In RocksDB, tombstone persists until compaction merges it through all levels</li>
+          <li>At the bottommost level, compaction drops the tombstone and the original key &mdash; data is physically deleted</li>
+          <li>Timeline: depends on compaction frequency, could be hours to days</li>
+        </ul>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">Batch-Only Stores</h4>
+        <ul style="color:var(--text-muted);">
+          <li>Next batch push <strong>replaces the entire version</strong></li>
+          <li>Old keys simply don't exist in the new version &mdash; they're gone</li>
+          <li>No tombstones needed; deletion is implicit by omission</li>
+          <li>Old version's RocksDB directory is <code>rm -rf</code>'d on version retire</li>
+          <li>GDPR compliance: ensure the batch pipeline excludes deleted records</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <strong class="blue">LinkedIn Data Deletion Workflow</strong>
+      LinkedIn follows structured data deletion workflows per <code>go/data-deletion</code>. For Venice, the process depends on store type: batch-only stores are naturally purged on the next push, while hybrid stores require explicit delete markers that propagate through compaction.
+    </div>
+
+    <h3>Storage Layout</h3>
+    <pre><code>/db/{storeName}_v{version}/partition-{id}/
+    ├── MANIFEST-000001          # RocksDB metadata: SST file list, levels, sequence numbers
+    ├── CURRENT                  # Points to the active MANIFEST file
+    ├── OPTIONS-000001           # RocksDB configuration snapshot
+    ├── 000023.sst               # SST data file (sorted key-value pairs)
+    ├── 000024.sst
+    ├── 000025.sst
+    └── 000026.log               # WAL file (for streaming writes only)
+
+# Each partition = independent RocksDB instance
+# 100 partitions × 2 versions = 200 RocksDB instances per server
+# Each instance has its own MemTable, L0-Ln levels, and WAL</code></pre>
+
+    <table>
+      <tr><th>Dimension</th><th>Typical Value</th><th>Impact</th></tr>
+      <tr><td>Partitions per store</td><td>100</td><td>Parallelism for ingestion and serving</td></tr>
+      <tr><td>Versions per store</td><td>2 (current + backup)</td><td>Storage doubles; instant rollback</td></tr>
+      <tr><td>RocksDB instances per server</td><td>~200</td><td>All share 16GB Block Cache</td></tr>
+      <tr><td>Stores per cluster</td><td>100s</td><td>Controller manages all store metadata</td></tr>
+    </table>
+  </div>
+
+  <!-- SECTION 8: Restore from Backup -->
+  <div class="section" id="s8">
+    <div class="section-num">Section 08</div>
+    <h2>Restore from Backup</h2>
+
+    <p>Restoring a Venice partition from backup involves downloading the snapshot, opening RocksDB, and catching up from Kafka to the present.</p>
+
+    <div class="walkthrough">
+      <h4>Step-by-Step Restore Process</h4>
+      <ol>
+        <li><strong>Download base snapshot</strong> (SST files + MANIFEST) from GPFS or Ambry.
+          <ul style="margin-top:4px;color:var(--text-muted);">
+            <li>GPFS: instant &mdash; files are on a local POSIX mount</li>
+            <li>Ambry: minutes to hours &mdash; depends on dataset size and network bandwidth</li>
+          </ul>
+        </li>
+        <li><strong>Open RocksDB</strong> on the restored files. RocksDB reads the MANIFEST to understand the level structure and SST file layout.</li>
+        <li><strong>Read stored Kafka offset</strong> from backup metadata (<code>OffsetRecord</code>). This tells the server exactly where it left off in the VT and RT topics.</li>
+        <li><strong>Start consuming VT + RT</strong> from the recorded offset to the current latest offset in Kafka.</li>
+        <li><strong>Apply all Kafka messages</strong> (catch-up phase). Each message is written to RocksDB via <code>put()</code>. This replays everything that happened after the backup was taken.</li>
+        <li><strong>Once fully caught up</strong> (consumer offset = latest offset), mark the partition as READY and begin serving reads.</li>
+      </ol>
+    </div>
+
+    <h3>Restore Time Estimation</h3>
+    <table>
+      <tr><th>Factor</th><th>GPFS Restore</th><th>Ambry Restore</th></tr>
+      <tr><td><strong>Download time</strong></td><td>Sub-second (hard links)</td><td>Minutes-hours (network transfer)</td></tr>
+      <tr><td><strong>RocksDB open</strong></td><td>Milliseconds</td><td>Milliseconds</td></tr>
+      <tr><td><strong>Kafka catch-up</strong></td><td colspan="2">Depends on: backup age × write rate</td></tr>
+      <tr><td><strong>Total for fresh backup</strong></td><td>Seconds</td><td>Minutes</td></tr>
+      <tr><td><strong>Total for 7-day-old backup</strong></td><td colspan="2">Replay 1 full VT + 7 days of RT writes (could be hours for large stores)</td></tr>
+    </table>
+
+    <div class="callout">
+      <strong class="highlight">Example: Restoring a 4TB Store from 7-Day-Old Backup</strong>
+      <ol style="margin-top:10px;color:var(--text-muted);">
+        <li>Download 4TB of SST files from Ambry (assuming 10 Gbps: ~53 minutes)</li>
+        <li>Open RocksDB on downloaded files (~1 second)</li>
+        <li>Replay the full Version Topic (4TB of sorted data, bulk-loaded via SstFileWriter)</li>
+        <li>Replay 7 days of RT writes (volume depends on write rate)</li>
+        <li>Total: 1-4 hours depending on network and write volume</li>
+      </ol>
+    </div>
+
+    <h3>Why Backup Freshness Matters</h3>
+    <div class="grid2">
+      <div class="card green-border">
+        <h4 class="green">Fresh Backup (hours old)</h4>
+        <p style="color:var(--text-muted);">Minimal Kafka catch-up needed. Restore completes in seconds (GPFS) or minutes (Ambry). The server quickly reaches READY state and begins serving.</p>
+      </div>
+      <div class="card red-border">
+        <h4 class="red">Stale Backup (days old)</h4>
+        <p style="color:var(--text-muted);">Must replay days of Kafka messages. For high-write stores, this can mean replaying terabytes of data. Restore can take hours, during which the partition is unavailable or served by other replicas.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 9: Interview Questions -->
+  <div class="section" id="s9">
+    <div class="section-num">Section 09</div>
+    <h2>Interview Questions</h2>
+
+    <h4>Architecture</h4>
+    <ol>
+      <li>What is Venice and what problem does it solve? How does it bridge the offline, nearline, and online worlds?</li>
+      <li>How does Venice achieve zero-downtime version swaps? What happens to in-flight reads during a swap?</li>
+      <li>Compare the 4 Venice client types (Thin, Fast, Da Vinci SSD, Da Vinci RAM). When would you choose each?</li>
+      <li>Explain the role of the Venice Controller, including the Parent/Child Controller architecture for multi-DC.</li>
+      <li>How does Venice use Apache Helix for partition assignment? What is the difference between External View and Customized View?</li>
+    </ol>
+
+    <h4>RocksDB Internals</h4>
+    <ol start="6">
+      <li>Explain how leveled compaction works in RocksDB. What is the key invariant that makes reads efficient at L1+?</li>
+      <li>What is the difference between a MemTable and an SST file? Why does Venice use double-buffered MemTables?</li>
+      <li>Why does Venice disable WAL for batch push? How is durability maintained without it?</li>
+      <li>Explain the three amplification tradeoffs (write, read, space) in an LSM-Tree. How does Venice's batch push achieve ~1x write amplification?</li>
+      <li>What is the Block Cache and how is it shared across RocksDB instances? Why is 16GB chosen for Venice servers?</li>
+    </ol>
+
+    <h4>Write &amp; Read Paths</h4>
+    <ol start="11">
+      <li>Compare Venice's two write paths: batch push vs streaming. How does each interact with RocksDB differently?</li>
+      <li>Why does batch push use <code>SstFileWriter</code> + <code>ingestExternalFile()</code> instead of regular <code>put()</code> calls? What are the performance implications?</li>
+      <li>Walk through Venice's read path. How do Bloom filters reduce read amplification?</li>
+      <li>Why do RT (streaming) writes go to ALL existing versions? What would happen if they didn't?</li>
+      <li>How does Venice handle hybrid stores where both batch and streaming writes coexist?</li>
+    </ol>
+
+    <h4>Backup &amp; Restore</h4>
+    <ol start="16">
+      <li>How does Venice's incremental backup work given that SST files are immutable? Why don't batch-only stores benefit from incremental backups?</li>
+      <li>Can you restore a RocksDB instance from SST files alone? Why or why not? What role does the WAL play?</li>
+      <li>Compare GPFS and Ambry as backup destinations. When would you use each?</li>
+      <li>Walk through the restore process from a 7-day-old backup. What determines the total restore time?</li>
+    </ol>
+
+    <h4>Operations &amp; Design</h4>
+    <ol start="20">
+      <li>How does Venice handle GDPR data deletion for streaming vs batch-only stores?</li>
+      <li>What is <code>numVersionsToPreserve</code> and what happens when a new version is pushed? Describe the full lifecycle.</li>
+      <li>How do RT (real-time) writes interact with version swaps? What ensures consistency during a swap?</li>
+      <li>A Venice store has 100 partitions, 2 versions, and each partition is 10GB. Calculate the total storage per server and the number of RocksDB instances.</li>
+      <li>Design a Venice store for ML feature serving that needs &lt;10&micro;s read latency. Which client type do you choose and why? What are the tradeoffs?</li>
+      <li>A Venice server's L0 file count is spiking during a batch push. Is this expected? How does Venice avoid this problem?</li>
+    </ol>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <p>Venice at LinkedIn &mdash; Derived Data Platform, RocksDB Internals, Write &amp; Read Paths</p>
+    <p style="margin-top:8px;font-size:0.85em;">
+      <a href="sd-index.html" style="color:var(--accent);text-decoration:none;">System Design Hub</a> &bull;
+      <a href="index.html" style="color:var(--accent);text-decoration:none;">Home</a>
+    </p>
+    <p style="margin-top:16px;font-size:0.8em;color:var(--text-muted);">
+      Sources: LinkedIn Venice open-source documentation, RocksDB Wiki,
+      Venice internal architecture docs, RocksDBStoragePartition.java codebase,
+      LinkedIn Engineering Blog
+    </p>
+  </div>
+</div>
+
+</body>
+</html>
