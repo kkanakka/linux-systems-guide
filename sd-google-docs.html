@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <title>System Design - Design Google Docs</title>
 <style>
   :root {
@@ -22,25 +23,25 @@
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg);
     color: var(--text);
-    line-height: 1.7;
-    font-size: 16px;
+    line-height: 1.6;
+    font-size: 15px;
   }
-  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
   .hero {
-    background: linear-gradient(135deg, #1a1e2e 0%, #ffffff 50%, #0a1a30 100%);
+    background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%);
     border-bottom: 1px solid var(--border);
-    padding: 80px 0 60px;
+    padding: 48px 0 36px;
     text-align: center;
   }
-  .hero h1 { font-size: 3em; font-weight: 800; margin-bottom: 16px; }
+  .hero h1 { font-size: 2.2em; font-weight: 700; margin-bottom: 12px; }
   .hero h1 span { color: var(--yt-red); }
-  .hero p { font-size: 1.2em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
+  .hero p { font-size: 1.05em; color: var(--text-muted); max-width: 700px; margin: 0 auto 30px; }
   .hero .badge {
     display: inline-block; background: var(--surface); border: 1px solid var(--border);
-    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; color: var(--accent2);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.8em; color: var(--text-muted);
   }
   .nav-links { margin-top: 20px; }
   .nav-links a {
@@ -58,7 +59,7 @@
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
     padding: 32px; margin: 40px auto; max-width: 900px;
   }
-  .toc h2 { font-size: 1.4em; margin-bottom: 16px; color: var(--accent); }
+  .toc h2 { font-size: 1.2em; margin-bottom: 16px; color: var(--accent); }
   .toc ol { padding-left: 24px; }
   .toc li { margin: 8px 0; }
   .toc a {
@@ -69,21 +70,21 @@
   .toc .sub { padding-left: 24px; list-style: disc; }
 
   .section {
-    margin: 60px 0; padding-top: 20px; border-top: 1px solid var(--border);
+    margin: 40px 0; padding-top: 16px; border-top: 1px solid var(--border);
   }
   .section-num {
-    font-size: 0.85em; font-weight: 700; color: var(--yt-red);
+    font-size: 0.75em; font-weight: 600; color: var(--yt-red);
     text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
   }
   .section h2 {
-    font-size: 2em; font-weight: 700; margin-bottom: 20px;
+    font-size: 1.6em; font-weight: 600; margin-bottom: 20px;
     color: var(--yt-red);}
   .section h3 {
-    font-size: 1.4em; font-weight: 600; margin: 30px 0 12px;
+    font-size: 1.15em; font-weight: 600; margin: 30px 0 12px;
     color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px;
   }
   .section h4 {
-    font-size: 1.15em; font-weight: 600; margin: 24px 0 10px;
+    font-size: 1em; font-weight: 600; margin: 20px 0 10px;
     color: var(--accent3);
   }
 
@@ -109,14 +110,13 @@
 
   code {
     background: var(--code-bg); border: 1px solid var(--border);
-    padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Menlo, monospace;
+    padding: 2px 8px; border-radius: 4px; font-family: 'JetBrains Mono', 'SF Mono', monospace;
     font-size: 0.9em; color: var(--accent3);
   }
   pre {
     background: var(--code-bg); border: 1px solid var(--border);
     padding: 20px; border-radius: 8px; overflow-x: auto;
-    font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; margin: 16px 0;
-    line-height: 1.5;
+    font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 0.85em; margin: 14px 0; line-height: 1.5;
   }
 
   table {
@@ -128,7 +128,7 @@
     text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
   }
   td {
-    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
   }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: rgba(35,131,226,0.03); }
@@ -142,7 +142,7 @@
     padding: 20px; text-align: center;
   }
   .scale-item .number {
-    font-size: 1.8em; font-weight: 800; color: var(--yt-red);
+    font-size: 1.3em; font-weight: 700; color: var(--yt-red);
   }
   .scale-item .label {
     font-size: 0.85em; color: var(--text-muted); margin-top: 4px;

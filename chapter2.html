@@ -3,28 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <title>Linux Fundamental Concepts - Complete Guide</title>
 <style>
   :root{--bg:#ffffff;--surface:#f7f6f3;--border:#e3e2de;--text:#37352f;--text-muted:#787774;--accent:#2383e2;--accent2:#0f7b0f;--accent3:#6940a5;--accent4:#d9730d;--red:#e03e3e;--code-bg:#ffffff;--card:#ffffff}
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;font-size:16px}
-  .container{max-width:1100px;margin:0 auto;padding:0 24px}
-  .hero{background:linear-gradient(135deg,#1a1e2e 0%,#ffffff 50%,#0a1628 100%);border-bottom:1px solid var(--border);padding:80px 0 60px;text-align:center}
-  .hero h1{font-size:3em;font-weight:800;margin-bottom:16px}
+  body{font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;background:var(--bg);color:var(--text);line-height: 1.6;font-size:16px}
+  .container{max-width: 900px;margin:0 auto;padding:0 24px}
+  .hero{background:linear-gradient(180deg, #fafafa 0%, #ffffff 100%);border-bottom:1px solid var(--border);padding: 48px 0 36px;text-align:center}
+  .hero h1 { font-size: 2.2em;font-weight:800;margin-bottom:16px}
   .hero h1 span{color:var(--accent)}
-  .hero p{font-size:1.2em;color:var(--text-muted);max-width:700px;margin:0 auto 30px}
+  .hero p{font-size: 1.05em; color: var(--text-muted); max-width:700px;margin:0 auto 30px}
   .hero .badge{display:inline-block;background:var(--surface);border:1px solid var(--border);padding:6px 16px;border-radius:20px;font-size:.85em;color:var(--accent2);margin:4px}
   .nav-link{display:inline-block;background:var(--surface);border:1px solid var(--accent);padding:8px 20px;border-radius:8px;color:var(--accent);text-decoration:none;margin:8px 4px;font-size:.9em;transition:all .2s}
   .nav-link:hover{background:var(--accent);color:var(--bg)}
   .toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;margin:40px auto;max-width:900px}
-  .toc h2{font-size:1.4em;margin-bottom:16px;color:var(--accent)}
+  .toc h2 { font-size: 1.2em;margin-bottom:16px;color:var(--accent)}
   .toc-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}
   .toc a{color:var(--text);text-decoration:none;border-bottom:1px dashed var(--border);transition:color .2s;font-size:.95em;display:block;padding:4px 0}
   .toc a:hover{color:var(--accent);border-bottom-color:var(--accent)}
-  .section{margin:60px 0;padding-top:20px;border-top:1px solid var(--border)}
+  .section{margin: 40px 0; padding-top: 16px;border-top:1px solid var(--border)}
   .section-num{font-size:.85em;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
-  .section h2{font-size:2em;font-weight:700;margin-bottom:20px;background:linear-gradient(90deg,var(--accent),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-  .section h3{font-size:1.4em;margin:30px 0 12px;color:var(--accent2);border-left:3px solid var(--accent2);padding-left:12px}
+  .section h2{font-size: 1.6em; font-weight: 600;margin-bottom:20px;background:linear-gradient(90deg,var(--accent),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .section h3{font-size: 1.15em; margin:30px 0 12px;color:var(--accent2);border-left:3px solid var(--accent2);padding-left:12px}
   .section h4{font-size:1.15em;margin:20px 0 8px;color:var(--accent3)}
   .section p{margin:12px 0}
   .section ul,.section ol{margin:12px 0 12px 24px}
