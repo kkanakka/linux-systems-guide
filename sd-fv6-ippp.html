@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Flannel v6 → IPPP Migration - Complete Migration Path at LinkedIn</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f6f3;
+    --border: #e3e2de;
+    --text: #37352f;
+    --text-muted: #787774;
+    --accent: #2383e2;
+    --accent2: #0f7b0f;
+    --accent3: #6940a5;
+    --accent4: #d9730d;
+    --red: #e03e3e;
+    --code-bg: #f7f6f3;
+    --card: #ffffff;
+    --ippp-accent: #0077b5;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+  .hero {
+    background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 0 36px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 2.2em; font-weight: 700; margin-bottom: 12px; }
+  .hero h1 span { color: var(--ippp-accent); }
+  .hero p { font-size: 1.05em; color: var(--text-muted); max-width: 750px; margin: 0 auto 30px; }
+  .hero .badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 0.8em; color: var(--text-muted);
+  }
+  .nav-links { margin-top: 20px; }
+  .nav-links a {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 8px; color: var(--accent); text-decoration: none;
+    margin: 4px; font-size: 0.9em; transition: all 0.2s;
+  }
+  .nav-links a:hover { border-color: var(--accent); background: rgba(35,131,226,0.06); }
+  .nav-links a.ippp { color: var(--ippp-accent); border-color: var(--ippp-accent); }
+  .nav-links a.ippp:hover { background: rgba(0,119,181,0.06); }
+  .nav-links a.purple { color: var(--accent3); border-color: var(--accent3); }
+  .nav-links a.purple:hover { background: rgba(105,64,165,0.06); }
+
+  .toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; margin: 40px auto; max-width: 900px;
+  }
+  .toc h2 { font-size: 1.2em; margin-bottom: 16px; color: var(--ippp-accent); }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin: 8px 0; }
+  .toc a {
+    color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--border);
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--ippp-accent); border-bottom-color: var(--ippp-accent); }
+  .toc .sub { padding-left: 24px; list-style: disc; }
+
+  .section {
+    margin: 40px 0; padding-top: 16px; border-top: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 0.75em; font-weight: 600; color: var(--ippp-accent);
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 1.6em; font-weight: 600; margin-bottom: 20px;
+    color: var(--ippp-accent);
+  }
+  .section h3 { font-size: 1.15em; color: var(--accent); margin: 28px 0 12px; }
+  .section h4 { font-size: 1em; color: var(--accent3); margin: 20px 0 10px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin: 20px 0; }
+  @media (max-width: 768px) {
+    .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 1.6em; }
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px;
+  }
+  .card h4 { margin-top: 0; }
+  .card.ippp-border { border-left: 3px solid var(--ippp-accent); }
+  .card.green-border { border-left: 3px solid var(--accent2); }
+  .card.blue-border { border-left: 3px solid var(--accent); }
+  .card.purple-border { border-left: 3px solid var(--accent3); }
+  .card.orange-border { border-left: 3px solid var(--accent4); }
+  .card.red-border { border-left: 3px solid var(--red); }
+
+  .diagram-box {
+    margin: 30px 0; text-align: center; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px; padding: 24px; overflow: hidden;
+  }
+  .diagram-box img { max-width: 100%; border-radius: 8px; }
+  .diagram-box .caption {
+    margin-top: 12px; font-size: 0.9em; color: var(--text-muted); font-style: italic;
+  }
+
+  .walkthrough {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; margin: 16px 0;
+  }
+  .walkthrough h4 { color: var(--accent2); margin-bottom: 8px; font-size: 0.95em; }
+  .walkthrough ol { padding-left: 20px; }
+  .walkthrough li { margin: 6px 0; color: var(--text-muted); }
+  .walkthrough li strong { color: var(--text); }
+
+  .scale-box {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 20px; margin: 6px; text-align: center;
+  }
+  .scale-box .num { font-size: 1.3em; font-weight: 700; color: var(--ippp-accent); }
+  .scale-box .label { font-size: 0.8em; color: var(--text-muted); }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; overflow-x: auto; font-size: 0.85em; margin: 14px 0; line-height: 1.5;
+  }
+  code { font-family: 'JetBrains Mono', 'SF Mono', monospace; }
+  p code, li code, td code {
+    background: var(--surface); padding: 2px 6px; border-radius: 4px;
+    font-size: 0.9em; color: var(--ippp-accent);
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 20px 0;
+    background: var(--surface); border-radius: 8px; overflow: hidden;
+  }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--card); color: var(--ippp-accent); font-weight: 600; }
+
+  ul { padding-left: 20px; margin: 10px 0; }
+  ul li { margin: 6px 0; }
+
+  .highlight { color: var(--ippp-accent); font-weight: 600; }
+  .green { color: var(--accent2); }
+  .blue { color: var(--accent); }
+  .purple { color: var(--accent3); }
+  .orange { color: var(--accent4); }
+  .red { color: var(--red); }
+
+  .callout {
+    background: rgba(0,119,181,0.05); border: 1px solid rgba(0,119,181,0.2);
+    border-radius: 10px; padding: 20px; margin: 20px 0;
+  }
+  .callout.warning {
+    background: rgba(224,62,62,0.05); border-color: rgba(224,62,62,0.2);
+  }
+  .callout.info {
+    background: rgba(35,131,226,0.05); border-color: rgba(88,166,255,0.3);
+  }
+  .callout.success {
+    background: rgba(15,123,15,0.05); border-color: rgba(15,123,15,0.2);
+  }
+  .callout strong { display: block; margin-bottom: 8px; }
+
+  .timeline { position: relative; padding-left: 30px; margin: 20px 0; }
+  .timeline::before {
+    content: ''; position: absolute; left: 8px; top: 0; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .timeline .event {
+    position: relative; margin-bottom: 20px; padding: 16px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .timeline .event::before {
+    content: ''; position: absolute; left: -26px; top: 20px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--ippp-accent); border: 2px solid #ffffff;
+  }
+  .timeline .event .time { font-size: 0.85em; color: var(--ippp-accent); font-weight: 600; }
+  .timeline .event p { margin-top: 6px; color: var(--text-muted); }
+
+  .status-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 0.78em; font-weight: 600; letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+  .status-badge.not-started { background: rgba(120,119,116,0.12); color: #787774; }
+  .status-badge.in-progress { background: rgba(217,115,13,0.12); color: #d9730d; }
+  .status-badge.completed { background: rgba(15,123,15,0.12); color: #0f7b0f; }
+  .status-badge.blocked { background: rgba(224,62,62,0.12); color: #e03e3e; }
+  .status-badge.ticket-created { background: rgba(105,64,165,0.12); color: #6940a5; }
+
+  .action-table { font-size: 0.92em; }
+  .action-table th { font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px; }
+  .action-table td { vertical-align: top; }
+  .action-table td:first-child { font-weight: 500; }
+
+  .phase-header {
+    background: var(--ippp-accent); color: #fff; padding: 14px 20px;
+    border-radius: 10px 10px 0 0; margin-top: 30px; font-weight: 600; font-size: 1.05em;
+  }
+  .phase-header + table { margin-top: 0; border-radius: 0 0 8px 8px; }
+
+  .footer {
+    border-top: 1px solid var(--border); padding: 40px 0; margin-top: 60px;
+    text-align: center; color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ HERO ═══════════════════════════════════════════ -->
+<div class="hero">
+  <div class="container">
+    <h1><span>Flannel v6 → IPPP</span> Migration</h1>
+    <p>Complete Migration Path from IPv6 Overlay to IP-Per-Pod with Routable Addresses at LinkedIn</p>
+    <div>
+      <span class="badge">Team: KCM</span>
+      <span class="badge">Authors: Kiran Chand Kanakkassery, Sameer Suresh Marulkar</span>
+      <span class="badge">March 2026</span>
+    </div>
+    <div class="nav-links">
+      <a href="sd-index.html" class="ippp">← System Design Index</a>
+      <a href="index.html">Home</a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ TABLE OF CONTENTS ═══════════════════════════════════ -->
+<div class="container">
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li><a href="#overview">Overview &amp; Motivation</a></li>
+      <li><a href="#network-arch">Network Architecture — Flannel v6 vs IPPP</a></li>
+      <li><a href="#phase0">Phase 0 — Dual-Stack Conversion (Current)</a></li>
+      <li><a href="#phase1">Phase 1 — fV6 Only (IPv6 Overlay Preparation)</a></li>
+      <li><a href="#phase2">Phase 2 — Mixed CNI (IPPP Node Rollout)</a></li>
+      <li><a href="#phase3-4">Phase 3 &amp; 4 — All IPPP + Decommission</a></li>
+      <li><a href="#controlplane">Control Plane Analysis</a></li>
+      <li><a href="#dataplane">Data Plane Analysis</a></li>
+      <li><a href="#action-items">Action Items by Phase (Interactive)</a></li>
+      <li><a href="#references">References</a></li>
+    </ol>
+  </div>
+
+  <!-- ══════════════════════ SECTION 1: Overview ══════════════════════ -->
+  <div class="section" id="overview">
+    <div class="section-num">Section 1</div>
+    <h2>Overview &amp; Motivation</h2>
+
+    <p>This document describes the complete migration path from Flannel IPv6 overlay networking to <strong>IP-Per-Pod (IPPP)</strong> with routable IPv6 addresses for Kubernetes clusters at LinkedIn. The migration is divided into four phases, each building on the previous one.</p>
+
+    <h3>End Goal</h3>
+    <div class="grid2">
+      <div class="card ippp-border">
+        <h4 class="highlight">All DP Nodes on IPPP</h4>
+        <p>Every data plane worker node uses <code>ipvlan</code> CNI with routable IPv6 addresses (<code>2a04:f547:...</code>). No Flannel overlay, no VXLAN tunnels, no <code>cni0</code> bridge.</p>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">CP IPv6-Only</h4>
+        <p>All CP nodes bind on <code>[::]</code> and advertise IPv6. IPv4 removed from CP <code>bond0</code>. etcd peer/client over IPv6.</p>
+      </div>
+      <div class="card blue-border">
+        <h4 class="blue">All Services SingleStack IPv6</h4>
+        <p>Every ClusterIP service — CoreDNS, kyverno, infra-webhooks, metrics-server, the <code>kubernetes</code> service itself — runs <code>ipFamilyPolicy: SingleStack</code> with <code>ipFamilies: [IPv6]</code>.</p>
+      </div>
+      <div class="card purple-border">
+        <h4 class="purple">kube-proxy nftables</h4>
+        <p>All nodes use kube-proxy in nftables mode with O(1) verdict map lookups. No iptables <code>KUBE-SERVICES</code> chains, no IPVS <code>kube-ipvs0</code> dummy device.</p>
+      </div>
+    </div>
+
+    <h3>Key Benefits</h3>
+    <div class="grid3">
+      <div class="scale-box"><div class="num">0</div><div class="label">Overlay Hops</div></div>
+      <div class="scale-box"><div class="num">0</div><div class="label">NAT Operations</div></div>
+      <div class="scale-box"><div class="num">2</div><div class="label">IPs in Conntrack</div></div>
+    </div>
+    <p>Pod-to-pod communication is equivalent to bare-metal server communication. Zero overlay, zero NAT, fully routable IPv6 addresses. Conntrack entries drop from 4 IPs (Flannel) to just 2 (source + destination).</p>
+
+    <h3>Out of Scope</h3>
+    <table>
+      <tr><th>Item</th><th>Reason</th></tr>
+      <tr><td>KSAP/NSS from hostNetwork to IPPP</td><td>Separate project; depends on stacking support, noisy-neighbor isolation on shared <code>bond0</code>, and application readiness</td></tr>
+      <tr><td>Hostname project (DNS discovery replacement)</td><td>Not part of this migration. Services continue using ClusterIP-based discovery via kube-proxy nftables</td></tr>
+      <tr><td>Stateful workloads (Kafka, Espresso, Venice)</td><td>Use host IPs directly, unaffected by CNI changes</td></tr>
+      <tr><td>kube-proxy removal</td><td>Remains in nftables mode; removal requires hostname/disco project completion</td></tr>
+      <tr><td>CoreDNS removal</td><td>Continues as in-cluster DNS provider; DCL-only DNS is a separate project</td></tr>
+      <tr><td>Cross-cluster IPPP communication</td><td>Single cluster scope only</td></tr>
+    </table>
+
+    <h3>Reviewers</h3>
+    <table>
+      <tr><th>Reviewer</th><th>Status</th></tr>
+      <tr><td>Steven Ihde</td><td><span class="status-badge not-started">Not Started</span></td></tr>
+      <tr><td>Ronak Nathani</td><td><span class="status-badge not-started">Not Started</span></td></tr>
+      <tr><td>Lavanya Rangaswamy</td><td><span class="status-badge not-started">Not Started</span></td></tr>
+    </table>
+
+    <div class="diagram-box">
+      <img src="images/sd_ippp_01_phases.png" alt="4-Phase Migration Plan">
+      <div class="caption">Fig 1: 4-Phase Migration Plan — DS → fV6 → Mixed CNI → All IPPP → Decommission</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════ SECTION 2: Network Architecture ══════════════════════ -->
+  <div class="section" id="network-arch">
+    <div class="section-num">Section 2</div>
+    <h2>Network Architecture — Flannel v6 vs IPPP</h2>
+
+    <div class="grid2">
+      <div class="card orange-border">
+        <h4 class="orange">Flannel v6 (Current Overlay)</h4>
+        <ul>
+          <li><strong>CIDR:</strong> <code>2a04:f540:fe00::/41</code> — non-routable overlay</li>
+          <li><strong>Encapsulation:</strong> VXLAN tunnels via <code>flannel-v6.1</code></li>
+          <li><strong>Bridge:</strong> <code>cni0</code> (Linux bridge per node)</li>
+          <li><strong>Conntrack:</strong> 4 IPs per flow (src pod → src host → dst host → dst pod)</li>
+          <li><strong>NAT:</strong> MASQUERADE via ip6tables for cross-subnet</li>
+          <li><strong>Devices:</strong> <code>flannel-v6.1</code>, <code>cni0</code>, <code>vethXXXX</code></li>
+        </ul>
+      </div>
+      <div class="card green-border">
+        <h4 class="green">IPPP (Target — IP-Per-Pod)</h4>
+        <ul>
+          <li><strong>CIDR:</strong> <code>2a04:f547:...</code> — routable from host subnet</li>
+          <li><strong>Mode:</strong> ipvlan on <code>bond0</code> (L3 mode)</li>
+          <li><strong>Routing:</strong> Direct over physical network — kernel routes</li>
+          <li><strong>Conntrack:</strong> 2 IPs per flow (src pod → dst pod)</li>
+          <li><strong>NAT:</strong> Zero — fully routable, no MASQUERADE</li>
+          <li><strong>Devices:</strong> <code>ipvl_bond0_X</code> (one per pod)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="diagram-box">
+      <img src="images/sd_ippp_02_topology.png" alt="Network Topology Comparison">
+      <div class="caption">Fig 2: Flannel v6 Overlay vs IPPP Direct Routing — Packet Path Comparison</div>
+    </div>
+
+    <h3>Comparison Table</h3>
+    <table>
+      <tr><th>Aspect</th><th>Flannel v6</th><th>IPPP</th></tr>
+      <tr><td><strong>CNI Plugin</strong></td><td><code>10-flannel.conflist</code></td><td><code>ipvlan_nw.conf</code></td></tr>
+      <tr><td><strong>IP Type</strong></td><td>Non-routable overlay (<code>2a04:f540:fe00::/41</code>)</td><td>Routable host-subnet (<code>2a04:f547:...</code>)</td></tr>
+      <tr><td><strong>Routing</strong></td><td>VXLAN encap/decap through <code>flannel-v6.1</code></td><td>Direct kernel routing via <code>bond0</code></td></tr>
+      <tr><td><strong>NAT</strong></td><td>ip6tables MASQUERADE for cross-subnet</td><td>None</td></tr>
+      <tr><td><strong>Conntrack Entries</strong></td><td>4 IPs per connection</td><td>2 IPs per connection</td></tr>
+      <tr><td><strong>Network Devices</strong></td><td><code>flannel-v6.1</code>, <code>cni0</code>, <code>vethXXXX</code></td><td><code>ipvl_bond0_X</code></td></tr>
+      <tr><td><strong>Performance</strong></td><td>Overlay overhead (encap/decap + bridge)</td><td>Bare-metal equivalent</td></tr>
+      <tr><td><strong>Troubleshooting</strong></td><td>Complex (overlay IPs, NAT, tunnels)</td><td>Simple (routable IPs, <code>tcpdump bond0</code>)</td></tr>
+    </table>
+  </div>
+
+  <!-- ══════════════════════ SECTION 3: Phase 0 ══════════════════════ -->
+  <div class="section" id="phase0">
+    <div class="section-num">Section 3</div>
+    <h2>Phase 0 — Dual-Stack Conversion (Current)</h2>
+
+    <p>Before any IPv6-only or IPPP migration can begin, all nodes must have both IPv4 and IPv6 podCIDRs assigned. This is the dual-stack conversion phase — currently in progress across all environments.</p>
+
+    <div class="callout info">
+      <strong>Current Status</strong>
+      ~18 PROD clusters still pending dual-stack conversion. EI and Corp environments are largely complete. GPU node pools require special handling due to scheduling constraints.
+    </div>
+
+    <h3>Action Items</h3>
+    <table>
+      <tr><th>Action</th><th>Owner</th><th>Status</th><th>Deadline</th><th>Notes</th></tr>
+      <tr>
+        <td>Complete dual-stack conversion in all Prod clusters</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>May 15</td>
+        <td>Started Jan '26, ~18 clusters pending</td>
+      </tr>
+      <tr>
+        <td>GPU node dual-stack conversion</td>
+        <td>GPU SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Mar 15</td>
+        <td>MLI workloads may slip timeline</td>
+      </tr>
+      <tr>
+        <td>EI k8s-0 dual-stack completion</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Apr 30</td>
+        <td>EI environments on accelerated path</td>
+      </tr>
+      <tr>
+        <td>Corp cluster dual-stack rollout</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Apr 30</td>
+        <td>Lower risk — fewer workloads</td>
+      </tr>
+    </table>
+
+    <h3>Phases Summary</h3>
+    <table>
+      <tr><th>Phase</th><th>State</th><th>What Changes</th></tr>
+      <tr>
+        <td><strong class="highlight">1 — fV6 Only</strong></td>
+        <td><code>EnableIPv4=false</code>, <code>EnableIPv6=true</code></td>
+        <td>IPv6-only overlay. All services dual-stack. kube-proxy nftables. CP binds <code>[::]</code>. DCL IPv6.</td>
+      </tr>
+      <tr>
+        <td><strong class="highlight">2 — Mixed CNI</strong></td>
+        <td>fV6 Flannel + IPPP coexist</td>
+        <td>Roll IPPP to DP node pools. flanneld stays as route helper on IPPP nodes.</td>
+      </tr>
+      <tr>
+        <td><strong class="highlight">3 — All IPPP</strong></td>
+        <td>All DP on IPPP, CP converting</td>
+        <td>Audit IPv4 deps. Remove IPv4 from CP. Clean up Flannel CIDRs.</td>
+      </tr>
+      <tr>
+        <td><strong class="highlight">4 — Decommission</strong></td>
+        <td>Pure IPPP, pure IPv6</td>
+        <td>Remove flanneld, Flannel configs, UCM cleanup. Replace CP nodes.</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ══════════════════════ SECTION 4: Phase 1 ══════════════════════ -->
+  <div class="section" id="phase1">
+    <div class="section-num">Section 4</div>
+    <h2>Phase 1 — fV6 Only (IPv6 Overlay Preparation)</h2>
+
+    <p>Phase 1 prepares the entire cluster for IPv6. No IPPP nodes are introduced yet. The goal: every component must be ready for IPv6 communication so that IPPP nodes can join seamlessly in Phase 2.</p>
+
+    <div class="callout">
+      <strong>After Phase 1 Completes:</strong>
+      Pods have IPv6-only overlay interfaces (no IPv4). The host remains dual-stack. All services have IPv6 ClusterIPs. API server accepts IPv6 connections. kube-proxy runs in nftables mode.
+    </div>
+
+    <h3>kube-proxy: iptables → nftables</h3>
+
+    <h4>Why nftables over IPVS</h4>
+    <p>Existing IPPP test clusters use IPVS mode, but upstream Kubernetes has signaled IPVS is "doomed in the long run." nftables provides the same O(1) lookup via verdict maps without IPVS's downsides: no <code>kube-ipvs0</code> dummy device, no <code>ip_vs</code> kernel modules, no IPVS scheduler limitations. nftables is beta in K8s 1.31 (feature gate on by default) and GA in 1.33.</p>
+
+    <h4>ConfigMap Template Change</h4>
+    <pre><code># BEFORE (templates/configmap.yaml):
+bindAddress: 0.0.0.0
+healthzBindAddress: 0.0.0.0:{{ .Values.kubeProxyHealthzPort }}
+metricsBindAddress: 0.0.0.0:13276
+
+# AFTER:
+bindAddress: '::'
+healthzBindAddress: '[::]:{{ .Values.kubeProxyHealthzPort }}'
+metricsBindAddress: '[::]:13276'</code></pre>
+
+    <h4>Per-Cluster Values Change</h4>
+    <pre><code># BEFORE -- values/prod-ltx1/k8s-33/values.yaml:
+clusterCidr: "100.96.0.0/12,2a04:f540:fe00::/41"
+
+# AFTER:
+kubeProxyMode: nftables
+clusterCidr: "100.96.0.0/12,2a04:f540:fe00::/41,2a04:f547:93:411:461::/80"
+#                                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+#                                                 IPPP pod CIDR added now</code></pre>
+
+    <div class="callout warning">
+      <strong>NodePort Behavior Change</strong>
+      In nftables mode, NodePort services are only reachable on the node's default IPs, NOT on <code>127.0.0.1</code>. Verify health checks and monitoring before rollout.
+    </div>
+
+    <h3>API Server, etcd, Controller, Scheduler Bind Changes</h3>
+
+    <div class="diagram-box">
+      <img src="images/sd_ippp_04_controlplane.png" alt="Control Plane IPv6 Bind Changes">
+      <div class="caption">Fig 4: Control Plane Components — IPv4 to Dual-Stack Bind Address Migration</div>
+    </div>
+
+    <h4>API Server</h4>
+    <pre><code># BEFORE:
+--bind-address=0.0.0.0       # IPv4 only
+--advertise-address=0.0.0.0  # auto-detects to IPv4
+
+# AFTER:
+--bind-address=::            # binds both IPv4 and IPv6 (:: is dual-stack)
+--advertise-address=2a04:f547:23:d90b::d2d9   # explicit IPv6 node address</code></pre>
+
+    <h4>etcd</h4>
+    <pre><code># BEFORE:
+--listen-client-urls=https://0.0.0.0:6625,http://127.0.0.1:3171
+--listen-peer-urls=https://0.0.0.0:6626
+
+# AFTER:
+--listen-client-urls=https://[::]:6625,http://[::1]:3171
+--listen-peer-urls=https://[::]:6626
+# advertise URLs use hostnames (DNS resolves to both v4/v6) — no change</code></pre>
+
+    <p>When CP nodes go IPv6-only (Phase 3), API server resolves etcd DNS and gets only AAAA. If etcd only listens on <code>0.0.0.0</code> (IPv4), IPv6 connections fail → API server loses etcd → cluster down. Changing now is safe — <code>[::]</code> accepts both.</p>
+
+    <h4>Controller Manager &amp; Scheduler</h4>
+    <pre><code># BEFORE:
+--bind-address=0.0.0.0  # health/metrics endpoint IPv4 only
+
+# AFTER:
+--bind-address=::       # health/metrics endpoint on both v4 and v6</code></pre>
+
+    <h3>CoreDNS PreferDualStack</h3>
+    <p>CoreDNS service must be converted to <code>PreferDualStack</code> so it gets both IPv4 and IPv6 ClusterIPs. This allows fV6 pods to reach CoreDNS via IPv6 while IPv4 pods still work during transition.</p>
+
+    <h3>DCL IPv6 Support</h3>
+    <ul>
+      <li><strong>Bind address:</strong> <code>[fd7a:7be2:2965:0:127::1]:53</code> — ULA for IPPP pods to reach DCL</li>
+      <li><strong>Upstream:</strong> IPv6 CoreDNS ClusterIP (<code>2a04:f540:fe80::c744</code>)</li>
+      <li><strong>IPv6 reverse PTR support:</strong> PSSEINFRA-6774 (In Progress)</li>
+      <li><strong>IPv6 k8s group support:</strong> PSSEINFRA-6773 (Ticket Created)</li>
+    </ul>
+
+    <h3>All Services → PreferDualStack</h3>
+    <p>Every ClusterIP service must be converted to <code>PreferDualStack</code> so IPv6-only pods can reach them. Currently <strong>39 of 39 non-headless services are SingleStack IPv4</strong> — this is the single biggest blocker.</p>
+
+    <h3>Kubelet clusterDNS → IPv6</h3>
+    <p>Kubelet's <code>clusterDNS</code> setting changes from <code>[10.244.0.10]</code> (IPv4 CoreDNS) to the IPv6 DCL ULA <code>[fd7a:7be2:2965:0:127::1]</code>. Rolled out colo-by-colo.</p>
+  </div>
+
+  <!-- ══════════════════════ SECTION 5: Phase 2 ══════════════════════ -->
+  <div class="section" id="phase2">
+    <div class="section-num">Section 5</div>
+    <h2>Phase 2 — Mixed CNI (IPPP Node Rollout)</h2>
+
+    <p>With Phase 1 complete, the cluster is ready for IPPP nodes. Phase 2 converts data plane node pools from fV6 Flannel to IPPP, one pool at a time.</p>
+
+    <div class="diagram-box">
+      <img src="images/sd_ippp_03_crosscni.png" alt="Cross-CNI Communication">
+      <div class="caption">Fig 3: Mixed CNI State — fV6 Flannel and IPPP Nodes Coexisting in One Cluster</div>
+    </div>
+
+    <h3>How Mixed CNI Works</h3>
+    <p><code>flanneld</code> runs on IPPP nodes as a DaemonSet but is <strong>NOT</strong> the CNI plugin. The active CNI is <code>ipvlan_nw.conf</code>. flanneld programs VXLAN FDB entries and routes, enabling the IPPP node to reach fV6 overlay pods through <code>flannel-v6.1</code>.</p>
+
+    <h3>Cross-CNI Communication — 4 Scenarios</h3>
+    <div class="grid2">
+      <div class="card green-border">
+        <h4 class="green">fV6 → fV6</h4>
+        <p>Both pods on overlay. VXLAN encap through <code>flannel-v6.1</code>. Standard Flannel path. No change from today.</p>
+      </div>
+      <div class="card ippp-border">
+        <h4 class="highlight">IPPP → IPPP</h4>
+        <p>Both pods routable. Direct over physical network. No overlay, no NAT. Bare-metal equivalent. Only 2 IPs.</p>
+      </div>
+      <div class="card orange-border">
+        <h4 class="orange">fV6 → IPPP</h4>
+        <p>Flannel kernel routing doesn't match IPPP CIDR → default route via <code>bond0</code>. ip6tables MASQUERADE rewrites source to host's <code>bond0</code> IP. IPPP pod sees Flannel host's node IP.</p>
+      </div>
+      <div class="card purple-border">
+        <h4 class="purple">IPPP → fV6</h4>
+        <p>IPPP node's flanneld (route helper) has VXLAN route for Flannel CIDR. Packet is VXLAN-encapsulated to the Flannel node's VTEP, decapsulated, delivered via <code>cni0</code>.</p>
+      </div>
+    </div>
+
+    <h3>UCM nimbus-ippp Profile</h3>
+
+    <h4>coresysctl.yaml — Remove IPVS Settings</h4>
+    <pre><code># BEFORE (profile/nimbus-ippp/coresysctl.yaml):
+coresysctl::sysctl_d:
+  - name: 'nimbus-ippp'
+    sysctls:
+      net.ipv6.conf.all.forwarding: 1
+      net.ipv4.vs.conntrack: 1                 # IPVS — REMOVE
+      net.ipv4.vs.expire_nodest_conn: 1        # IPVS — REMOVE
+      net.ipv4.vs.expire_quiescent_template: 1 # IPVS — REMOVE
+
+# AFTER:
+coresysctl::sysctl_d:
+  - name: 'nimbus-ippp'
+    sysctls:
+      net.ipv6.conf.all.forwarding: 1</code></pre>
+
+    <h4>coremodprobe.yaml — Remove IPVS Modules</h4>
+    <pre><code># BEFORE (profile/nimbus-ippp/coremodprobe.yaml):
+coremodprobe::load:
+  ip_vs:     # IPVS — REMOVE
+  ip_vs_rr:  # IPVS — REMOVE
+  ip_vs_wrr: # IPVS — REMOVE
+  ip_vs_sh:  # IPVS — REMOVE
+
+# AFTER:
+coremodprobe::load: {}
+# nf_tables auto-loads when kube-proxy uses nft commands</code></pre>
+
+    <h4>coredcl.yaml — Already Correct</h4>
+    <pre><code>coredcl::k8s_endpoints:
+  - '2a04:f540:fe80::c744'   # IPv6-only CoreDNS</code></pre>
+
+    <h3>KCM IPvlan Node Configuration Revision</h3>
+    <pre><code># KubernetesNodeConfigurationRevision:
+spec:
+  cniType: IPvlan
+  kubeletConfig:
+    kubelet_config_file_contents: |
+      address: '::'
+      clusterDNS:
+        - fd7a:7be2:2965:0:127::1   # DCL ULA only
+      healthzBindAddress: '::'</code></pre>
+
+    <h3>Compute Broker: IPPP Node Pools</h3>
+    <pre><code># K8s Release Channel:
+K8SReleaseChannel: WORKER_NODE_IP_PER_POD
+
+# Compute Broker Pool:
+cniType: IPvlan</code></pre>
+
+    <h3>Validation Checklist</h3>
+    <div class="walkthrough">
+      <h4>Pre-IPPP Node Join Checklist</h4>
+      <ol>
+        <li><strong>kube-proxy nftables</strong> — <code>nft list ruleset</code> shows kube-proxy tables on existing nodes</li>
+        <li><strong>All services PreferDualStack</strong> — <code>kubectl get svc -A</code> shows IPv6 ClusterIPs</li>
+        <li><strong>DCL IPv6</strong> — <code>dig @fd7a:7be2:2965:0:127::1 kubernetes.default.svc.cluster.local AAAA</code></li>
+        <li><strong>Cross-CNI validation</strong> — IPPP pod can reach fV6 pod and vice versa</li>
+        <li><strong>API server webhooks</strong> — API server can reach IPPP webhook pods</li>
+        <li><strong>Konnectivity</strong> — <code>kubectl exec</code> works on IPPP pods</li>
+        <li><strong>DFW rules</strong> — IPPP pod CIDR allowed in firewall</li>
+        <li><strong>k8s-metrics-agent</strong> — <code>--ipv6-per-pod-enabled=true</code></li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ══════════════════════ SECTION 6: Phase 3 & 4 ══════════════════════ -->
+  <div class="section" id="phase3-4">
+    <div class="section-num">Section 6</div>
+    <h2>Phase 3 &amp; 4 — All IPPP + Decommission</h2>
+
+    <h3>Phase 3: CP IPv6-Only Conversion</h3>
+    <p>Once all DP nodes are IPPP and IPv4 dependencies are resolved, remove IPv4 from CP node <code>bond0</code> interfaces. All CP components already listen on <code>[::]</code> from Phase 1.</p>
+
+    <h4>IPv4 Dependency Audit</h4>
+    <table>
+      <tr><th>Component</th><th>Current IPv4 Usage</th><th>Action</th></tr>
+      <tr><td>Skyfall</td><td>Kafka brokers via <code>atd.prod</code> (IPv4-preferred DNS)</td><td>Switch to <code>atd-ipv6</code> disco endpoints</td></tr>
+      <tr><td>DFW rules</td><td>ACLDB may not include IPPP CIDRs</td><td>Verify IPPP CIDRs in DFW-DB allow rules</td></tr>
+      <tr><td>LNKD-otelcontribcol</td><td>DP-only agent, untested on IPv6</td><td>Verify with owning team</td></tr>
+      <tr><td>fd-sb-client-agent</td><td>DP-only network monitoring agent</td><td>Verify with owning team</td></tr>
+      <tr><td>droplet</td><td>DP-only Nimbus agent</td><td>Verify with owning team</td></tr>
+    </table>
+
+    <h3>Phase 4: Flannel Decommission</h3>
+    <p>With all nodes on IPPP, remove all Flannel-related configuration.</p>
+
+    <h4>Items to Remove</h4>
+    <table>
+      <tr><th>Item</th><th>Location</th><th>How</th></tr>
+      <tr><td>flanneld DaemonSet</td><td><code>k8s-flanneld</code> Helm chart</td><td>Remove ArgoCD application</td></tr>
+      <tr><td><code>kube-flannel-cfg</code> ConfigMap</td><td><code>kube-system</code> namespace</td><td>Removed with chart</td></tr>
+      <tr><td><code>10-flannel.conflist</code></td><td><code>ucm-k8s-kubernetes-node/files/</code></td><td>Delete file from module</td></tr>
+      <tr><td><code>k8s_dcl_iptable_rules.sh</code></td><td><code>ucm-k8s-kubernetes-node/files/</code></td><td>Delete file from module</td></tr>
+      <tr><td><code>dcl_iptables.pp</code></td><td><code>ucm-k8s-kubernetes-node/manifests/services/</code></td><td>Delete class</td></tr>
+      <tr><td>Flannel conditional in <code>init.pp</code></td><td><code>ucm-k8s-kubernetes-node/manifests/</code></td><td>Remove <code>if cni_type=='Flannel'</code> block</td></tr>
+      <tr><td>Flannel CIDRs in <code>--cluster-cidr</code></td><td>UCM CP config</td><td>Update controller-manager flags</td></tr>
+      <tr><td>IPv4 CIDRs in kube-proxy</td><td>kube-proxy Helm values</td><td><code>clusterCidr</code>: IPPP CIDR only</td></tr>
+      <tr><td>IPv4 CIDRs in ArgoCD <code>NO_PROXY</code></td><td><code>k8s-argocd</code> Helm values</td><td>Remove <code>10.0.0.0/8</code>, <code>100.96.0.0/12</code></td></tr>
+    </table>
+
+    <h3>Service Finalization</h3>
+    <pre><code># All services → SingleStack IPv6:
+ipFamilyPolicy: SingleStack
+ipFamilies: [IPv6]
+
+# kube-proxy — IPPP CIDR only:
+clusterCidr: "2a04:f547:93:411:461::/80"
+
+# Controller manager — remove Flannel CIDRs:
+--cluster-cidr: 2a04:f547:93:411:461::/80</code></pre>
+
+    <h3>Final Verification Commands</h3>
+    <pre><code># Per-node verification:
+nft list ruleset | grep kube-proxy        # shows kube-proxy nftables
+iptables -t nat -L KUBE-SERVICES          # empty or "No chain"
+iptables -t nat -L | grep FLANNEL         # no matches
+ip link show flannel.1 2>&1               # "does not exist"
+ip link show flannel-v6.1 2>&1            # "does not exist"
+ip link show cni0 2>&1                    # "does not exist"
+
+# Cluster-wide:
+kubectl get pods -A -o wide               # all IPs are 2a04:f547:...
+kubectl get svc -A                        # all ClusterIPs are IPv6
+kubectl exec test -- nslookup kubernetes.default   # resolves IPv6
+conntrack -L -d &lt;api-ipv6&gt;                # direct connections, no MASQ</code></pre>
+  </div>
+
+  <!-- ══════════════════════ SECTION 7: Control Plane Analysis ══════════════════════ -->
+  <div class="section" id="controlplane">
+    <div class="section-num">Section 7</div>
+    <h2>Control Plane Analysis</h2>
+
+    <h3>API Server Flags &amp; Migration Impact</h3>
+    <table>
+      <tr><th>Flag</th><th>Value</th><th>Migration Impact</th></tr>
+      <tr>
+        <td><code>--service-cluster-ip-range</code></td>
+        <td><code>10.244.0.0/16, 2a04:f540:fe80::/108</code></td>
+        <td><span class="green"><strong>Safe.</strong></span> Already dual-stack. IPPP uses same service CIDR. No change needed.</td>
+      </tr>
+      <tr>
+        <td><code>--enable-aggregator-routing</code></td>
+        <td><code>true</code></td>
+        <td><span class="red"><strong>Risk.</strong></span> On K8s 1.31, Endpoints for IPv4-only services won't contain IPv6 pod IPs → <code>kubectl top</code> and HPA break. Requires K8s 1.34.</td>
+      </tr>
+      <tr>
+        <td><code>--enable-admission-plugins</code></td>
+        <td><code>MutatingAdmissionWebhook, ValidatingAdmissionWebhook</code></td>
+        <td><span class="red"><strong>Risk.</strong></span> API server connects directly to webhook pod IPs. On K8s 1.31, IPv4-only webhook services won't list IPv6 IPPP IPs → webhooks unreachable.</td>
+      </tr>
+      <tr>
+        <td><code>--advertise-address</code></td>
+        <td><code>0.0.0.0</code></td>
+        <td><span class="green"><strong>Safe.</strong></span> Listens on all interfaces including <code>bond0</code> IPv6.</td>
+      </tr>
+      <tr>
+        <td><code>--egress-selector-config-file</code></td>
+        <td>NOT SET</td>
+        <td><span class="green"><strong>Beneficial.</strong></span> No Konnectivity tunnel — API server connects directly to pod IPs. Natural split path during mixed state.</td>
+      </tr>
+    </table>
+
+    <h3>The K8s 1.34 Blocker</h3>
+    <div class="callout warning">
+      <strong>Critical Dependency: K8s 1.34 + Dual-Stack Services MUST come BEFORE any IPPP node rollout</strong>
+      On K8s 1.31, the Endpoints object for an IPv4-only service won't contain IPv6 pod IPs. When a webhook pod moves to IPPP and gets an IPv6 address, the API server's endpoint resolver sees nothing for that pod — it disappears from the pool.
+    </div>
+    <pre><code># Before IPPP:
+Endpoints("k8s-kyverno-svc") = [100.96.2.5, 100.96.1.5, 100.96.2.133]
+
+# After 1 pod moves to IPPP:
+Endpoints = [100.96.2.5, 100.96.1.5]  ← third pod GONE
+            (IPv6 IP 2a04:f547:... not listed in IPv4-only Endpoints)</code></pre>
+
+    <h3>Pod → API Server Traffic Flow</h3>
+    <table>
+      <tr><th>Scenario</th><th>Path</th><th>NAT Ops</th><th>Conntrack IPs</th></tr>
+      <tr>
+        <td><strong>Current (IPv4 DS)</strong></td>
+        <td>Pod <code>100.96.x</code> → ClusterIP <code>10.244.0.1</code> → DNAT → MASQUERADE → API server</td>
+        <td>2</td>
+        <td>4</td>
+      </tr>
+      <tr>
+        <td><strong>Future fV6</strong></td>
+        <td>Pod <code>2a04:f540:...</code> → IPv6 ClusterIP → DNAT → MASQUERADE → API server</td>
+        <td>2</td>
+        <td>4</td>
+      </tr>
+      <tr>
+        <td><strong class="green">Future IPPP</strong></td>
+        <td>Pod <code>2a04:f547:...</code> → IPv6 ClusterIP → DNAT → <strong>direct, NO MASQUERADE</strong> → API server sees pod's real IP</td>
+        <td>1</td>
+        <td>3</td>
+      </tr>
+    </table>
+
+    <h3>API Server → Pod Traffic Flow</h3>
+    <table>
+      <tr><th>Scenario</th><th>Path</th><th>Overlay?</th></tr>
+      <tr>
+        <td><strong>Current (IPv4 DS)</strong></td>
+        <td>API server → Endpoints → <code>100.96.x:port</code> → MASQUERADE → VXLAN → <code>cni0/veth</code> → pod</td>
+        <td>Yes (VXLAN)</td>
+      </tr>
+      <tr>
+        <td><strong>Future fV6</strong></td>
+        <td>Same pattern, all IPv6. VXLAN over IPv6.</td>
+        <td>Yes (VXLAN)</td>
+      </tr>
+      <tr>
+        <td><strong class="green">Future IPPP</strong></td>
+        <td>API server → EndpointSlices → <code>2a04:f547:...:port</code> → route via <code>bond0</code> → <strong>direct, no overlay, no NAT</strong></td>
+        <td>No</td>
+      </tr>
+    </table>
+
+    <h3>TLS Certificate Analysis Summary</h3>
+    <table>
+      <tr><th>Certificate</th><th>Has IPv6 IP SAN</th><th>Has IPv6 DNS SANs</th><th>Change Needed</th></tr>
+      <tr>
+        <td>API Server (<code>apiserver.cert</code>)</td>
+        <td><span class="green">✓</span> <code>2A04:F547:23:D90B::D2D9</code></td>
+        <td><span class="green">✓</span> <code>atd-ipv6</code>, <code>atd-udp-ipv6</code></td>
+        <td><span class="green">None</span></td>
+      </tr>
+      <tr>
+        <td>etcd Client (<code>identity.cert</code>)</td>
+        <td><span class="green">✓</span> <code>2A04:F547:23:D90B::D2D9</code></td>
+        <td><span class="green">✓</span></td>
+        <td><span class="green">None</span></td>
+      </tr>
+      <tr>
+        <td>etcd Peer (<code>etcd.cert</code>)</td>
+        <td><span class="green">✓</span> <code>2A04:F547:23:D90B::D2D9</code></td>
+        <td><span class="green">✓</span></td>
+        <td><span class="green">None</span></td>
+      </tr>
+      <tr>
+        <td>Controller (<code>controller.cert</code>)</td>
+        <td><span class="green">✓</span> <code>2A04:F547:23:D90B::D2D9</code></td>
+        <td><span class="green">✓</span></td>
+        <td><span class="green">None</span></td>
+      </tr>
+      <tr>
+        <td>Scheduler (<code>scheduler.cert</code>)</td>
+        <td><span class="green">✓</span> <code>2A04:F547:23:D90B::D2D9</code></td>
+        <td><span class="green">✓</span></td>
+        <td><span class="green">None</span></td>
+      </tr>
+      <tr>
+        <td>Service Account (<code>service_account.cert</code>)</td>
+        <td>N/A (signing cert)</td>
+        <td><span class="green">✓</span></td>
+        <td><span class="green">None</span></td>
+      </tr>
+    </table>
+    <p><strong>P3 note:</strong> API server cert has <code>IP:10.244.0.1</code> (IPv4 ClusterIP) but not the IPv6 ClusterIP. Add <code>2a04:f540:fe80::1</code> to SAN for <code>KUBERNETES_SERVICE_HOST</code> direct-IP connections.</p>
+  </div>
+
+  <!-- ══════════════════════ SECTION 8: Data Plane Analysis ══════════════════════ -->
+  <div class="section" id="dataplane">
+    <div class="section-num">Section 8</div>
+    <h2>Data Plane Analysis</h2>
+
+    <h3>Host Agents Audit</h3>
+    <table>
+      <tr><th>Agent</th><th>Type</th><th>Migration Impact</th></tr>
+      <tr><td><code>obhc-agent</code></td><td>systemd, 30+ sub-checks</td><td><code>[kubernetes]</code> checker may probe pod IPs. Needs review for CIDR assumptions.</td></tr>
+      <tr><td><code>dfwd.service</code></td><td>DFW host agent</td><td><span class="red"><strong>Must</strong></span> allow IPPP pod CIDR traffic in rules.</td></tr>
+      <tr><td><code>skyfall.service</code></td><td>Monitoring agent</td><td>Check pod CIDR metric filters. Switch to <code>atd-ipv6</code> disco endpoints.</td></tr>
+      <tr><td><code>argos-agent</code></td><td>NetEng fault detection</td><td>Check for <code>flannel.1</code> interface assumptions.</td></tr>
+      <tr><td><code>rain_agent</code></td><td>Metrics collection</td><td>Check for pod CIDR metric paths.</td></tr>
+      <tr><td><code>inquery-agent</code></td><td>Fact collection</td><td>Check network interface enumeration.</td></tr>
+      <tr><td><code>droplet.service</code></td><td>Nimbus agent (DP-only)</td><td>Check for pod CIDR assumptions.</td></tr>
+      <tr><td><code>fd-sb-client-agent</code></td><td>Fault detection sideband</td><td>Network monitoring — check flannel interface assumptions.</td></tr>
+      <tr><td><code>k8s-metrics-agent</code></td><td>Pod metrics (hostNetwork)</td><td><span class="red"><strong>BLOCKER:</strong></span> <code>--ipv6-per-pod-enabled=false</code> → must be <code>true</code></td></tr>
+    </table>
+
+    <h3>Key DaemonSet Pods on DP Node</h3>
+    <table>
+      <tr><th>DaemonSet Pod</th><th>hostNetwork</th><th>Impact</th></tr>
+      <tr><td><code>kube-flannel-ds-amd64</code></td><td>true</td><td>Removed on IPPP nodes (CNI switches to ipvlan)</td></tr>
+      <tr><td><code>kube-proxy</code></td><td>true</td><td>Must switch to nftables mode for IPPP</td></tr>
+      <tr><td><code>k8s-metrics-agent</code></td><td>true</td><td><span class="red"><strong>Blocker</strong></span> — <code>--ipv6-per-pod-enabled=false</code></td></tr>
+      <tr><td><code>konnectivity-agent</code></td><td class="red"><strong>false</strong> (podNetwork)</td><td>Must work on IPPP podNetwork</td></tr>
+      <tr><td><code>k8s-datapack-agent</code></td><td class="red"><strong>false</strong> (podNetwork)</td><td>Must work on IPPP podNetwork</td></tr>
+      <tr><td><code>li-cert-manager-csi-driver</code></td><td class="red"><strong>false</strong> (podNetwork)</td><td>CSI driver — must work on IPPP</td></tr>
+      <tr><td><code>k8s-webhook-probe</code></td><td class="red"><strong>false</strong> (podNetwork)</td><td>Must work on IPv6 pod IPs</td></tr>
+      <tr><td><code>node-exporter</code></td><td>true</td><td>No pod network dependency</td></tr>
+      <tr><td><code>fluent-bit</code></td><td>true</td><td>Collects logs — no CIDR dependency</td></tr>
+    </table>
+
+    <h3>Port Conflicts Analysis</h3>
+    <p>These services share ports and are co-located — they <strong>MUST</strong> stay on podNetwork (each gets a unique pod IP). This is <strong>not</strong> a problem for IPPP (ipvlan gives each pod a unique IP), only for a hypothetical hostNetwork approach.</p>
+
+    <h4>Port 9443 Conflict (4 workloads)</h4>
+    <table>
+      <tr><th>Node</th><th>Co-located Services</th></tr>
+      <tr><td><code>ltx1-app152341</code></td><td>kyverno-admission-controller + uqm-webhook</td></tr>
+      <tr><td><code>ltx1-app156250</code></td><td>kyverno-admission-controller + uqm-webhook</td></tr>
+      <tr><td><code>ltx1-app156415</code></td><td>k8s-sidecar-operator + maintenance-controller</td></tr>
+      <tr><td><code>ltx1-app162785</code></td><td>k8s-sidecar-operator + maintenance-controller</td></tr>
+    </table>
+
+    <h4>Port 10250 — Hard Blocker for hostNetwork</h4>
+    <div class="callout warning">
+      <strong>kubelet Conflict</strong>
+      Port 10250 is used by kubelet on EVERY node. <code>li-cert-manager-approver-policy</code> (2 replicas) and <code>li-cert-manager-webhook</code> (3 replicas) both bind 10250. These services <strong>MUST</strong> stay on podNetwork — impossible to run on hostNetwork without port remapping.
+    </div>
+
+    <h4>k8s-metrics-agent Blocker</h4>
+    <pre><code>/k8s-metrics-agent --ipv6-per-pod-enabled=false --pod-discovery-mode=kubelet</code></pre>
+    <div class="callout warning">
+      <strong>BLOCKER</strong>
+      This flag must be <code>true</code> for IPPP pods. The metrics agent will not discover IPv6 pod metrics otherwise. Must be changed before any IPPP node rollout.
+    </div>
+  </div>
+
+  <!-- ══════════════════════ SECTION 9: Action Items ══════════════════════ -->
+  <div class="section" id="action-items">
+    <div class="section-num">Section 9</div>
+    <h2>Action Items by Phase</h2>
+
+    <p>Complete tracking of all migration action items. Click on phase headers to expand/collapse.</p>
+
+    <!-- ──────── Phase 0/1 Table ──────── -->
+    <div class="phase-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none';" style="cursor:pointer;">
+      Phase 0 / Phase 1 — Prerequisites &amp; fV6 Preparation (20 items) ▾
+    </div>
+    <table class="action-table">
+      <tr><th>#</th><th>Action Item</th><th>Owner</th><th>Status</th><th>Deadline</th><th>Notes</th></tr>
+      <tr>
+        <td>1</td>
+        <td>Dual-Stack Migration — complete in all clusters (Prod, Corp, EI)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>May 15</td>
+        <td>Started Jan '26</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>K8s 1.34 Upgrade — all clusters</td>
+        <td>Sameer / K8s SRE</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Apr 30</td>
+        <td>EndpointSlice support — <strong class="red">blocker</strong></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>CoreDNS service → Dual-Stack (IPv4 + IPv6 ClusterIPs)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Feb 10</td>
+        <td>PR #211 approved</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>DCL IPv6 support — bind <code>[fd7a:...]:53</code>, IPv6 CoreDNS upstream</td>
+        <td>Steve Ihde / DCL</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Mar 30</td>
+        <td>DCL 3.0.27+</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>DCL IPv6 reverse PTR record support (PSSEINFRA-6774)</td>
+        <td>DCL Team</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Mar 30</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>DCL IPv6 k8s group support (PSSEINFRA-6773)</td>
+        <td>DCL Team</td>
+        <td><span class="status-badge ticket-created">Ticket Created</span></td>
+        <td>Mar 30</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td>KSAP+NSS Apps IPv6 Compatibility Audit</td>
+        <td>No owner</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Apr 15</td>
+        <td>Started Jan '26</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td>KJP/MLI Pod Network Apps → PreferDualStack. Java: <code>preferIPv6=true</code></td>
+        <td>No owner</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>May 15</td>
+        <td>Coordinate w/ clients</td>
+      </tr>
+      <tr>
+        <td>9</td>
+        <td>K8s DaemonSets / Services → PreferDualStack for NSS/KSAP</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Jun 15</td>
+        <td>All clusters</td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td>ip6tables PREROUTING rules (<code>cni0</code> → DCL IPv6)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Mar 30</td>
+        <td>May not be needed</td>
+      </tr>
+      <tr>
+        <td>11</td>
+        <td>ip6tables POSTROUTING / MASQUERADE rules</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Mar 30</td>
+        <td>May not be needed</td>
+      </tr>
+      <tr>
+        <td>12</td>
+        <td>Kubelet <code>clusterDNS</code> → IPv6 (<code>fd7a:...::1</code>, CoreDNS IPv6)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Apr 30</td>
+        <td>Colo-level rollout</td>
+      </tr>
+      <tr>
+        <td>13</td>
+        <td>Verify <code>resolv.conf</code> IP ordering (IPv6 first)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge in-progress">In Progress</span></td>
+        <td>Apr 30</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>14</td>
+        <td>Audit all services in dual-stack pod network — create tickets for IPv6 testing</td>
+        <td>No owner</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Apr 15</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>15</td>
+        <td>Test service delete/recreate downtime (measure v4→v6 gap)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Apr 15</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>16</td>
+        <td>Go/Python services: test v6-only mode [MLI/NKS apps]</td>
+        <td>No owner</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Jun 15</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>17</td>
+        <td>Verify GPU apps compatibility for IPv6</td>
+        <td>GPU SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Mar 15</td>
+        <td>MLI may slip to Dec</td>
+      </tr>
+      <tr>
+        <td>18</td>
+        <td>Convert <code>kubernetes</code> service (default ns) → PreferDualStack</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td><code>KUBERNETES_SERVICE_HOST</code></td>
+      </tr>
+      <tr>
+        <td>19</td>
+        <td>Verify Happy Eyeballs (RFC 6555) in k8s/Nimbus applications</td>
+        <td>App Teams</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td>Fallback behavior</td>
+      </tr>
+      <tr>
+        <td>20</td>
+        <td><code>k8s-metrics-agent</code>: <code>--ipv6-per-pod-enabled=true</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge blocked">Blocked</span></td>
+        <td>Before IPPP</td>
+        <td>Currently <code>false</code> — <strong>blocker</strong></td>
+      </tr>
+    </table>
+
+    <!-- ──────── Phase 0.5/2 Table ──────── -->
+    <div class="phase-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none';" style="cursor:pointer;">
+      Phase 0.5 / Phase 2 — IPPP Prerequisites &amp; Node Rollout (22 items) ▾
+    </div>
+    <table class="action-table">
+      <tr><th>#</th><th>Action Item</th><th>Owner</th><th>Status</th><th>Deadline</th><th>Notes</th></tr>
+      <tr>
+        <td>1</td>
+        <td>API server <code>--bind-address=0.0.0.0</code> → <code>[::]</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Accept IPv6 connections</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>API server <code>--advertise-address</code> → <code>&lt;node-ipv6&gt;</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>IPv6 EndpointSlice backend</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>Regenerate API server TLS cert with IPv6 ClusterIP SAN</td>
+        <td>K8s SRE / LiPKI</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>P3 item per cert analysis</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>etcd <code>--listen-client-urls</code> → <code>https://[::]:6625</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Required for CP IPv6-only</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>etcd <code>--listen-peer-urls</code> → <code>https://[::]:6626</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Prevents quorum loss</td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>Controller-manager + Scheduler <code>--bind-address</code> → <code>[::]</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Health/metrics on IPv6</td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td>kube-proxy → nftables mode (cluster-wide)</td>
+        <td>Kiran</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>O(1) verdict maps</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td>kube-proxy <code>clusterCIDR</code>: add IPPP CIDR (<code>2a04:f547:...</code>)</td>
+        <td>Kiran</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Prevent MASQUERADE</td>
+      </tr>
+      <tr>
+        <td>9</td>
+        <td>DCL: bind on ULA <code>fd7a:7be2:2965:0:127::1</code> for IPPP pods</td>
+        <td>DCL Team</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>IPPP bypasses <code>cni0</code> DNAT</td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td>UCM <code>nimbus-ippp</code> profile (hieradata changes)</td>
+        <td>Amit Joshi</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>coresysctl, coremodprobe</td>
+      </tr>
+      <tr>
+        <td>11</td>
+        <td>KCM IPvlan Node Configuration Revision</td>
+        <td>Amit Joshi</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td><code>cniType=IPvlan</code></td>
+      </tr>
+      <tr>
+        <td>12</td>
+        <td>Compute Broker: create IPPP node pools</td>
+        <td>Vladimir Ishutinov</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td><code>WORKER_NODE_IP_PER_POD</code></td>
+      </tr>
+      <tr>
+        <td>13</td>
+        <td>DFW rules: allow IPPP pod CIDR (<code>2a04:f547:...</code>)</td>
+        <td>DFW Team</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>ACLDB / DFW-DB</td>
+      </tr>
+      <tr>
+        <td>14</td>
+        <td>Validate konnectivity-agent → server over IPv6</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td><code>kubectl exec/logs</code> depend on this</td>
+      </tr>
+      <tr>
+        <td>15</td>
+        <td>ArgoCD <code>NO_PROXY</code>: add IPPP CIDR</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>16</td>
+        <td><code>k8s-metrics-agent</code>: <code>--ipv6-per-pod-enabled=true</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge blocked">Blocked</span></td>
+        <td>Before IPPP</td>
+        <td>Currently <code>false</code> — <strong>blocker</strong></td>
+      </tr>
+      <tr>
+        <td>17</td>
+        <td>Rolling restart all pods (pick up new env vars)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td><code>KUBERNETES_SERVICE_HOST</code></td>
+      </tr>
+      <tr>
+        <td>18</td>
+        <td>Verify <code>KUBERNETES_SERVICE_HOST</code> is IPv6 in new pods</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Immutable after creation</td>
+      </tr>
+      <tr>
+        <td>19</td>
+        <td>Validate cross-CNI: IPPP pod ↔ fV6 pod</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Mixed CNI coexistence</td>
+      </tr>
+      <tr>
+        <td>20</td>
+        <td>Validate: API server → IPPP webhook pods</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>21</td>
+        <td>Host agents IPv6 audit (obhc, skyfall, dfwd, argos, rain)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Verify no IPv4 assumptions</td>
+      </tr>
+      <tr>
+        <td>22</td>
+        <td>Skyfall Kafka → <code>atd-ipv6</code> disco endpoints</td>
+        <td>Skyfall Team</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Before IPPP</td>
+        <td>Currently IPv4-preferred</td>
+      </tr>
+    </table>
+
+    <!-- ──────── Phase 3/4 Table ──────── -->
+    <div class="phase-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none';" style="cursor:pointer;">
+      Phase 3 / Phase 4 — All IPPP, Cleanup &amp; Decommission (17 items) ▾
+    </div>
+    <table class="action-table">
+      <tr><th>#</th><th>Action Item</th><th>Owner</th><th>Status</th><th>Deadline</th><th>Notes</th></tr>
+      <tr>
+        <td>1</td>
+        <td>Remove flanneld DaemonSet (ArgoCD app <code>k8s-flanneld</code>)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td>After all DP nodes IPPP</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>Remove <code>10-flannel.conflist</code> from UCM</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>Remove <code>k8s_dcl_iptable_rules.sh</code> from UCM</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>Remove <code>dcl_iptables.pp</code> from UCM manifests</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>Remove Flannel conditional block in <code>init.pp</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>Controller-manager <code>--cluster-cidr</code>: remove Flannel CIDRs</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td>kube-proxy <code>clusterCIDR</code>: IPPP CIDR only</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td>Remove <code>100.96.0.0/12</code>, fV6 CIDR</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td>ArgoCD <code>NO_PROXY</code>: remove <code>10.0.0.0/8</code>, <code>100.96.0.0/12</code></td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>9</td>
+        <td>Convert all services → SingleStack IPv6</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td>Drop IPv4 ClusterIPs</td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td>CoreDNS service → SingleStack IPv6</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td>Optional — can stay dual</td>
+      </tr>
+      <tr>
+        <td>11</td>
+        <td><code>kubernetes</code> (default ns) service → SingleStack IPv6</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>12</td>
+        <td>Control Plane nodes → IPv6-only (remove IPv4 from <code>bond0</code>)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td>After all DP on IPPP</td>
+      </tr>
+      <tr>
+        <td>13</td>
+        <td>IPv4 Dependency Audit (Skyfall, DFW, otelcontribcol, droplet)</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td>Before CP IPv6-only</td>
+      </tr>
+      <tr>
+        <td>14</td>
+        <td>Infra Graph IPv6 audit script — verify all traffic IPv6</td>
+        <td>Infra Graph</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>15</td>
+        <td>Final verification: <code>nft list ruleset</code>, no iptables, no flannel devices</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>16</td>
+        <td>Verify all pods have routable <code>2a04:f547:...</code> addresses</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>17</td>
+        <td>Verify conntrack: direct pod-to-pod, zero MASQUERADE</td>
+        <td>K8s SRE</td>
+        <td><span class="status-badge not-started">Not Started</span></td>
+        <td>Post-IPPP</td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ══════════════════════ SECTION 10: References ══════════════════════ -->
+  <div class="section" id="references">
+    <div class="section-num">Section 10</div>
+    <h2>References</h2>
+
+    <ul>
+      <li><a href="#">Kubernetes dual stack to v6 SS migration timeline</a></li>
+      <li><a href="#">Dual stack conversion in all K8S clusters: Rollout plan and Timeline</a></li>
+      <li><a href="#">IPPP-MigrationGuide — Internal Docs</a></li>
+      <li><a href="#">IPPP Adoption Strategy</a></li>
+      <li><a href="sd-flink.html">Flink at LinkedIn (related infrastructure)</a></li>
+      <li><a href="sd-venice.html">Venice at LinkedIn (related infrastructure)</a></li>
+      <li><a href="https://kubernetes.io/docs/concepts/services-networking/dual-stack/" target="_blank">Kubernetes Dual-Stack Documentation</a></li>
+      <li><a href="https://kubernetes.io/docs/reference/networking/virtual-ips/#proxy-mode-nftables" target="_blank">Kubernetes nftables Proxy Mode</a></li>
+    </ul>
+  </div>
+
+  <!-- ══════════════════════ FOOTER ══════════════════════ -->
+  <div class="footer">
+    <p><strong>Flannel v6 → IPPP Migration</strong> — KCM Team, LinkedIn</p>
+    <p style="margin-top: 8px;">Authors: Kiran Chand Kanakkassery, Sameer Suresh Marulkar &middot; March 2026</p>
+    <p style="margin-top: 8px;">Reviewers: Steven Ihde, Ronak Nathani, Lavanya Rangaswamy</p>
+    <div class="nav-links" style="margin-top: 16px;">
+      <a href="sd-index.html" class="ippp">← System Design Index</a>
+      <a href="index.html">Home</a>
+    </div>
+    <p style="margin-top: 20px; font-size: 0.85em;">
+      Source: Internal design document &middot; flannel-v6-to-ippp-migration.md
+    </p>
+  </div>
+</div>
+
+<div id="comments-section"></div>
+<script src="comments.js"></script>
+</body>
+</html>
