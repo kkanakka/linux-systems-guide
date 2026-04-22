@@ -99,6 +99,66 @@
   .p-i { background: linear-gradient(135deg, #86198f 0%, #1e293b 100%); border-left: 4px solid #e879f9; }
   .p-j { background: linear-gradient(135deg, #581c87 0%, #1e293b 100%); border-left: 4px solid #c084fc; }
   .p-k { background: linear-gradient(135deg, #4c1d95 0%, #1e293b 100%); border-left: 4px solid #a78bfa; }
+  .p-l { background: linear-gradient(135deg, #831843 0%, #1e293b 100%); border-left: 4px solid #f472b6; }
+
+  /* sub-headers inside a phase deep-dive */
+  .phase h4 {
+    color: #fbbf24;
+    font-size: 14px;
+    margin: 18px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+  }
+  .phase p { color: #cbd5e1; font-size: 14px; margin: 8px 0; }
+  .phase p strong { color: #f1f5f9; }
+  .phase ul { color: #cbd5e1; font-size: 14px; margin: 8px 0 8px 22px; }
+  .phase ul li { margin: 4px 0; }
+
+  .compare-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 14px 0;
+  }
+  .compare-2 > div {
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .compare-2 h5 {
+    color: #f472b6;
+    font-size: 13px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .compare-2 p { font-size: 13px; color: #cbd5e1; }
+  @media (max-width: 700px) { .compare-2 { grid-template-columns: 1fr; } }
+
+  .insight-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 13px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .insight-table th, .insight-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .insight-table th {
+    color: #f472b6;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: rgba(0,0,0,0.3);
+  }
+  .insight-table td:first-child { color: #fbbf24; font-weight: 600; }
 
   .phase-header {
     display: flex;
@@ -274,6 +334,7 @@
     <a href="#phase-i"><span class="tn">I</span>L7 LB → app → fanout</a>
     <a href="#phase-j"><span class="tn">J</span>Response flows back</a>
     <a href="#phase-k"><span class="tn">K</span>Browser parses & renders</a>
+    <a href="#phase-l"><span class="tn">L</span>Deep dive: where IS the GLB?</a>
     <a href="#summary"><span class="tn">★</span>Summary &amp; glossary</a>
   </div>
 </div>
@@ -719,6 +780,257 @@ lo: <span class="vip">VIP</span>     lo: <span class="vip">VIP</span>          l
 <span class="step-num">Step 50:</span> <span class="highlight">✨ User sees LinkedIn feed ✨</span>
           Total time: ~200-800ms to first byte, ~1-3s fully interactive
   </div>
+</div>
+
+<div class="arrow-down">▼</div>
+
+<!-- PHASE L: GLB DEEP DIVE -->
+<div class="phase p-l" id="phase-l">
+  <div class="phase-header">
+    <span class="phase-icon">🌍</span>
+    <span class="phase-badge">PHASE L · DEEP DIVE</span>
+    <span class="phase-title">There IS a GLB &mdash; it's just not a box</span>
+  </div>
+
+  <p>
+    The confusion is thinking of a <strong>GLB (Global Load Balancer)</strong> as a physical device
+    like IPVS. Modern GLB is a <strong>combination</strong> of BGP anycast, geo-aware DNS, and
+    health monitoring &mdash; working together. There is no single server called "the GLB" that
+    all traffic flows through; that would defeat the entire purpose (the point is to <em>avoid</em>
+    global traffic funneling through one place).
+  </p>
+
+  <p>There are two main techniques, and most large companies use a hybrid of both.</p>
+
+  <h4>Technique 1 &mdash; BGP anycast (the VIP lives in many places)</h4>
+
+  <p>
+    Remember <span class="vip" style="font-family:monospace;">13.107.42.14</span>?
+    LinkedIn doesn't announce it from <em>one</em> POP. They announce it from <strong>every</strong>
+    POP in the world, simultaneously, via eBGP to their peers and transit providers.
+  </p>
+
+  <div class="ascii">
+  LinkedIn Ashburn POP       <span class="comment">──&gt;</span> announces <span class="vip">13.107.42.0/24</span> to US East ISPs
+  LinkedIn San Jose POP      <span class="comment">──&gt;</span> announces <span class="vip">13.107.42.0/24</span> to US West ISPs
+  LinkedIn Dublin POP        <span class="comment">──&gt;</span> announces <span class="vip">13.107.42.0/24</span> to European ISPs
+  LinkedIn Singapore POP     <span class="comment">──&gt;</span> announces <span class="vip">13.107.42.0/24</span> to APAC ISPs
+  LinkedIn Mumbai POP        <span class="comment">──&gt;</span> announces <span class="vip">13.107.42.0/24</span> to Indian ISPs
+  ... more POPs ...
+  </div>
+
+  <p>
+    Every POP says <em>"I own this prefix."</em> From the internet's perspective, the VIP is
+    reachable from many directions. <strong>BGP's best-path algorithm does the geographic
+    routing for free.</strong>
+  </p>
+
+  <div class="ascii">
+<span class="comment">When a user in Mumbai sends a packet to 13.107.42.14:</span>
+
+  Their ISP (<span class="asn">Reliance Jio AS55836</span>) looks up <span class="vip">13.107.42.0/24</span> in BGP.
+  Routing table says: shortest AS_PATH is via direct peer at Mumbai IXP
+                       <span class="comment">→</span> LinkedIn Mumbai POP.
+  Packet goes to Mumbai.
+
+<span class="comment">Meanwhile, a user in Texas doing the same query:</span>
+
+  Their ISP (<span class="asn">Comcast AS7922</span>) looks up <span class="vip">13.107.42.0/24</span>.
+  Shortest AS_PATH is via Level3 <span class="comment">→</span> LinkedIn Ashburn POP.
+  Packet goes to Ashburn.
+  </div>
+
+  <p>The same IP, hitting different POPs, purely based on BGP topology. That's anycast.</p>
+
+  <div class="diagram">
+    User in Mumbai <span class="comment">─────►</span> nearest hop <span class="comment">─────►</span> <span style="color:#fb923c;">LinkedIn Mumbai POP</span>
+                                                    │
+                                                    ▼
+                                             <span class="comment">(same VIP locally
+                                              in that POP)</span>
+
+    User in Texas  <span class="comment">─────►</span> nearest hop <span class="comment">─────►</span> <span style="color:#fb923c;">LinkedIn Ashburn POP</span>
+                                                    │
+                                                    ▼
+                                             <span class="comment">(same VIP locally
+                                              in that POP)</span>
+  </div>
+
+  <p>
+    The "GLB" here is <strong>BGP itself</strong>. No centralized dispatcher. The protocol that
+    routes your packet to the nearest advertisement <em>is</em> the global load balancer.
+  </p>
+
+  <h4>Technique 2 &mdash; DNS-based steering (different IPs per region)</h4>
+
+  <p>
+    Not everyone uses pure anycast. The alternative (what Netflix and many CDNs use) is to
+    return <strong>different IPs to different users via GeoDNS</strong>. Each POP gets its own
+    unique unicast VIP.
+  </p>
+
+  <div class="ascii">
+  User in Mumbai asks:   "linkedin.com A?"
+  LinkedIn's DNS sees:    resolver IP from India <span class="comment">→</span> returns <span class="vip">13.107.55.200</span>  <span class="comment">(Mumbai POP VIP)</span>
+
+  User in Texas asks:    "linkedin.com A?"
+  LinkedIn's DNS sees:    resolver IP from US    <span class="comment">→</span> returns <span class="vip">13.107.42.14</span>   <span class="comment">(Ashburn POP VIP)</span>
+  </div>
+
+  <p>
+    Each POP has its own unique VIP. DNS picks which VIP to return based on the resolver's
+    location, then BGP just has to route the packet to that specific VIP (which is only
+    announced from that one POP).
+  </p>
+
+  <p>
+    The "GLB" here is the <strong>authoritative DNS server's geo-logic</strong>. Companies like
+    NS1, AWS Route 53, Dyn, Akamai DNS, and Cloudflare DNS all do this.
+  </p>
+
+  <h4>Technique 3 &mdash; Hybrid (most big companies)</h4>
+
+  <p>Google, AWS, Cloudflare, and Microsoft all use both:</p>
+
+  <ul>
+    <li><strong>Anycast</strong> for DNS and short-lived connections (UDP queries, QUIC handshakes)</li>
+    <li><strong>GeoDNS</strong> for long-lived connections (video streams, large downloads)</li>
+    <li><strong>Inside each POP</strong>, IPVS / Maglev / Katran picks a backend</li>
+  </ul>
+
+  <div class="compare-2">
+    <div>
+      <h5>Cloudflare &mdash; anycast-heavy</h5>
+      <p>Literally every one of their ~300+ POPs announces the same <span class="vip" style="font-family:monospace;">1.1.1.1</span> or the same customer VIPs. Their GLB is pure BGP.</p>
+    </div>
+    <div>
+      <h5>Netflix &mdash; GeoDNS-heavy</h5>
+      <p>Long video streams don't tolerate BGP reconvergence mid-stream well, so they prefer stable unicast IPs per POP, steered by GeoDNS.</p>
+    </div>
+  </div>
+
+  <h4>So how does India hit the Mumbai POP specifically?</h4>
+
+  <p>Two possible mechanisms, depending on the company:</p>
+
+  <p style="color:#fbbf24;font-family:monospace;font-size:13px;margin-top:14px;">▸ If using anycast (Google, Cloudflare):</p>
+
+  <div class="ascii">
+User (Mumbai, ISP = <span class="asn">Jio AS55836</span>)
+  │
+  │ DNS lookup: linkedin.com <span class="comment">→</span> <span class="vip">13.107.42.14</span>
+  │ <span class="comment">(DNS resolver could be anywhere — returns the single anycast IP)</span>
+  │
+  ▼
+User sends packet: dst = <span class="vip">13.107.42.14</span>
+  │
+  ▼
+Jio router's BGP table for <span class="vip">13.107.42.0/24</span>:
+  - Path A: <span class="asn">AS55836</span> <span class="comment">→</span> <span class="asn">AS8075</span> (Microsoft/LinkedIn Mumbai)       AS_PATH = [8075]    <span class="highlight">← shortest!</span>
+  - Path B: <span class="asn">AS55836</span> <span class="comment">→</span> <span class="asn">AS6453</span> (Tata) <span class="comment">→</span> <span class="asn">AS8075</span> (Ashburn POP)     AS_PATH = [6453, 8075]
+  - Path C: <span class="asn">AS55836</span> <span class="comment">→</span> <span class="asn">AS2914</span> (NTT)  <span class="comment">→</span> <span class="asn">AS8075</span> (Singapore POP)   AS_PATH = [2914, 8075]
+
+Jio picks <span class="highlight">Path A</span> (direct peering with LinkedIn Mumbai, shortest AS_PATH)
+  │
+  ▼
+Packet goes to LinkedIn Mumbai POP <span class="comment">— never leaves India</span>
+  </div>
+
+  <p>
+    The shortest AS_PATH to the VIP happens to be the POP in Mumbai because LinkedIn peers with
+    Indian ISPs at Mumbai IXPs. <strong>Geographic proximity emerges from BGP topology naturally.</strong>
+  </p>
+
+  <p style="color:#fbbf24;font-family:monospace;font-size:13px;margin-top:14px;">▸ If using GeoDNS:</p>
+
+  <div class="ascii">
+User (Mumbai)
+  │
+  │ DNS lookup: linkedin.com A?
+  │ <span class="comment">(query goes to Jio's DNS resolver, say 49.45.1.1)</span>
+  │
+  ▼
+Jio resolver <span class="comment">→</span> LinkedIn authoritative DNS (Dynect)
+  │
+  │ Dynect sees: resolver IP = <span class="ip">49.45.1.1</span> (Indian ISP)
+  │ Dynect's geo-database: India <span class="comment">→</span> Mumbai POP
+  │ Returns: linkedin.com = <span class="vip">13.107.55.200</span> (Mumbai VIP, unicast)
+  │
+  ▼
+User sends packet to <span class="vip">13.107.55.200</span>
+  │
+  │ <span class="vip">13.107.55.200/24</span> is announced ONLY from Mumbai POP via BGP
+  │ BGP routes to Mumbai naturally
+  │
+  ▼
+Packet arrives at Mumbai POP
+  </div>
+
+  <p>
+    Both techniques end up with the same result: the packet lands at Mumbai. They just get there
+    by different means.
+  </p>
+
+  <h4>The "GLB is invisible" realization</h4>
+
+  <p>
+    So to answer <em>"why isn't there a GLB anywhere?"</em> &mdash; there is one, but it's woven
+    into the infrastructure rather than being a box:
+  </p>
+
+  <table class="insight-table">
+    <tr><th>What looks like</th><th>What it actually is</th></tr>
+    <tr><td>A "Global Load Balancer"</td><td>BGP anycast + GeoDNS + health monitoring</td></tr>
+    <tr><td>"It decided to send me to Mumbai"</td><td>BGP's shortest-AS-path naturally picked Mumbai</td></tr>
+    <tr><td>"The GLB runs somewhere"</td><td>Distributed across every POP and every DNS server</td></tr>
+  </table>
+
+  <p>
+    There's no single machine deciding "this user goes to Mumbai, that user goes to Dublin." It
+    <strong>emerges</strong> from four cooperating systems:
+  </p>
+  <ul>
+    <li>Every POP <strong>announces the same VIP</strong> (or a region-specific VIP) via BGP.</li>
+    <li>Every BGP router on the internet <strong>independently picks the closest path</strong> based on AS_PATH length and LOCAL_PREF.</li>
+    <li>DNS servers have <strong>geo-aware logic</strong> that steers different users to different VIPs.</li>
+    <li><strong>Health monitoring</strong> at each POP withdraws BGP announcements when the POP is unhealthy &mdash; rerouting users to the next-nearest POP automatically.</li>
+  </ul>
+
+  <h4>What's running at each POP</h4>
+
+  <p>Now you can see the full picture: a thin global "fabric" routes you to a POP, and the heavy LB lifting happens locally inside that POP.</p>
+
+  <div class="diagram">
+<span style="color:#f472b6;">┌───────────────────────────────────────────────────────────────┐</span>
+<span style="color:#f472b6;">│</span>                    <span class="highlight">GLOBAL "GLB"</span>                               <span style="color:#f472b6;">│</span>
+<span style="color:#f472b6;">│</span>       <span class="comment">(BGP anycast + GeoDNS + health monitoring)</span>              <span style="color:#f472b6;">│</span>
+<span style="color:#f472b6;">│</span>                           │                                   <span style="color:#f472b6;">│</span>
+<span style="color:#f472b6;">│</span>                 routes user to nearest POP                    <span style="color:#f472b6;">│</span>
+<span style="color:#f472b6;">│</span>                           │                                   <span style="color:#f472b6;">│</span>
+<span style="color:#f472b6;">└───────────────────────────┼───────────────────────────────────┘</span>
+                            │
+         <span class="comment">┌──────────────────┼──────────────────┐</span>
+         ▼                  ▼                  ▼
+    <span style="color:#fb923c;">┌─────────┐        ┌─────────┐       ┌─────────┐</span>
+    <span style="color:#fb923c;">│</span> Mumbai  <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span> Ashburn <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span> Dublin  <span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">│</span>  POP    <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>  POP    <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>  POP    <span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">├─────────┤</span>        <span style="color:#fb923c;">├─────────┤</span>       <span style="color:#fb923c;">├─────────┤</span>
+    <span style="color:#fb923c;">│</span> Edge rtr<span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span> Edge rtr<span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span> Edge rtr<span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">│</span>   ToR   <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>   ToR   <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>   ToR   <span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">│</span>  <span style="color:#f87171;">IPVS×N</span> <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>  <span style="color:#f87171;">IPVS×N</span> <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>  <span style="color:#f87171;">IPVS×N</span> <span style="color:#fb923c;">│</span>    <span class="comment">← local LB</span>
+    <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">│</span>  <span style="color:#e879f9;">ATS×M</span>  <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>  <span style="color:#e879f9;">ATS×M</span>  <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>  <span style="color:#e879f9;">ATS×M</span>  <span style="color:#fb923c;">│</span>    <span class="comment">← L7 proxy / cache</span>
+    <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>    │    <span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">│</span>  <span style="color:#a78bfa;">Apps</span>   <span style="color:#fb923c;">│</span>        <span style="color:#fb923c;">│</span>  <span style="color:#a78bfa;">Apps</span>   <span style="color:#fb923c;">│</span>       <span style="color:#fb923c;">│</span>  <span style="color:#a78bfa;">Apps</span>   <span style="color:#fb923c;">│</span>
+    <span style="color:#fb923c;">└─────────┘        └─────────┘       └─────────┘</span>
+  </div>
+
+  <p>
+    At the <strong>global level</strong>, there's no single LB &mdash; it's BGP + DNS.
+    At the <strong>POP level</strong>, IPVS (or Maglev / Katran / GLB-the-product) handles the work.
+  </p>
 </div>
 
 <!-- SUMMARY -->
